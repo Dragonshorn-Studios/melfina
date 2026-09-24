@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" role="img" aria-labelledby="title desc">
+  <title id="title">Melfina locked color array</title>
+  <desc id="desc">void #0B1220, panel #152238, amber #E8A838, amber-dim #B8842A, cream #E8E4D8, steel #8A9BB0, danger #C45C4A, border #2A3A52</desc>
+  <rect width="960" height="420" fill="#0B1220"/>
+  <text x="24" y="36" fill="#E8A838" font-family="IBM Plex Mono, monospace" font-size="14">01 / COLOR ARRAY</text>
+  <g font-family="Manrope, sans-serif" font-size="13">
+    <rect x="24" y="56" width="220" height="150" fill="#0B1220" stroke="#2A3A52" stroke-width="2"/>
+    <text x="40" y="168" fill="#E8E4D8">VOID</text>
+    <text x="40" y="188" fill="#8A9BB0" font-family="IBM Plex Mono, monospace">#0B1220</text>
+    <rect x="256" y="56" width="220" height="150" fill="#152238" stroke="#2A3A52" stroke-width="2"/>
+    <text x="272" y="168" fill="#E8E4D8">PANEL</text>
+    <text x="272" y="188" fill="#8A9BB0" font-family="IBM Plex Mono, monospace">#152238</text>
+    <rect x="488" y="56" width="220" height="150" fill="#E8A838" stroke="#E8A838" stroke-width="2"/>
+    <text x="504" y="168" fill="#0B1220">AMBER</text>
+    <text x="504" y="188" fill="#0B1220" font-family="IBM Plex Mono, monospace">#E8A838</text>
+    <rect x="720" y="56" width="216" height="150" fill="#B8842A" stroke="#B8842A" stroke-width="2"/>
+    <text x="736" y="168" fill="#0B1220">AMBER-DIM</text>
+    <text x="736" y="188" fill="#0B1220" font-family="IBM Plex Mono, monospace">#B8842A</text>
+    <rect x="24" y="222" width="220" height="150" fill="#E8E4D8" stroke="#E8E4D8" stroke-width="2"/>
+    <text x="40" y="334" fill="#0B1220">CREAM</text>
+    <text x="40" y="354" fill="#152238" font-family="IBM Plex Mono, monospace">#E8E4D8</text>
+    <rect x="256" y="222" width="220" height="150" fill="#8A9BB0" stroke="#8A9BB0" stroke-width="2"/>
+    <text x="272" y="334" fill="#0B1220">STEEL</text>
+    <text x="272" y="354" fill="#0B1220" font-family="IBM Plex Mono, monospace">#8A9BB0</text>
+    <rect x="488" y="222" width="220" height="150" fill="#C45C4A" stroke="#C45C4A" stroke-width="2"/>
+    <text x="504" y="334" fill="#E8E4D8">DANGER</text>
+    <text x="504" y="354" fill="#E8E4D8" font-family="IBM Plex Mono, monospace">#C45C4A</text>
+    <rect x="720" y="222" width="216" height="150" fill="#2A3A52" stroke="#2A3A52" stroke-width="2"/>
+    <text x="736" y="334" fill="#E8E4D8">BORDER</text>
+    <text x="736" y="354" fill="#8A9BB0" font-family="IBM Plex Mono, monospace">#2A3A52</text>
+  </g>
+</svg>
