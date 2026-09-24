@@ -24,7 +24,7 @@ Later MCP (out of scope for the shell): `list_shared` / `read_shared` / `write_s
 
 ## Stack
 
-- PHP + Laravel modular monolith (default `app/` layout; grow internally, do not split services)
+- PHP 8.4 + Laravel modular monolith (default `app/` layout; grow internally, do not split services)
 - SQLite to start (one instance, one owner). PostgreSQL is allowed later; not required for boot
 - Blade + Tailwind + CSS variables (`resources/css/tokens.css`) — skin from [look.md](look.md), no design-system kit / Storybook
 - MCP behind auth (HTTP) — later

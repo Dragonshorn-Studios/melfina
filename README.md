@@ -22,7 +22,7 @@ Out of scope here: owner auth, agents CRUD, VFS, MCP, Shared ACL, full chrome UI
 
 ## Local run
 
-Requires PHP 8.3+, Composer, Node 22+, SQLite.
+Requires PHP 8.4+, Composer, Node 22+, SQLite.
 
 ```bash
 composer setup
