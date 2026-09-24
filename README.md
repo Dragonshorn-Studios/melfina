@@ -16,7 +16,7 @@ Chrome (later — mention only): `Agents` · `Files` · `Shared` · `Instruction
 
 ## Stack (this shell)
 
-Laravel 13 modular monolith. SQLite. Blade + Tailwind + CSS variables (`resources/css/tokens.css`). Manrope + IBM Plex Mono. No DaisyUI, Bootstrap, Material, or Storybook.
+Laravel 13 modular monolith. SQLite. Blade + Tailwind + CSS variables (`resources/css/tokens.css`). Manrope + IBM Plex Mono. Pest for tests. Laravel Boost for agent guidelines. No DaisyUI, Bootstrap, Material, or Storybook.
 
 Out of scope here: owner auth, agents CRUD, VFS, MCP, Shared ACL, full chrome UI, Kubernetes, ImpPost, vectors / Mem0 / `.mem`.
 
@@ -57,6 +57,16 @@ The app listens on [http://localhost:8000](http://localhost:8000). First start i
 ## Tokens
 
 void `#0B1220` · panel `#152238` · amber `#E8A838` · amber-dim `#B8842A` · cream `#E8E4D8` · steel `#8A9BB0` · danger `#C45C4A` · border `#2A3A52`
+
+## Tests and Boost
+
+```bash
+php artisan test
+```
+
+Tests are [Pest](https://pestphp.com). New tests: `php artisan make:test --pest {name}`.
+
+[Laravel Boost](https://laravel.com/docs/boost) is a dev dependency (`boost.json`). After clone, run `php artisan boost:install` so Cursor/Claude get the MCP server and skills. `composer update` runs `boost:update`.
 
 ## Contribute / security
 
