@@ -29,7 +29,7 @@
                             <td class="py-2 pr-4 {{ $agent->isActive() ? 'text-amber' : 'text-danger' }}">{{ $agent->status }}</td>
                             <td class="py-2 pr-4 text-steel">{{ $agent->key_hash ? 'issued' : '—' }}</td>
                             <td class="py-2 text-right">
-                                <a href="{{ route('console.agents.show', $agent) }}" class="text-amber underline decoration-border underline-offset-4">open</a>
+                                <a href="{{ route('console.files.show', $agent) }}" class="text-amber underline decoration-border underline-offset-4">open</a>
                             </td>
                         </tr>
                     @endforeach

@@ -10,14 +10,34 @@ beforeEach(function () {
     $this->agent = Agent::factory()->create();
 });
 
-it('renders the four console tabs', function () {
+it('renders the sidebar with agents and section links', function () {
     $this->actingAs($this->owner)
         ->get(route('console.agents.index'))
         ->assertOk()
-        ->assertSee(route('console.agents.index'))
-        ->assertSee(route('console.files.index'))
+        ->assertSee($this->agent->name)
+        ->assertSee(route('console.files.show', $this->agent))
         ->assertSee(route('console.shared.index'))
-        ->assertSee(route('console.instructions.index'));
+        ->assertSee(route('console.clients.index'))
+        ->assertSee(route('console.agents.create'));
+});
+
+it('folds the global files and instructions indexes into the agent list', function () {
+    $this->actingAs($this->owner)
+        ->get(route('console.files.index'))
+        ->assertRedirect(route('console.agents.index'));
+
+    $this->actingAs($this->owner)
+        ->get(route('console.instructions.index'))
+        ->assertRedirect(route('console.agents.index'));
+});
+
+it('renders the per-agent tab strip on agent pages', function () {
+    $this->actingAs($this->owner)
+        ->get(route('console.files.show', $this->agent))
+        ->assertOk()
+        ->assertSee(route('console.files.show', $this->agent))
+        ->assertSee(route('console.agents.instructions.edit', $this->agent))
+        ->assertSee(route('console.agents.show', $this->agent));
 });
 
 it('redirects the dashboard to the agents tab', function () {
@@ -26,12 +46,12 @@ it('redirects the dashboard to the agents tab', function () {
         ->assertRedirect(route('console.agents.index'));
 });
 
-it('lists agents with file counts on the files tab', function () {
+it('shows agent file counts in the sidebar', function () {
     VfsFile::writeFor($this->agent, 'a.txt', '1');
     VfsFile::writeFor($this->agent, 'b.txt', '2');
 
     $this->actingAs($this->owner)
-        ->get(route('console.files.index'))
+        ->get(route('console.agents.index'))
         ->assertOk()
         ->assertSee($this->agent->name)
         ->assertSee('text-steel">2<', false);
@@ -77,15 +97,13 @@ it('rejects invalid paths on file write', function () {
         ])->assertSessionHasErrors('path');
 });
 
-it('shows the instruction editor landing', function () {
+it('shows the per-agent instruction editor', function () {
     Instruction::factory()->for($this->agent)->create(['content' => 'rules']);
 
     $this->actingAs($this->owner)
-        ->get(route('console.instructions.index'))
+        ->get(route('console.agents.instructions.edit', $this->agent))
         ->assertOk()
-        ->assertSee($this->agent->name)
-        ->assertSee('set')
-        ->assertSee(route('console.agents.instructions.edit', $this->agent));
+        ->assertSee('rules');
 });
 
 it('renders the dismiss control on a flashed key', function () {

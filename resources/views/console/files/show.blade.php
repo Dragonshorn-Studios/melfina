@@ -1,4 +1,4 @@
-<x-console-layout :title="'Files — '.$agent->name">
+<x-console-layout :title="'Files — '.$agent->name" :agent="$agent">
     <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
         <div class="flex items-center justify-between">
             <div>
