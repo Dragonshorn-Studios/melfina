@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\RegisteredOwnerController;
 use App\Http\Controllers\Console\AgentController;
 use App\Http\Controllers\Console\DashboardController;
 use App\Http\Controllers\Console\InstructionController;
+use App\Http\Controllers\Console\SharedSpaceController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -32,4 +33,6 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
 
     Route::get('agents/{agent}/instructions', [InstructionController::class, 'edit'])->name('agents.instructions.edit');
     Route::put('agents/{agent}/instructions', [InstructionController::class, 'update'])->name('agents.instructions.update');
+
+    Route::resource('shared', SharedSpaceController::class)->except(['destroy', 'show']);
 });
