@@ -68,6 +68,7 @@ The app listens on [http://localhost:8000](http://localhost:8000) (override with
 | `APP_PORT` | `8000` | Host port to publish |
 | `PORT` | `8000` | Port the app serves on inside the container |
 | `DB_DATABASE` | `/data/database.sqlite` | SQLite path (keep inside `/data`) |
+| `TRUSTED_PROXIES` | `*` | Reverse proxies trusted for `X-Forwarded-*` headers (needed so HTTPS URLs are generated behind Coolify's TLS proxy) |
 
 **Coolify:** point a new Docker Compose resource at this repo — Coolify builds the image and runs `docker-compose.yml` as-is. Set `APP_URL` to the assigned domain; no deploy webhook needed.
 

@@ -14,6 +14,14 @@ if [ ! -f /data/.env ]; then
     cp .env.example /data/.env
     APP_KEY="base64:$(php -r 'echo base64_encode(random_bytes(32));')"
     sed -i "s|^APP_KEY=.*|APP_KEY=${APP_KEY}|" /data/.env
+
+    # .env.example ships dev defaults; a Docker-only deploy (no compose env)
+    # would otherwise run with debug on and logs hidden in storage/logs.
+    # Real env vars always win over .env, so compose/deploy env still overrides.
+    sed -i "s|^APP_ENV=.*|APP_ENV=${APP_ENV:-production}|" /data/.env
+    sed -i "s|^APP_DEBUG=.*|APP_DEBUG=${APP_DEBUG:-false}|" /data/.env
+    sed -i "s|^APP_URL=.*|APP_URL=${APP_URL:-http://localhost:8000}|" /data/.env
+    sed -i "s|^LOG_CHANNEL=.*|LOG_CHANNEL=${LOG_CHANNEL:-stderr}|" /data/.env
 fi
 
 # The seeded .env.example leaves DB_DATABASE unset, which points Laravel at
