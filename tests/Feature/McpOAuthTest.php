@@ -101,6 +101,9 @@ it('rejects redirect URIs outside the allow-list', function () {
 });
 
 it('throttles DCR so the clients table cannot be spammed', function () {
+    // Smoke check for the route-rebind trick: if a laravel/mcp upgrade ever
+    // registers oauth/register after routes/ai.php runs, the unthrottled
+    // binding wins back and this test fails on upgrade — that's the signal.
     // A distinct IP keeps the bucket separate from the other tests'.
     $this->withServerVariables(['REMOTE_ADDR' => '10.99.99.99']);
 
