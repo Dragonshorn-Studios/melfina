@@ -24,14 +24,14 @@ it('bootstraps the first owner and logs them in', function () {
 it('closes registration once an owner exists', function () {
     User::factory()->owner()->create();
 
-    $this->get(route('register'))->assertRedirect(route('login'));
+    $this->get(route('register'))->assertNotFound();
 
     $this->post(route('register'), [
         'name' => 'Second',
         'email' => 'second@example.com',
         'password' => 'password',
         'password_confirmation' => 'password',
-    ])->assertForbidden();
+    ])->assertNotFound();
 
     expect(User::count())->toBe(1);
 });

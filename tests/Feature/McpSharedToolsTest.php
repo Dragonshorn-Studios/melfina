@@ -129,3 +129,15 @@ it('rate limits shared writes per agent', function () {
     expect($result['isError'])->toBeTrue()
         ->and(sharedText($result))->toContain('rate limit');
 });
+
+it('does not count invalid writes against the rate limit', function () {
+    ($this->grant)('write');
+
+    for ($i = 0; $i < WriteFile::WRITE_LIMIT_PER_MINUTE; $i++) {
+        ($this->mcpTool)('write_shared', ['space' => 'drop-point', 'path' => '../evil.txt', 'content' => 'x']);
+    }
+
+    $result = ($this->mcpTool)('write_shared', ['space' => 'drop-point', 'path' => 'ok.txt', 'content' => 'x']);
+
+    expect($result['isError'] ?? false)->toBeFalse();
+});

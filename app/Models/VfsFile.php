@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 
@@ -119,10 +120,23 @@ class VfsFile extends Model
             throw new InvalidArgumentException('Content exceeds '.self::MAX_CONTENT_BYTES.' bytes.');
         }
 
-        return static::query()->updateOrCreate(
-            ['agent_id' => $agent->id, 'path' => $normalized],
-            ['content' => $content],
-        );
+        try {
+            return static::query()->updateOrCreate(
+                ['agent_id' => $agent->id, 'path' => $normalized],
+                ['content' => $content],
+            );
+        } catch (UniqueConstraintViolationException) {
+            // A concurrent insert won the row — overwrite it so the last writer wins.
+            static::query()
+                ->where('agent_id', $agent->id)
+                ->where('path', $normalized)
+                ->update(['content' => $content]);
+
+            return static::query()
+                ->where('agent_id', $agent->id)
+                ->where('path', $normalized)
+                ->firstOrFail();
+        }
     }
 
     /**

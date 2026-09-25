@@ -43,13 +43,13 @@ class WriteFile extends Tool
             return Response::error('Write rate limit exceeded. Try again in '.RateLimiter::availableIn($rateKey).' seconds.');
         }
 
-        RateLimiter::hit($rateKey, 60);
-
         try {
             VfsFile::writeFor($agent, $request->get('path'), $request->get('content'));
         } catch (InvalidArgumentException $e) {
             return Response::error($e->getMessage());
         }
+
+        RateLimiter::hit($rateKey, 60);
 
         return Response::text('File written.');
     }

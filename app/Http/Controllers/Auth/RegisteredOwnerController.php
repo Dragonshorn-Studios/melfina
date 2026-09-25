@@ -18,11 +18,9 @@ class RegisteredOwnerController extends Controller
     /**
      * Show the first-owner registration form.
      */
-    public function create(): View|RedirectResponse
+    public function create(): View
     {
-        if (User::query()->where('is_owner', true)->exists()) {
-            return redirect()->route('login');
-        }
+        abort_if(User::query()->where('is_owner', true)->exists(), 404);
 
         return view('auth.register');
     }
@@ -39,7 +37,7 @@ class RegisteredOwnerController extends Controller
         ]);
 
         $user = DB::transaction(function () use ($validated): User {
-            abort_if(User::query()->where('is_owner', true)->lockForUpdate()->exists(), 403);
+            abort_if(User::query()->where('is_owner', true)->lockForUpdate()->exists(), 404);
 
             return User::query()->create([
                 'name' => $validated['name'],
