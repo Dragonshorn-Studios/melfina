@@ -34,6 +34,7 @@
                         ['label' => 'Agents', 'route' => 'console.agents.index', 'active' => request()->routeIs('console.agents.*') && ! request()->routeIs('console.agents.instructions.*')],
                         ['label' => 'Files', 'route' => 'console.files.index', 'active' => request()->routeIs('console.files.*')],
                         ['label' => 'Shared', 'route' => 'console.shared.index', 'active' => request()->routeIs('console.shared.*')],
+                        ['label' => 'Clients', 'route' => 'console.clients.index', 'active' => request()->routeIs('console.clients.*')],
                         ['label' => 'Instructions', 'route' => 'console.instructions.index', 'active' => request()->routeIs('console.instructions.*') || request()->routeIs('console.agents.instructions.*')],
                     ];
                 @endphp

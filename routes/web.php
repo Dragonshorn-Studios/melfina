@@ -6,6 +6,7 @@ use App\Http\Controllers\Console\AgentController;
 use App\Http\Controllers\Console\DashboardController;
 use App\Http\Controllers\Console\FileController;
 use App\Http\Controllers\Console\InstructionController;
+use App\Http\Controllers\Console\McpClientController;
 use App\Http\Controllers\Console\SharedSpaceController;
 use Illuminate\Support\Facades\Route;
 
@@ -43,4 +44,7 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::delete('files/{agent}', [FileController::class, 'destroy'])->name('files.destroy');
 
     Route::resource('shared', SharedSpaceController::class)->except(['destroy', 'show']);
+
+    Route::get('clients', [McpClientController::class, 'index'])->name('clients.index');
+    Route::delete('clients/{client}', [McpClientController::class, 'destroy'])->name('clients.destroy');
 });

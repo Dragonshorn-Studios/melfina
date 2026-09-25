@@ -12,6 +12,10 @@ services:
       DB_DATABASE: /data/database.sqlite
       SESSION_DRIVER: database
       LOG_CHANNEL: stderr
+      PASSPORT_KEYS_DIR: /data/passport
+      # Comma-separated redirect allow-list for OAuth DCR (custom schemes
+      # claude/cursor/vscode/chatgpt-desktop are always permitted).
+      MCP_REDIRECT_DOMAINS: ${MCP_REDIRECT_DOMAINS:-http://localhost,http://127.0.0.1}
     volumes:
       - melfina-data:/data
     healthcheck:

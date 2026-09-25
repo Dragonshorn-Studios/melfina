@@ -28,6 +28,9 @@ jobs:
       - name: Generate application key
         run: php artisan key:generate
 
+      - name: Generate Passport OAuth keys
+        run: php artisan passport:keys --force
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:

@@ -31,11 +31,25 @@ if ! grep -q '^DB_DATABASE=' /data/.env; then
     printf '\nDB_DATABASE=%s\n' "${DB_DATABASE:-/data/database.sqlite}" >> /data/.env
 fi
 
+# Same for the Passport key dir — the app reads keys through
+# Passport::loadKeysFrom(env('PASSPORT_KEYS_DIR')), so it must be in .env.
+if ! grep -q '^PASSPORT_KEYS_DIR=' /data/.env; then
+    printf '\nPASSPORT_KEYS_DIR=%s\n' "${PASSPORT_KEYS_DIR:-/data/passport}" >> /data/.env
+fi
+
 ln -sfn /data/.env .env
 
 DB_PATH="${DB_DATABASE:-/data/database.sqlite}"
 mkdir -p "$(dirname "$DB_PATH")"
 touch "$DB_PATH"
+
+# OAuth signing keys live on the volume too — losing them invalidates every
+# issued MCP token. PASSPORT_KEYS_DIR makes loadKeysFrom read them here.
+KEYS_DIR="${PASSPORT_KEYS_DIR:-/data/passport}"
+mkdir -p "$KEYS_DIR"
+if [ ! -f "$KEYS_DIR/oauth-private.key" ]; then
+    PASSPORT_KEYS_DIR="$KEYS_DIR" php artisan passport:keys --force
+fi
 
 php artisan migrate --force --graceful
 

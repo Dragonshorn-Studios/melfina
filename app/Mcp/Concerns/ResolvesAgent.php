@@ -2,11 +2,11 @@
 
 namespace App\Mcp\Concerns;
 
-use App\Http\Middleware\ResolveAgentFromKey;
+use App\Http\Middleware\ResolveAgent;
 use App\Models\Agent;
 
 /**
- * The agent placed on the request by {@see ResolveAgentFromKey}.
+ * The agent placed on the request by {@see ResolveAgent}.
  */
 trait ResolvesAgent
 {
