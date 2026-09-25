@@ -34,7 +34,7 @@ it('lists agents with file counts on the files tab', function () {
         ->get(route('console.files.index'))
         ->assertOk()
         ->assertSee($this->agent->name)
-        ->assertSee('2');
+        ->assertSee('text-steel">2<', false);
 });
 
 it('lets the owner browse, write, and delete files in an agent tree', function () {

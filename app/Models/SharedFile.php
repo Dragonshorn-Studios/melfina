@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 
@@ -65,9 +66,22 @@ class SharedFile extends Model
             throw new InvalidArgumentException('Content exceeds '.VfsFile::MAX_CONTENT_BYTES.' bytes.');
         }
 
-        return static::query()->updateOrCreate(
-            ['shared_space_id' => $space->id, 'path' => $normalized],
-            ['content' => $content],
-        );
+        try {
+            return static::query()->updateOrCreate(
+                ['shared_space_id' => $space->id, 'path' => $normalized],
+                ['content' => $content],
+            );
+        } catch (UniqueConstraintViolationException) {
+            // A concurrent insert won the row — overwrite it so the last writer wins.
+            static::query()
+                ->where('shared_space_id', $space->id)
+                ->where('path', $normalized)
+                ->update(['content' => $content]);
+
+            return static::query()
+                ->where('shared_space_id', $space->id)
+                ->where('path', $normalized)
+                ->firstOrFail();
+        }
     }
 }

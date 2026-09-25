@@ -119,3 +119,13 @@ it('rate limits writes per agent', function () {
     expect($result['isError'])->toBeTrue()
         ->and(mcpText($result))->toContain('rate limit');
 });
+
+it('does not count invalid writes against the rate limit', function () {
+    for ($i = 0; $i < WriteFile::WRITE_LIMIT_PER_MINUTE; $i++) {
+        ($this->mcpTool)('write_file', ['path' => '../evil.txt', 'content' => 'x']);
+    }
+
+    $result = ($this->mcpTool)('write_file', ['path' => 'ok.txt', 'content' => 'x']);
+
+    expect($result['isError'] ?? false)->toBeFalse();
+});
