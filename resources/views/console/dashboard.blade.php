@@ -25,7 +25,7 @@
                 <p class="mt-1 text-2xl font-semibold text-amber">{{ $stats['active'] }}</p>
             </div>
             <div class="border border-border/60 bg-void/40 px-4 py-3" style="border-radius: var(--radius-console)">
-                <p class="font-mono text-[10px] tracking-[0.14em] text-steel">FILES</p>
+                <p class="font-mono text-[10px] tracking-[0.14em] text-steel">PRIVATE FILES</p>
                 <p class="mt-1 text-2xl font-semibold text-cream">{{ $stats['files'] }}</p>
             </div>
             <div class="border border-border/60 bg-void/40 px-4 py-3" style="border-radius: var(--radius-console)">
