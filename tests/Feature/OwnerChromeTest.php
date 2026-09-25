@@ -38,7 +38,20 @@ it('renders the per-agent tab strip on agent pages', function () {
         ->assertOk()
         ->assertSee(route('console.files.show', $this->agent))
         ->assertSee(route('console.agents.instructions.edit', $this->agent))
-        ->assertSee(route('console.agents.show', $this->agent));
+        ->assertSee(route('console.agents.show', $this->agent))
+        ->assertSee(route('console.agents.connect', $this->agent));
+});
+
+it('renders the connect guides for an agent', function () {
+    $this->actingAs($this->owner)
+        ->get(route('console.agents.connect', $this->agent))
+        ->assertOk()
+        ->assertSee(url('/mcp'))
+        ->assertSee('claude mcp add --transport http melfina', false)
+        ->assertSee('mcp-remote')
+        ->assertSee('MCP_REDIRECT_DOMAINS')
+        ->assertSee('~/.mavis/mcp/mcp.json')
+        ->assertSee('Bearer melf_…', false);
 });
 
 it('shows fleet stats and agent rows on the dashboard', function () {

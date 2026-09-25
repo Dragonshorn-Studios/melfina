@@ -96,6 +96,7 @@
                             ['label' => 'Files', 'route' => route('console.files.show', $agent), 'active' => request()->routeIs('console.files.*')],
                             ['label' => 'Instructions', 'route' => route('console.agents.instructions.edit', $agent), 'active' => request()->routeIs('console.agents.instructions.*')],
                             ['label' => 'Key', 'route' => route('console.agents.show', $agent), 'active' => request()->routeIs('console.agents.show') || request()->routeIs('console.agents.edit')],
+                            ['label' => 'Connect', 'route' => route('console.agents.connect', $agent), 'active' => request()->routeIs('console.agents.connect')],
                         ];
                     @endphp
                     <nav class="mb-8 flex gap-1 border border-border bg-panel p-1" style="border-radius: var(--radius-console)">
