@@ -2,6 +2,7 @@
 
 use App\Models\Agent;
 use App\Models\Instruction;
+use App\Models\SharedSpace;
 use App\Models\User;
 use App\Models\VfsFile;
 
@@ -40,10 +41,22 @@ it('renders the per-agent tab strip on agent pages', function () {
         ->assertSee(route('console.agents.show', $this->agent));
 });
 
-it('redirects the dashboard to the agents tab', function () {
+it('shows fleet stats and agent rows on the dashboard', function () {
+    VfsFile::writeFor($this->agent, 'a.txt', '1');
+    $this->agent->rotateKey();
+    $space = SharedSpace::factory()->create();
+    $space->aclEntries()->create(['agent_id' => $this->agent->id, 'permission' => 'write']);
+
     $this->actingAs($this->owner)
         ->get(route('console.dashboard'))
-        ->assertRedirect(route('console.agents.index'));
+        ->assertOk()
+        ->assertSee('Fleet at a glance')
+        ->assertSee($this->agent->name)
+        ->assertSee($space->name)
+        ->assertSee(route('console.files.show', $this->agent))
+        ->assertSee(route('console.shared.edit', $space))
+        ->assertSee(route('console.agents.create'))
+        ->assertSee('issued', false);
 });
 
 it('shows agent file counts in the sidebar', function () {
