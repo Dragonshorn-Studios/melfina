@@ -100,6 +100,20 @@ it('rejects redirect URIs outside the allow-list', function () {
         ->assertJson(['error' => 'invalid_redirect_uri']);
 });
 
+it('throttles DCR so the clients table cannot be spammed', function () {
+    // Smoke check for the route-rebind trick: if a laravel/mcp upgrade ever
+    // registers oauth/register after routes/ai.php runs, the unthrottled
+    // binding wins back and this test fails on upgrade — that's the signal.
+    // A distinct IP keeps the bucket separate from the other tests'.
+    $this->withServerVariables(['REMOTE_ADDR' => '10.99.99.99']);
+
+    for ($i = 0; $i < 20; $i++) {
+        registerClient()->assertCreated();
+    }
+
+    registerClient()->assertTooManyRequests();
+});
+
 it('issues a PKCE token bound to the consent-picked agent', function () {
     $owner = User::factory()->owner()->create();
     $agent = Agent::factory()->create();
