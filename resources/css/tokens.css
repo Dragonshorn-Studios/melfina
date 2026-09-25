@@ -1,0 +1,14 @@
+:root {
+    /* Locked Melfina palette — do not invent extra brand colors. */
+    --color-void: #0B1220;
+    --color-panel: #152238;
+    --color-amber: #E8A838;
+    --color-amber-dim: #B8842A;
+    --color-cream: #E8E4D8;
+    --color-steel: #8A9BB0;
+    --color-danger: #C45C4A;
+    --color-border: #2A3A52;
+    --font-ui: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --radius-console: 2px;
+}

@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.backup
+vendor
+node_modules
+public/hot
+storage/logs
+storage/framework/cache
+storage/framework/sessions
+storage/framework/views
+*.sqlite
+*.sqlite-journal

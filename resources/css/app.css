@@ -1,0 +1,33 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../views/**/*.blade.php';
+
+@theme {
+    --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --color-void: #0b1220;
+    --color-panel: #152238;
+    --color-amber: #e8a838;
+    --color-amber-dim: #b8842a;
+    --color-cream: #e8e4d8;
+    --color-steel: #8a9bb0;
+    --color-danger: #c45c4a;
+    --color-border: #2a3a52;
+}
+
+html,
+body {
+    background: var(--color-void);
+    color: var(--color-cream);
+    font-family: var(--font-ui);
+}
+
+.font-mono,
+code,
+kbd,
+pre {
+    font-family: var(--font-mono);
+}
