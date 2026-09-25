@@ -3,23 +3,25 @@ set -eu
 
 cd /app
 
-if [ ! -f .env ]; then
-    cp .env.example .env
+# Runtime dirs the .dockerignore keeps out of the image.
+mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache
+
+# Persistent state lives in the /data volume: .env (incl. APP_KEY) and the
+# SQLite database. On first boot both are seeded, so containers are disposable.
+mkdir -p /data
+
+if [ ! -f /data/.env ]; then
+    cp .env.example /data/.env
+    APP_KEY="base64:$(php -r 'echo base64_encode(random_bytes(32));')"
+    sed -i "s|^APP_KEY=.*|APP_KEY=${APP_KEY}|" /data/.env
 fi
 
-composer install --no-interaction --prefer-dist
+ln -sfn /data/.env .env
 
-if ! grep -q '^APP_KEY=base64:' .env; then
-    php artisan key:generate --force --no-interaction
-fi
+DB_PATH="${DB_DATABASE:-/data/database.sqlite}"
+mkdir -p "$(dirname "$DB_PATH")"
+touch "$DB_PATH"
 
-mkdir -p database
-touch database/database.sqlite
 php artisan migrate --force --graceful
 
-if [ ! -f public/build/manifest.json ]; then
-    npm install --ignore-scripts
-    npm run build
-fi
-
-exec php artisan serve --host=0.0.0.0 --port=8000
+exec php artisan serve --host=0.0.0.0 --port="${PORT:-8000}"

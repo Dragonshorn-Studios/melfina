@@ -46,13 +46,30 @@ php artisan serve
 
 Dev with Vite hot reload: `composer run dev`.
 
-## Docker Compose
+## Docker Compose / Coolify
+
+Single service — no K8s, no external database:
 
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
-The app listens on [http://localhost:8000](http://localhost:8000). First start installs Composer/npm deps and migrates SQLite inside the container.
+The app listens on [http://localhost:8000](http://localhost:8000) (override with `APP_PORT`). The image bakes code, Composer deps, and built assets; the entrypoint seeds `.env` and `APP_KEY` on first boot, migrates SQLite, then serves.
+
+**Persistence:** all mutable state lives in the `melfina-data` volume at `/data` — `.env` (with the generated `APP_KEY`) and `database.sqlite`. The container itself is disposable; `docker compose down` keeps data, `docker compose down -v` wipes it.
+
+**Healthcheck:** the service healthcheck hits `GET /up`; `docker compose ps` reports `healthy` once migrations pass and the server answers.
+
+**Env vars** (set via `environment:` or Coolify's env UI):
+
+| Var | Default | Purpose |
+|-----|---------|---------|
+| `APP_URL` | `http://localhost:8000` | Public URL of the install |
+| `APP_PORT` | `8000` | Host port to publish |
+| `PORT` | `8000` | Port the app serves on inside the container |
+| `DB_DATABASE` | `/data/database.sqlite` | SQLite path (keep inside `/data`) |
+
+**Coolify:** point a new Docker Compose resource at this repo — Coolify builds the image and runs `docker-compose.yml` as-is. Set `APP_URL` to the assigned domain; no deploy webhook needed.
 
 ## Owner bootstrap
 
