@@ -49,11 +49,14 @@ it('rejects a disabled agent key', function () {
     ($this->mcp)('tools/list')->assertUnauthorized();
 });
 
-it('lists the four private tools', function () {
+it('lists the private and shared tools', function () {
     $names = collect(($this->mcp)('tools/list')->assertOk()->json('result.tools'))
         ->pluck('name')->sort()->values();
 
-    expect($names->all())->toBe(['list_files', 'read_file', 'read_instructions', 'write_file']);
+    expect($names->all())->toBe([
+        'list_files', 'list_shared', 'read_file', 'read_instructions',
+        'read_shared', 'write_file', 'write_shared',
+    ]);
 });
 
 it('writes then reads a file scoped to the agent', function () {
