@@ -16,6 +16,13 @@ if [ ! -f /data/.env ]; then
     sed -i "s|^APP_KEY=.*|APP_KEY=${APP_KEY}|" /data/.env
 fi
 
+# The seeded .env.example leaves DB_DATABASE unset, which points Laravel at
+# /app/database/database.sqlite — a non-persistent in-image path. Pin it to the
+# volume so Docker-only deploys (no compose env) work the same as compose.
+if ! grep -q '^DB_DATABASE=' /data/.env; then
+    printf '\nDB_DATABASE=%s\n' "${DB_DATABASE:-/data/database.sqlite}" >> /data/.env
+fi
+
 ln -sfn /data/.env .env
 
 DB_PATH="${DB_DATABASE:-/data/database.sqlite}"
