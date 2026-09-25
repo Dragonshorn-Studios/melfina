@@ -84,6 +84,24 @@ it('rejects invalid credentials', function () {
     $this->assertGuest();
 });
 
+it('flags the session cookie secure behind a trusted TLS proxy', function () {
+    User::factory()->owner()->create([
+        'email' => 'owner@example.com',
+        'password' => bcrypt('password'),
+    ]);
+
+    $response = $this->post(route('login'), [
+        'email' => 'owner@example.com',
+        'password' => 'password',
+    ], ['X-Forwarded-Proto' => 'https']);
+
+    $sessionCookie = collect($response->headers->getCookies())
+        ->first(fn ($cookie) => $cookie->getName() === config('session.cookie'));
+
+    expect($sessionCookie)->not->toBeNull()
+        ->and($sessionCookie->isSecure())->toBeTrue();
+});
+
 it('logs out', function () {
     $owner = User::factory()->owner()->create();
 
