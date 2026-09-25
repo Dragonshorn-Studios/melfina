@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredOwnerController;
+use App\Http\Controllers\Console\AgentController;
 use App\Http\Controllers\Console\DashboardController;
 use Illuminate\Support\Facades\Route;
 
@@ -24,4 +25,7 @@ Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
 
 Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');
+
+    Route::post('agents/{agent}/rotate', [AgentController::class, 'rotate'])->name('agents.rotate');
+    Route::resource('agents', AgentController::class)->except(['destroy']);
 });
