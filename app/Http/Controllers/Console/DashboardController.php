@@ -3,15 +3,31 @@
 namespace App\Http\Controllers\Console;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\RedirectResponse;
+use App\Models\Agent;
+use App\Models\SharedSpace;
+use App\Models\VfsFile;
+use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
-    /**
-     * The console is the four tabs — Agents is the landing one.
-     */
-    public function __invoke(): RedirectResponse
+    public function __invoke(): View
     {
-        return redirect()->route('console.agents.index');
+        return view('console.dashboard', [
+            'stats' => [
+                'agents' => Agent::count(),
+                'active' => Agent::where('status', Agent::STATUS_ACTIVE)->count(),
+                'files' => VfsFile::count(),
+                'spaces' => SharedSpace::count(),
+            ],
+            'agents' => Agent::query()
+                ->withCount('files')
+                ->withMax('files', 'updated_at')
+                ->orderBy('name')
+                ->get(),
+            'spaces' => SharedSpace::query()
+                ->withCount(['files', 'aclEntries'])
+                ->orderBy('name')
+                ->get(),
+        ]);
     }
 }

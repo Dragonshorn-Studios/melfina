@@ -12,13 +12,13 @@ use InvalidArgumentException;
 
 class FileController extends Controller
 {
-    public function index(): View
+    /**
+     * The sidebar agent list is the file browser entry point now — the
+     * global index folds into it.
+     */
+    public function index(): RedirectResponse
     {
-        $this->authorize('viewAny', Agent::class);
-
-        return view('console.files.index', [
-            'agents' => Agent::query()->withCount('files')->orderBy('name')->get(),
-        ]);
+        return redirect()->route('console.agents.index');
     }
 
     public function show(Agent $agent): View

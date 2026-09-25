@@ -31,6 +31,7 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::get('/', DashboardController::class)->name('dashboard');
 
     Route::post('agents/{agent}/rotate', [AgentController::class, 'rotate'])->name('agents.rotate');
+    Route::get('agents/{agent}/connect', [AgentController::class, 'connect'])->name('agents.connect');
     Route::resource('agents', AgentController::class)->except(['destroy']);
 
     Route::get('instructions', [InstructionController::class, 'index'])->name('instructions.index');

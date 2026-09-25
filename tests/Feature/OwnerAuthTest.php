@@ -45,7 +45,7 @@ it('lets the owner into the console', function () {
 
     $this->actingAs($owner)
         ->get(route('console.dashboard'))
-        ->assertRedirect(route('console.agents.index'));
+        ->assertOk();
 });
 
 it('forbids non-owner users from owner routes', function () {

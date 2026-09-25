@@ -1,4 +1,4 @@
-<x-console-layout :title="$agent->name">
+<x-console-layout :title="$agent->name" :agent="$agent">
     @if (session('plaintext_key'))
         <div id="plaintext-key" class="mb-6 border border-amber bg-void p-4" style="border-radius: var(--radius-console)">
             <div class="flex items-center justify-between">

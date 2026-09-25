@@ -8,14 +8,16 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
  * @property string $name
  * @property string $status
  * @property string|null $key_hash
+ * @property Carbon|null $key_issued_at
  */
-#[Fillable(['name', 'status', 'key_hash'])]
+#[Fillable(['name', 'status', 'key_hash', 'key_issued_at'])]
 class Agent extends Model
 {
     /** @use HasFactory<AgentFactory> */
@@ -24,6 +26,13 @@ class Agent extends Model
     public const STATUS_ACTIVE = 'active';
 
     public const STATUS_DISABLED = 'disabled';
+
+    protected function casts(): array
+    {
+        return [
+            'key_issued_at' => 'datetime',
+        ];
+    }
 
     public function instruction(): HasOne
     {
@@ -49,6 +58,7 @@ class Agent extends Model
         $plaintext = 'melf_'.Str::random(48);
 
         $this->key_hash = self::hashKey($plaintext);
+        $this->key_issued_at = now();
         $this->save();
 
         return $plaintext;

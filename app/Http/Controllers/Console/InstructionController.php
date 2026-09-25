@@ -12,15 +12,12 @@ use Illuminate\View\View;
 class InstructionController extends Controller
 {
     /**
-     * Instruction editor landing: pick an agent to shape.
+     * Instructions live under each agent's workspace tab now — the global
+     * index folds into the sidebar agent list.
      */
-    public function index(): View
+    public function index(): RedirectResponse
     {
-        $this->authorize('viewAny', Agent::class);
-
-        return view('console.instructions.index', [
-            'agents' => Agent::query()->withExists('instruction')->orderBy('name')->get(),
-        ]);
+        return redirect()->route('console.agents.index');
     }
 
     /**
