@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Console;
 
 use App\Http\Controllers\Controller;
-use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse;
 
 class DashboardController extends Controller
 {
-    public function __invoke(): View
+    /**
+     * The console is the four tabs — Agents is the landing one.
+     */
+    public function __invoke(): RedirectResponse
     {
-        return view('console.dashboard');
+        return redirect()->route('console.agents.index');
     }
 }

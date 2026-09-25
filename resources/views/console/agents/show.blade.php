@@ -1,7 +1,12 @@
 <x-console-layout :title="$agent->name">
     @if (session('plaintext_key'))
-        <div class="mb-6 border border-amber bg-void p-4" style="border-radius: var(--radius-console)">
-            <p class="font-mono text-xs tracking-[0.16em] text-amber">AGENT KEY — SHOWN ONCE</p>
+        <div id="plaintext-key" class="mb-6 border border-amber bg-void p-4" style="border-radius: var(--radius-console)">
+            <div class="flex items-center justify-between">
+                <p class="font-mono text-xs tracking-[0.16em] text-amber">AGENT KEY — SHOWN ONCE</p>
+                <button type="button" onclick="document.getElementById('plaintext-key').remove()"
+                    class="border border-border px-2 py-1 font-mono text-xs text-steel hover:border-amber hover:text-cream"
+                    style="border-radius: var(--radius-console)">dismiss</button>
+            </div>
             <p class="mt-2 select-all break-all font-mono text-sm text-cream">{{ session('plaintext_key') }}</p>
             <p class="mt-2 font-mono text-xs text-steel">Copy it now. Only the hash is stored; we cannot show it again.</p>
         </div>

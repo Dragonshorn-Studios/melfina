@@ -12,6 +12,18 @@ use Illuminate\View\View;
 class InstructionController extends Controller
 {
     /**
+     * Instruction editor landing: pick an agent to shape.
+     */
+    public function index(): View
+    {
+        $this->authorize('viewAny', Agent::class);
+
+        return view('console.instructions.index', [
+            'agents' => Agent::query()->withExists('instruction')->orderBy('name')->get(),
+        ]);
+    }
+
+    /**
      * Edit the (1:1) instruction record for an agent, creating it lazily.
      */
     public function edit(Agent $agent): View

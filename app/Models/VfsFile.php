@@ -124,4 +124,17 @@ class VfsFile extends Model
             ['content' => $content],
         );
     }
+
+    /**
+     * Delete a file scoped to the agent. Returns whether a row was removed.
+     */
+    public static function deleteFor(Agent $agent, string $path): bool
+    {
+        $normalized = static::normalizePath($path);
+
+        return static::query()
+            ->where('agent_id', $agent->id)
+            ->where('path', $normalized)
+            ->delete() > 0;
+    }
 }

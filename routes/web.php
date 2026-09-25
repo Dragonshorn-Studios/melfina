@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredOwnerController;
 use App\Http\Controllers\Console\AgentController;
 use App\Http\Controllers\Console\DashboardController;
+use App\Http\Controllers\Console\FileController;
 use App\Http\Controllers\Console\InstructionController;
 use App\Http\Controllers\Console\SharedSpaceController;
 use Illuminate\Support\Facades\Route;
@@ -31,8 +32,15 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::post('agents/{agent}/rotate', [AgentController::class, 'rotate'])->name('agents.rotate');
     Route::resource('agents', AgentController::class)->except(['destroy']);
 
+    Route::get('instructions', [InstructionController::class, 'index'])->name('instructions.index');
     Route::get('agents/{agent}/instructions', [InstructionController::class, 'edit'])->name('agents.instructions.edit');
     Route::put('agents/{agent}/instructions', [InstructionController::class, 'update'])->name('agents.instructions.update');
+
+    Route::get('files', [FileController::class, 'index'])->name('files.index');
+    Route::get('files/{agent}', [FileController::class, 'show'])->name('files.show');
+    Route::get('files/{agent}/edit', [FileController::class, 'edit'])->name('files.edit');
+    Route::put('files/{agent}', [FileController::class, 'update'])->name('files.update');
+    Route::delete('files/{agent}', [FileController::class, 'destroy'])->name('files.destroy');
 
     Route::resource('shared', SharedSpaceController::class)->except(['destroy', 'show']);
 });

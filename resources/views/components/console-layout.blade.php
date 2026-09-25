@@ -28,6 +28,26 @@
                 @endauth
             </header>
 
+            @auth
+                @php
+                    $tabs = [
+                        ['label' => 'Agents', 'route' => 'console.agents.index', 'active' => request()->routeIs('console.agents.*') && ! request()->routeIs('console.agents.instructions.*')],
+                        ['label' => 'Files', 'route' => 'console.files.index', 'active' => request()->routeIs('console.files.*')],
+                        ['label' => 'Shared', 'route' => 'console.shared.index', 'active' => request()->routeIs('console.shared.*')],
+                        ['label' => 'Instructions', 'route' => 'console.instructions.index', 'active' => request()->routeIs('console.instructions.*') || request()->routeIs('console.agents.instructions.*')],
+                    ];
+                @endphp
+                <nav class="mb-8 flex gap-1 border border-border bg-panel p-1" style="border-radius: var(--radius-console)">
+                    @foreach ($tabs as $tab)
+                        <a href="{{ route($tab['route']) }}"
+                            class="px-3 py-1.5 font-mono text-xs tracking-[0.12em] {{ $tab['active'] ? 'border border-amber bg-void text-amber' : 'border border-transparent text-steel hover:text-cream' }}"
+                            style="border-radius: var(--radius-console)">
+                            {{ strtoupper($tab['label']) }}
+                        </a>
+                    @endforeach
+                </nav>
+            @endauth
+
             {{ $slot }}
         </div>
     </body>
