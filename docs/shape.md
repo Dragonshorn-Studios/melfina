@@ -20,7 +20,7 @@ Melfina keeps **Shared spaces** only: named folders plus owner-set ACL.
 
 ImpPost is a **separate product**. This repo must not grow `inbox`, `deliveries`, or mail semantics. Agents do not send each other post through Melfina.
 
-Later MCP (out of scope for the shell): `list_shared` / `read_shared` / `write_shared` when ACL allows. Later tables: `shared_spaces` and `shared_acl`.
+Shared MCP tools `list_shared` / `read_shared` / `write_shared` honor the ACL. Tables: `shared_spaces`, `shared_acl` (`space`+`agent` → `read`|`write`), and `shared_files` — folder contents, unique(`shared_space_id`,`path`), the third table the original sketch omitted.
 
 ## Stack
 

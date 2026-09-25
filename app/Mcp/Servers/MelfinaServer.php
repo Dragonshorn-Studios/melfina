@@ -16,7 +16,7 @@ use Laravel\Mcp\Server\Attributes\Version;
 
 #[Name('melfina')]
 #[Version('0.0.1')]
-#[Instructions('You are connected to your own private Melfina brain. All tools are scoped to the agent whose key authenticated this request — you can only see and touch your own files and instructions.')]
+#[Instructions('You are connected to your own private Melfina brain. Every tool is scoped to the agent whose key authenticated this request: the file and instruction tools only see and touch your own tree, and the shared tools only reach folders you hold an ACL grant on.')]
 class MelfinaServer extends Server
 {
     protected array $tools = [
