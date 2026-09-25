@@ -39,7 +39,13 @@ class ResolveAgent
 
     private function agentFromOAuthToken(): ?Agent
     {
-        $user = Auth::guard('api')->user();
+        // Missing Passport keys or malformed tokens raise inside the guard;
+        // an unresolvable credential is a 401, never a 500.
+        try {
+            $user = Auth::guard('api')->user();
+        } catch (\Throwable) {
+            return null;
+        }
 
         if ($user === null) {
             return null;
