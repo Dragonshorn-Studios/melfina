@@ -75,6 +75,10 @@ The app listens on [http://localhost:8000](http://localhost:8000) (override with
 
 One owner per install. After first boot, open [http://localhost:8000/register](http://localhost:8000/register) and create the owner account — registration closes permanently once the owner exists. Owner console lives at `/console`; agents never use this session (they get Bearer/MCP keys).
 
+## Owner bootstrap
+
+One owner per install. After first boot, open [http://localhost:8000/register](http://localhost:8000/register) and create the owner account — registration closes permanently once the owner exists. Owner console lives at `/console`; agents never use this session (they get Bearer/MCP keys).
+
 ## Tokens
 
 void `#0B1220` · panel `#152238` · amber `#E8A838` · amber-dim `#B8842A` · cream `#E8E4D8` · steel `#8A9BB0` · danger `#C45C4A` · border `#2A3A52`
