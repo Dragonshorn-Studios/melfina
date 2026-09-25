@@ -6,6 +6,7 @@ use Database\Factories\AgentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 /**
@@ -22,6 +23,11 @@ class Agent extends Model
     public const STATUS_ACTIVE = 'active';
 
     public const STATUS_DISABLED = 'disabled';
+
+    public function instruction(): HasOne
+    {
+        return $this->hasOne(Instruction::class);
+    }
 
     public function isActive(): bool
     {
