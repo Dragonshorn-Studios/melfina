@@ -21,10 +21,10 @@ class ConsoleLayout extends Component
         public ?string $title = null,
         public ?Agent $agent = null,
     ) {
-        $this->agents = Agent::query()
-            ->withCount('files')
-            ->orderBy('name')
-            ->get();
+        // Guest pages share this layout but render only a bare header.
+        $this->agents = auth()->check()
+            ? Agent::query()->withCount('files')->orderBy('name')->get()
+            : collect();
     }
 
     public function render(): View
