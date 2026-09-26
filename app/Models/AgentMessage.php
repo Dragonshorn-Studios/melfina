@@ -18,8 +18,8 @@ use Illuminate\Support\Carbon;
  * `sender_name`/`recipient_name` are display snapshots so history stays
  * readable after an agent is renamed or deleted (FKs go null).
  *
- * @property int $sender_agent_id
- * @property int $recipient_agent_id
+ * @property int|null $sender_agent_id
+ * @property int|null $recipient_agent_id
  * @property string $sender_name
  * @property string $recipient_name
  * @property string|null $subject
@@ -48,6 +48,8 @@ class AgentMessage extends Model
     protected function casts(): array
     {
         return [
+            'sender_agent_id' => 'integer',
+            'recipient_agent_id' => 'integer',
             'read_at' => 'datetime',
             'acknowledged_at' => 'datetime',
         ];

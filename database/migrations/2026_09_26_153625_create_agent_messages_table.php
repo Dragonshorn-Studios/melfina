@@ -15,7 +15,7 @@ return new class extends Migration
             $table->foreignId('recipient_agent_id')->nullable()->constrained('agents')->nullOnDelete();
             $table->string('sender_name');
             $table->string('recipient_name');
-            $table->string('subject')->nullable();
+            $table->string('subject', 300)->nullable();
             $table->text('body');
             $table->timestamp('read_at')->nullable();
             $table->timestamp('acknowledged_at')->nullable();

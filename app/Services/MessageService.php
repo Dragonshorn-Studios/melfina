@@ -212,14 +212,20 @@ class MessageService
 
         $total = strlen($body);
         foreach ($attachments as $attachment) {
-            if (mb_strlen($attachment['name'] ?? '') > AgentMessage::MAX_ATTACHMENT_NAME_LENGTH
-                || trim($attachment['name'] ?? '') === '') {
+            if (! is_array($attachment)
+                || ! is_string($attachment['name'] ?? null)
+                || ! is_string($attachment['content'] ?? null)) {
+                throw new InvalidArgumentException('Each attachment must be a {name, content} pair.');
+            }
+
+            if (mb_strlen($attachment['name']) > AgentMessage::MAX_ATTACHMENT_NAME_LENGTH
+                || trim($attachment['name']) === '') {
                 throw new InvalidArgumentException('Attachment name is empty or too long.');
             }
 
-            $total += strlen($attachment['content'] ?? '');
+            $total += strlen($attachment['content']);
 
-            if (strlen($attachment['content'] ?? '') > AgentMessage::MAX_ATTACHMENT_BYTES) {
+            if (strlen($attachment['content']) > AgentMessage::MAX_ATTACHMENT_BYTES) {
                 throw new InvalidArgumentException('Attachment exceeds '.AgentMessage::MAX_ATTACHMENT_BYTES.' bytes.');
             }
         }

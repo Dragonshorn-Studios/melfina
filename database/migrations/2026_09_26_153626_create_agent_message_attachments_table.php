@@ -13,7 +13,7 @@ return new class extends Migration
             $table->foreignId('agent_message_id')->constrained('agent_messages')->cascadeOnDelete();
             // The path/name the sender attached plus the content captured at send
             // time — an immutable snapshot, never re-read from the VFS.
-            $table->string('name');
+            $table->string('name', 512);
             $table->text('content');
             $table->timestamps();
 

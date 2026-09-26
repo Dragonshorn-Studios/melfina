@@ -179,18 +179,36 @@ it('preserves history with name snapshots when an agent is deleted', function ()
         ->and($kept->recipient_name)->toBe($recipientName);
 });
 
-it('rolls back delivery when an attachment is invalid', function () {
+it('rolls back the whole delivery when an attachment insert fails mid-transaction', function () {
+    AgentMessageAttachment::creating(fn () => throw new RuntimeException('insert failed'));
+
     try {
         $this->service->send($this->sender, $this->recipient->id, null, 'hi', [
             ['name' => 'ok.txt', 'content' => 'fine'],
-            ['name' => '', 'content' => 'bad'],
         ]);
-    } catch (InvalidArgumentException) {
+    } catch (RuntimeException) {
         // expected
     }
 
     expect(AgentMessage::query()->count())->toBe(0)
         ->and(AgentMessageAttachment::query()->count())->toBe(0);
+});
+
+it('rejects malformed attachments without leaking query errors', function () {
+    foreach ([
+        [['name' => 'no-content.txt']],
+        [['name' => 'non-string.txt', 'content' => 42]],
+        ['not-an-array'],
+    ] as $attachments) {
+        try {
+            $this->service->send($this->sender, $this->recipient->id, null, 'hi', $attachments);
+            $this->fail('Expected InvalidArgumentException');
+        } catch (InvalidArgumentException) {
+            // expected
+        }
+    }
+
+    expect(AgentMessage::query()->count())->toBe(0);
 });
 
 it('counts unread messages for hint surfaces', function () {
