@@ -17,11 +17,38 @@ if [ ! -f /data/.env ]; then
 
     # .env.example ships dev defaults; a Docker-only deploy (no compose env)
     # would otherwise run with debug on and logs hidden in storage/logs.
-    # Real env vars always win over .env, so compose/deploy env still overrides.
     sed -i "s|^APP_ENV=.*|APP_ENV=${APP_ENV:-production}|" /data/.env
     sed -i "s|^APP_DEBUG=.*|APP_DEBUG=${APP_DEBUG:-false}|" /data/.env
     sed -i "s|^APP_URL=.*|APP_URL=${APP_URL:-http://localhost:8000}|" /data/.env
     sed -i "s|^LOG_CHANNEL=.*|LOG_CHANNEL=${LOG_CHANNEL:-stderr}|" /data/.env
+fi
+
+persist_runtime_env() {
+    name="$1"
+    value="$2"
+    escaped_value="$(printf '%s' "$value" | sed 's/[\\&|]/\\&/g')"
+
+    if grep -q "^${name}=" /data/.env; then
+        sed -i "s|^${name}=.*|${name}=${escaped_value}|" /data/.env
+    else
+        printf '%s=%s\n' "$name" "$value" >> /data/.env
+    fi
+}
+
+# The data volume survives image rebuilds. Keep deploy-controlled values in
+# its .env aligned with the runtime environment on every container start,
+# while preserving manually managed values when no runtime override exists.
+if [ "${APP_ENV+x}" = x ]; then
+    persist_runtime_env APP_ENV "$APP_ENV"
+fi
+if [ "${APP_DEBUG+x}" = x ]; then
+    persist_runtime_env APP_DEBUG "$APP_DEBUG"
+fi
+if [ "${APP_URL+x}" = x ]; then
+    persist_runtime_env APP_URL "$APP_URL"
+fi
+if [ "${LOG_CHANNEL+x}" = x ]; then
+    persist_runtime_env LOG_CHANNEL "$LOG_CHANNEL"
 fi
 
 # The seeded .env.example leaves DB_DATABASE unset, which points Laravel at
