@@ -60,9 +60,10 @@
             </div>
             <p class="mt-3 text-sm text-steel">
                 The fleet key (<code>melfg_…</code>) is the shared credential you put in a shared MCP config:
-                it opens the <code>/mcp</code> endpoint but carries no persona. Each agent then proves who it
-                is with its own key, sent as <code>X-Melfina-Agent-Key</code> (or <code>?agent_key=</code>) —
-                that is what gives every agent or discussion its own brain on a shared server.
+                it opens the <code>/mcp</code> endpoint but carries no persona — anyone holding it can claim
+                any agent. Each agent then says who it is with <code>X-Melfina-Agent-Key</code> (or
+                <code>?agent_key=</code>) carrying its name or key — that is what gives every agent or
+                discussion its own brain on a shared server.
             </p>
             <dl class="mt-4 space-y-2 font-mono text-xs">
                 <div class="flex gap-4">

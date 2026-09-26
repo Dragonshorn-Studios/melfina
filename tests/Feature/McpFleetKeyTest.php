@@ -26,7 +26,37 @@ beforeEach(function () {
 it('rejects a fleet bearer without an agent key', function () {
     ($this->mcp)('tools/list', [], $this->fleetKey)
         ->assertUnauthorized()
-        ->assertJson(['error' => 'agent key required']);
+        ->assertJson(['error' => 'agent persona required']);
+});
+
+it('resolves the persona from the agent name', function () {
+    ($this->mcp)('tools/list', [], $this->fleetKey, ['X-Melfina-Agent-Key' => $this->agent->name])
+        ->assertOk();
+
+    $this->postJson('/mcp?agent_key='.$this->agent->name, [
+        'jsonrpc' => '2.0',
+        'id' => 1,
+        'method' => 'tools/list',
+        'params' => [],
+    ], ['Authorization' => 'Bearer '.$this->fleetKey])->assertOk();
+});
+
+it('fails closed on an ambiguous or disabled agent name', function () {
+    Agent::factory()->withKey('melf_twin')->create(['name' => $this->agent->name]);
+
+    ($this->mcp)('tools/list', [], $this->fleetKey, ['X-Melfina-Agent-Key' => $this->agent->name])
+        ->assertUnauthorized();
+
+    $twin = Agent::where('key_hash', Agent::hashKey('melf_twin'))->firstOrFail();
+    $twin->update(['status' => Agent::STATUS_DISABLED]);
+
+    ($this->mcp)('tools/list', [], $this->fleetKey, ['X-Melfina-Agent-Key' => $this->agent->name])
+        ->assertOk();
+
+    $this->agent->update(['status' => Agent::STATUS_DISABLED]);
+
+    ($this->mcp)('tools/list', [], $this->fleetKey, ['X-Melfina-Agent-Key' => $this->agent->name])
+        ->assertUnauthorized();
 });
 
 it('resolves the persona from the agent key header', function () {
@@ -112,7 +142,8 @@ it('serves the plugin repo over the dumb git protocol', function () {
     $this->get('/plugins/melf_testkey.git/objects/pack/'.$pack)->assertOk();
 });
 
-it('serves the fleet-form repo URL with both keys embedded', function () {
+it('serves the fleet-form repo URL keyed by name or key', function () {
+    $this->get("/plugins/{$this->fleetKey}/{$this->agent->name}.git/info/refs")->assertOk();
     $this->get("/plugins/{$this->fleetKey}/melf_testkey.git/info/refs")->assertOk();
 
     $repo = app(PluginRepo::class)->repoDir($this->agent);
@@ -121,12 +152,19 @@ it('serves the fleet-form repo URL with both keys embedded', function () {
 
     expect($mcp->getOutput())
         ->toContain('Bearer '.$this->fleetKey)
-        ->toContain('melf_testkey');
+        ->toContain('X-Melfina-Agent-Key')
+        ->toContain($this->agent->name)
+        ->not->toContain('melf_testkey');
+});
+
+it('rejects a bare name in the direct repo form', function () {
+    $this->get('/plugins/'.$this->agent->name.'.git/info/refs')->assertNotFound();
 });
 
 it('404s plugin repo requests with dead credentials', function () {
     $this->get('/plugins/melf_deadkey.git/info/refs')->assertNotFound();
     $this->get('/plugins/melfg_dead/melf_testkey.git/info/refs')->assertNotFound();
+    $this->get("/plugins/{$this->fleetKey}/no-such-agent.git/info/refs")->assertNotFound();
 });
 
 it('lets the owner download the plugin zip with live keys', function () {

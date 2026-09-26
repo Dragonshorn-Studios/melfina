@@ -30,17 +30,22 @@ class PluginRepoController extends Controller
 
     private function serve(PluginRepo $repos, string $repo, string $path, ?string $fleet): Response
     {
-        $agentKey = Str::beforeLast($repo, '.git');
-        $agent = Agent::forKey($agentKey);
+        $persona = Str::beforeLast($repo, '.git');
+        $agent = Agent::forPersona($persona);
 
-        // A fleet key in the URL must be live; when present it is embedded
-        // as the Bearer credential in the generated package.
-        if ($agent === null || ($fleet !== null && ! User::isMcpKey($fleet))) {
+        // The direct form embeds the URL segment as the Bearer credential,
+        // so it must be a real `melf_…` key — a bare name can't open /mcp on
+        // its own. A fleet key in the URL must be live.
+        if (
+            $agent === null
+            || ($fleet === null && ! str_starts_with($persona, 'melf_'))
+            || ($fleet !== null && ! User::isMcpKey($fleet))
+        ) {
             abort(404);
         }
 
         try {
-            $dir = $repos->ensureBuilt($agent, $agentKey, $fleet);
+            $dir = $repos->ensureBuilt($agent, $persona, $fleet);
         } catch (\Throwable) {
             abort(500);
         }

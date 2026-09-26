@@ -13,9 +13,9 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Resolves the calling agent from three auth paths:
  *
- * - fleet key Bearer (`melfg_…`, User::isMcpKey) plus the agent's own key in
- *   the `X-Melfina-Agent-Key` header or `agent_key` query param — the shape
- *   shared MCP configs use, where the config never holds a persona;
+ * - fleet key Bearer (`melfg_…`, User::isMcpKey) plus the agent's persona —
+ *   its name or `melf_…` key — in the `X-Melfina-Agent-Key` header or
+ *   `agent_key` query param, for shared MCP configs that hold no persona;
  * - a per-agent Bearer key (Agent::forKey) for dedicated configs;
  * - an OAuth access token bound to an agent through the consent grant
  *   (McpTokenAgent).
@@ -49,17 +49,17 @@ class ResolveAgent
 
     /**
      * Fleet-mode request: the fleet key only opens the endpoint. The persona
-     * comes from the key the agent stores itself — without one there is no
-     * agent to scope to, so the request fails closed.
+     * comes from what the agent knows about itself — its name or key —
+     * without one there is no agent to scope to, so the request fails closed.
      */
     private function handleFleetRequest(Request $request, Closure $next): Response
     {
-        $agentKey = $request->header(self::AGENT_KEY_HEADER) ?? $request->query('agent_key');
+        $persona = $request->header(self::AGENT_KEY_HEADER) ?? $request->query('agent_key');
 
-        $agent = is_string($agentKey) ? Agent::forKey($agentKey) : null;
+        $agent = is_string($persona) ? Agent::forPersona($persona) : null;
 
         if ($agent === null) {
-            return $this->unauthorized('agent key required');
+            return $this->unauthorized('agent persona required');
         }
 
         $request->attributes->set('agent', $agent);

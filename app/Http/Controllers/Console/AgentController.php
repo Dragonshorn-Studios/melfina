@@ -80,7 +80,7 @@ class AgentController extends Controller
                 'claudeCode' => 'claude mcp add --transport http melfina '.$endpoint,
                 'claudeCodeKey' => 'claude mcp add --transport http'
                     .' --header "Authorization: Bearer melfg_…"'
-                    .' --header "X-Melfina-Agent-Key: melf_…"'
+                    .' --header "X-Melfina-Agent-Key: '.$agent->name.'"'
                     .' melfina '.$endpoint,
                 'cursor' => json_encode([
                     'mcpServers' => [
@@ -102,7 +102,7 @@ class AgentController extends Controller
                         'url' => $endpoint,
                         'headers' => [
                             'Authorization' => 'Bearer melfg_…',
-                            'X-Melfina-Agent-Key' => 'melf_…',
+                            'X-Melfina-Agent-Key' => $agent->name,
                         ],
                         'enabled' => true,
                     ],

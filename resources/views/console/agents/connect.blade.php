@@ -4,13 +4,15 @@
         <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">{{ $agent->name }} — MCP endpoint</h1>
         <p class="mt-3 text-sm text-steel">
             Point MCP clients at this Streamable HTTP URL. Clients that speak OAuth get a browser consent
-            screen where you bind the token to this agent. Static configs send two keys: the install's
+            screen where you bind the token to this agent. Static configs send two credentials: the install's
             <strong class="text-cream">fleet key</strong> (<code>melfg_…</code>, generate it on the
             <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.dashboard') }}">dashboard</a>)
-            as the Bearer credential, plus this agent's own key (<code>melf_…</code>, shown once on the
+            as the Bearer credential, plus this agent's persona — its <strong class="text-cream">name</strong>
+            or its key (<code>melf_…</code>, shown once on the
             <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.show', $agent) }}">Key</a> tab)
-            as <code>X-Melfina-Agent-Key</code>. On a shared config the fleet key is identical for every
-            agent — the agent key is what gives each one its persona.
+            as <code>X-Melfina-Agent-Key</code>. The name is not a secret — the agent just has to know it.
+            On a shared config the fleet key is identical for every agent — the persona is what gives each
+            one its brain.
         </p>
         <pre class="mt-4 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $endpoint }}</pre>
 
@@ -19,7 +21,7 @@
             <p class="mt-2 text-sm text-steel">
                 For clients that install MCP servers from a plugin repo (MiniMax Code, mavis, zcode,
                 Claude plugin marketplaces, …) Melfina serves a ready-made package as a git URL —
-                substitute the fleet key and this agent's key:
+                substitute the fleet key and this agent's name or key:
             </p>
             <pre class="mt-3 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $pluginUrl }}</pre>
             <p class="mt-2 text-sm text-steel">
@@ -103,12 +105,12 @@
             <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
                 <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">MINIMAX (MAVIS)</summary>
                 <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
-                    <li>MiniMax does not run the OAuth flow — send the fleet key as Bearer plus this agent's key in <code>X-Melfina-Agent-Key</code>. Or install the plugin package from the URL above.</li>
+                    <li>MiniMax does not run the OAuth flow — send the fleet key as Bearer plus this agent's name in <code>X-Melfina-Agent-Key</code>. Or install the plugin package from the URL above.</li>
                     <li>Edit <code>~/.mavis/mcp/mcp.json</code> and add a <code>melfina</code> entry (the file format varies between MiniMax versions — check <code>mavis mcp list</code> after saving):</li>
                 </ol>
                 <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $snippets['minimax'] }}</pre>
                 <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel" start="3">
-                    <li>Replace <code>melfg_…</code> with the fleet key and <code>melf_…</code> with this agent's key, then restart the agent.</li>
+                    <li>Replace <code>melfg_…</code> with the fleet key, then restart the agent.</li>
                 </ol>
             </details>
 
@@ -117,7 +119,7 @@
                 <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
                     <li>Transport: Streamable HTTP at the endpoint URL above.</li>
                     <li>Auth: OAuth 2.1 with DCR — clients auto-register via <code>POST /oauth/register</code>; discovery is at <code>/.well-known/oauth-protected-resource</code> and <code>/.well-known/oauth-authorization-server</code>. PKCE S256 only.</li>
-                    <li>No OAuth support? Send <code>Authorization: Bearer melfg_…</code> (fleet key) plus <code>X-Melfina-Agent-Key: melf_…</code> on every request. A dedicated config may send <code>Bearer melf_…</code> alone instead.</li>
+                    <li>No OAuth support? Send <code>Authorization: Bearer melfg_…</code> (fleet key) plus <code>X-Melfina-Agent-Key</code> with this agent's name or key on every request. A dedicated config may send <code>Bearer melf_…</code> alone instead.</li>
                 </ol>
             </details>
         </div>

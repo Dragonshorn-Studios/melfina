@@ -20,16 +20,17 @@ Mcp::web('/mcp', MelfinaServer::class)->middleware(ResolveAgent::class);
 
 // Per-agent plugin repositories, cloneable over git's dumb HTTP protocol.
 // The credentials ride in the path: /plugins/{fleet}/{agent}.git for the
-// fleet form, /plugins/{agent}.git when no fleet key is in play.
+// fleet form (agent = name or melf_ key), /plugins/{agentKey}.git when no
+// fleet key is in play.
 Route::get('plugins/{fleet}/{repo}/{path?}', [PluginRepoController::class, 'showFleet'])
     ->where([
         'fleet' => 'melfg_[A-Za-z0-9]+',
-        'repo' => 'melf_[A-Za-z0-9]+\.git',
+        'repo' => '[A-Za-z0-9_.-]+\.git',
         'path' => '.*',
     ]);
 
 Route::get('plugins/{repo}/{path?}', [PluginRepoController::class, 'show'])
     ->where([
-        'repo' => 'melf_[A-Za-z0-9]+\.git',
+        'repo' => '[A-Za-z0-9_.-]+\.git',
         'path' => '.*',
     ]);

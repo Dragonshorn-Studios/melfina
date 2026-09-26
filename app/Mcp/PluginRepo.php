@@ -18,7 +18,10 @@ use Symfony\Component\Process\Process;
  * for someone already holding them:
  *
  *     /plugins/{agentKey}.git                    → Bearer melf_… (direct persona)
- *     /plugins/{fleetKey}/{agentKey}.git         → Bearer melfg_… + X-Melfina-Agent-Key
+ *     /plugins/{fleetKey}/{agentKey|name}.git    → Bearer melfg_… + X-Melfina-Agent-Key: <name>
+ *
+ * The fleet form's persona header carries the agent's *name*, not its key —
+ * the name is a non-secret id the agent knows from its own instructions.
  *
  * Built repos are cached under storage/app/mcp-plugins and rebuilt whenever
  * the embedded credentials or endpoint change (fingerprint check).
@@ -177,7 +180,7 @@ class PluginRepo
         $headers = $fleetKey !== null
             ? [
                 'Authorization' => 'Bearer '.$fleetKey,
-                'X-Melfina-Agent-Key' => $agentKey,
+                'X-Melfina-Agent-Key' => $agent->name,
             ]
             : ['Authorization' => 'Bearer '.$agentKey];
 
@@ -235,8 +238,9 @@ You are {$agent->name}. This plugin connects you to your own Melfina brain.
 - `list_files` / `read_file` / `write_file` — your private tree. Nobody else can see or touch it.
 - `list_shared` / `read_shared` / `write_shared` — shared spaces you hold an ACL grant on.
 
-Your persona comes from the agent key wired into this plugin's MCP headers.
-Never paste the plugin URL, the fleet key, or your key into chat or code.
+Your persona comes from your name wired into this plugin's MCP headers —
+the fleet key only opens the endpoint. Never paste the plugin URL or the
+fleet key into chat or code.
 MD;
 
         $readme = <<<MD
