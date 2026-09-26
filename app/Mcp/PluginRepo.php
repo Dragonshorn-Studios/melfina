@@ -140,6 +140,61 @@ class PluginRepo
     }
 
     /**
+     * Flat directory of the credential-free fleet package for ZIP
+     * downloads (same layout as per-agent packages).
+     */
+    public function publicPackageDir(): string
+    {
+        return storage_path('app/mcp-plugins/public-pkg');
+    }
+
+    /**
+     * Regenerate the flat public package directory. Safe to rebuild on
+     * every download — nothing inside is a credential.
+     */
+    public function rebuildPublicPackage(): string
+    {
+        $dir = $this->publicPackageDir();
+        File::deleteDirectory($dir);
+
+        foreach ($this->publicPackageFiles() as $path => $contents) {
+            $full = $dir.'/'.$path;
+            File::ensureDirectoryExists(dirname($full));
+            file_put_contents($full, $contents);
+        }
+
+        return $dir;
+    }
+
+    /**
+     * Zip a package directory into a 0600 temp file and return its path —
+     * the caller streams it via response()->download()->deleteFileAfterSend().
+     * tempnam's file is already 0600; OVERWRITE truncates rather than
+     * replacing it, so the credential-bearing archive never exists at
+     * a world-readable path.
+     */
+    public function zipDirectory(string $dir): string
+    {
+        throw_unless(class_exists(\ZipArchive::class), RuntimeException::class, 'PHP ext-zip is not installed');
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'melfina-plugin-');
+        $zip = new \ZipArchive;
+        throw_unless($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true, RuntimeException::class);
+
+        // allFiles with $hidden=true ships the dot-prefixed manifests
+        // (.minimax-plugin/, .claude-plugin/, .mcp.json) — and needs no
+        // GLOB_BRACE, which musl/Alpine PHP builds lack.
+        foreach (File::allFiles($dir, hidden: true) as $file) {
+            $zip->addFile($file->getPathname(), $file->getRelativePathname());
+        }
+
+        throw_unless($zip->close(), RuntimeException::class);
+        chmod($zipPath, 0600);
+
+        return $zipPath;
+    }
+
+    /**
      * Resolve a repo-relative path (info/refs, HEAD, objects/…) to a real
      * file inside the built repo, or null when it escapes or does not exist.
      */

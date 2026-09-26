@@ -10,6 +10,12 @@
             <strong class="text-cream">name</strong>, a non-secret id it knows from its own instructions. For a
             dedicated single-agent setup instead, see that agent's <em>Connect</em> tab.
         </p>
+        @if ($endpointIsLocal)
+            <p class="mt-3 border border-red-500/60 bg-void/40 px-3 py-2 font-mono text-xs text-red-400" style="border-radius: var(--radius-console)">
+                endpoint resolves to localhost — set APP_URL to this install's public URL, or remote
+                agents get a package pointing at their own machine.
+            </p>
+        @endif
         @unless ($hasFleetKey)
             <p class="mt-3 border border-amber/50 bg-void/40 px-3 py-2 font-mono text-xs text-amber" style="border-radius: var(--radius-console)">
                 no fleet key yet — generate one on the dashboard first.
@@ -28,6 +34,8 @@
             </p>
             <pre class="mt-3 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $publicRepoUrl }}</pre>
             <p class="mt-2 text-sm text-steel">
+                Importer insists on GitHub or a file upload (MiniMax)?
+                <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.mcp.plugin.zip') }}">Download the same package as a ZIP</a>.
                 Prefer the key baked in instead? <code>{{ $fleetRepoUrl }}</code> embeds the fleet key —
                 the clone needs Basic credentials, so use it only with clients that pass
                 <code>user:pass@</code> URLs correctly.
@@ -67,9 +75,9 @@
             <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
                 <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">OAUTH CLIENTS</summary>
                 <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
-                    <li>OAuth-capable clients don't need the fleet key at all: point them at the endpoint, they auto-register via <code>POST /oauth/register</code>, and you bind the token to one agent on the consent screen.</li>
+                    <li>OAuth clients don't need the fleet key: point them at the endpoint, they auto-register via <code>POST /oauth/register</code>, and the token is bound to one agent — chosen on the consent screen, which needs a one-time owner click <em>per bot</em>.</li>
+                    <li>Headless bots that can't click through consent (grokbot-style, one connection per bot) use the fleet forms above instead — fleet key plus "you are &lt;name&gt;" via <code>X-Melfina-Agent-Key</code> or the Basic username.</li>
                     <li>Discovery: <code>/.well-known/oauth-protected-resource</code> and <code>/.well-known/oauth-authorization-server</code>. PKCE S256 only.</li>
-                    <li>Note OAuth binds each token to a single agent — the fleet forms above are the ones that let a shared install serve every agent.</li>
                 </ol>
             </details>
         </div>

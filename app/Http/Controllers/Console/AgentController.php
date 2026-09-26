@@ -7,13 +7,11 @@ use App\Mcp\PluginRepo;
 use App\Models\Agent;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
-use ZipArchive;
 
 class AgentController extends Controller
 {
@@ -202,24 +200,12 @@ class AgentController extends Controller
 
         $dir = $repos->packageDir($agent);
         abort_unless(is_dir($dir), 404);
-        abort_unless(class_exists(ZipArchive::class), 500, 'PHP ext-zip is not installed');
 
-        // tempnam's file is 0600 — keep that path (OVERWRITE truncates it)
-        // so the credential-bearing archive is never world-readable.
-        $zipPath = tempnam(sys_get_temp_dir(), 'melfina-plugin-');
-
-        $zip = new ZipArchive;
-        abort_unless($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true, 500);
-
-        // allFiles with $hidden=true ships the dot-prefixed manifests
-        // (.minimax-plugin/, .claude-plugin/, .mcp.json) — and needs no
-        // GLOB_BRACE, which musl/Alpine PHP builds lack.
-        foreach (File::allFiles($dir, hidden: true) as $file) {
-            $zip->addFile($file->getPathname(), $file->getRelativePathname());
+        try {
+            $zipPath = $repos->zipDirectory($dir);
+        } catch (\RuntimeException $e) {
+            abort(500, $e->getMessage());
         }
-
-        abort_unless($zip->close(), 500);
-        chmod($zipPath, 0600);
 
         $slug = Str::slug($agent->name) ?: 'agent';
 
