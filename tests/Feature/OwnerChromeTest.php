@@ -141,6 +141,34 @@ it('renders the dismiss control on a flashed key', function () {
         ->assertSee('dismiss');
 });
 
+it('gates every destructive form behind the shared confirm dialog', function () {
+    $gate = 'onsubmit="return window.__melfinaConfirm';
+
+    $this->actingAs($this->owner)
+        ->get(route('console.agents.show', $this->agent))
+        ->assertOk()
+        ->assertSee('data-confirm="Rotate key?', false)
+        ->assertSee($gate, false);
+
+    VfsFile::writeFor($this->agent, 'notes/plan.txt', 'x');
+    $this->actingAs($this->owner)
+        ->get(route('console.files.edit', [$this->agent, 'path' => 'notes/plan.txt']))
+        ->assertOk()
+        ->assertSee('data-confirm="Delete notes/plan.txt?', false)
+        ->assertSee($gate, false);
+
+    $this->postJson('/oauth/register', [
+        'client_name' => 'Gatecheck',
+        'redirect_uris' => ['http://localhost/callback'],
+    ])->assertCreated();
+
+    $this->actingAs($this->owner)
+        ->get(route('console.clients.index'))
+        ->assertOk()
+        ->assertSee('data-confirm="Revoke Gatecheck?', false)
+        ->assertSee($gate, false);
+});
+
 it('blocks non-owners from files and instructions routes', function () {
     $user = User::factory()->create();
 

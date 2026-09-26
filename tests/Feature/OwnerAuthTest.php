@@ -48,7 +48,7 @@ it('lets the owner into the console', function () {
         ->assertOk()
         ->assertSee('id="melfina-confirm"', false)
         ->assertSee('data-confirm=', false)
-        ->assertDontSee('onsubmit=', false)
+        ->assertSee('onsubmit="return window.__melfinaConfirm', false)
         ->assertSee('lg:sticky', false);
 });
 
