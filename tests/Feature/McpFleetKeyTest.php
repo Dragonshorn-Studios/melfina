@@ -71,6 +71,40 @@ it('resolves the persona from the agent_key query param (names only)', function 
     ], ['Authorization' => 'Bearer '.$this->fleetKey])->assertUnauthorized();
 });
 
+it('claims the persona from a Basic username on /mcp', function () {
+    // URL-only clients fold both credentials into the endpoint:
+    // https://{name}:{fleet}@host/mcp — username is the persona.
+    $this->withBasicAuth($this->agent->name, $this->fleetKey)
+        ->postJson('/mcp', [
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'tools/list',
+        ])->assertOk();
+
+    // Persona as the agent's key works the same way.
+    $this->withBasicAuth('melf_testkey', $this->fleetKey)
+        ->postJson('/mcp', [
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'tools/list',
+        ])->assertOk();
+
+    $this->withBasicAuth('no-such-agent', $this->fleetKey)
+        ->postJson('/mcp', [
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'tools/list',
+        ])->assertUnauthorized();
+
+    // A Basic pair without the fleet key is just a dead credential.
+    $this->withBasicAuth($this->agent->name, 'melf_testkey')
+        ->postJson('/mcp', [
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'tools/list',
+        ])->assertUnauthorized();
+});
+
 it('rejects a fleet bearer with an unknown or disabled agent key', function () {
     ($this->mcp)('tools/list', [], $this->fleetKey, ['X-Melfina-Agent-Key' => 'melf_wrong'])
         ->assertUnauthorized();
@@ -153,7 +187,7 @@ it('serves the direct-form plugin repo over the dumb git protocol', function () 
 it('serves the fleet-form repo keyed by persona name or agent key', function () {
     $clone = fn (string $user) => $this
         ->withBasicAuth($user, $this->fleetKey)
-        ->get('/plugins/melfina.git/info/refs');
+        ->get('/plugins/a.git/info/refs');
 
     $clone($this->agent->name)->assertOk();
     $clone('melf_testkey')->assertOk();
@@ -167,6 +201,36 @@ it('serves the fleet-form repo keyed by persona name or agent key', function () 
         ->toContain('X-Melfina-Agent-Key')
         ->toContain($this->agent->name)
         ->not->toContain('melf_testkey');
+});
+
+it('serves the fleet-wide melfina.git package without a persona', function () {
+    $clone = fn (string $path) => $this
+        ->withBasicAuth('melfina', $this->fleetKey)
+        ->get('/plugins/melfina.git/'.$path);
+
+    $clone('info/refs')->assertOk();
+    $clone('HEAD')->assertOk();
+
+    $dir = app(PluginRepo::class)->globalDir();
+    $show = fn (string $file) => tap(new Process(['git', '--git-dir='.$dir, 'show', 'HEAD:'.$file]), fn ($p) => $p->run())->getOutput();
+
+    $mcp = $show('mcp.json');
+    expect($mcp)
+        ->toContain('YOUR_AGENT_NAME:'.$this->fleetKey.'@')
+        ->toContain('/mcp')
+        ->not->toContain('X-Melfina-Agent-Key')
+        ->not->toContain('melf_testkey');
+
+    expect(json_decode($show('plugin.json'), true)['name'])->toBe('melfina')
+        ->and(json_decode($show('.minimax-plugin/plugin.json'), true)['name'])->toBe('melfina')
+        ->and($show('skills/melfina/SKILL.md'))->toContain('YOUR_AGENT_NAME');
+
+    // An agent key presented as the password still gets the per-agent
+    // direct repo, not the fleet package.
+    $this->withBasicAuth('melfina', 'melf_testkey')
+        ->get('/plugins/melfina.git/info/refs')
+        ->assertOk();
+    expect(is_dir(app(PluginRepo::class)->repoDir($this->agent, 'direct')))->toBeTrue();
 });
 
 it('keeps the two clone modes in separate repos', function () {

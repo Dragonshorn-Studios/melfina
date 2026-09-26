@@ -87,6 +87,13 @@ class AgentController extends Controller
             // consumed as part of the capture-group reference.
             'pluginUrl' => preg_replace('#^(https?://)#', '${1}'.$personaUser.':melfg_…@', $repoPath),
             'pluginUrlDirect' => preg_replace('#^(https?://)#', '${1}'.$personaUser.':melf_…@', $repoPath),
+            // One clone URL for the whole install — persona-free, gated by
+            // the fleet key; each agent writes its own name into the
+            // package's MCP URL.
+            'pluginUrlFleet' => preg_replace('#^(https?://)#', '${1}melfina:melfg_…@', url('/plugins/melfina.git')),
+            // URL-only clients fold persona + fleet key into the endpoint
+            // as Basic userinfo: https://{name}:{fleet}@host/mcp.
+            'endpointPersonaUrl' => preg_replace('#^(https?://)#', '${1}'.$personaUser.':melfg_…@', $endpoint),
             'hasPackage' => is_dir(app(PluginRepo::class)->packageDir($agent)),
             'snippets' => [
                 'claudeDesktop' => json_encode([
