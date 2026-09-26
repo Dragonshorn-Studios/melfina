@@ -53,7 +53,11 @@ class SharedSpaceController extends Controller
 
         return view('console.shared.show', [
             'space' => $shared,
-            'files' => $shared->files()->orderBy('path')->get(),
+            'files' => $shared->files()
+                ->orderBy('path')
+                ->select(['id', 'shared_space_id', 'path', 'updated_at'])
+                ->selectRaw('length(content) as byte_size')
+                ->paginate(50),
         ]);
     }
 

@@ -32,7 +32,7 @@
                     @foreach ($files as $file)
                         <tr class="border-b border-border/50">
                             <td class="py-2 pr-4 text-cream">{{ $file->path }}</td>
-                            <td class="py-2 pr-4 text-steel">{{ strlen($file->content) }} B</td>
+                            <td class="py-2 pr-4 text-steel">{{ $file->byte_size }} B</td>
                             <td class="py-2 pr-4 text-steel">{{ $file->updated_at->toDateTimeString() }}</td>
                             <td class="py-2 text-right">
                                 <a href="{{ route('console.shared.file', ['shared' => $space, 'path' => $file->path]) }}"
@@ -42,6 +42,10 @@
                     @endforeach
                 </tbody>
             </table>
+
+            <div class="mt-4">
+                {{ $files->links() }}
+            </div>
         @endif
     </main>
 </x-console-layout>
