@@ -29,15 +29,10 @@ class MergeMcpRedirectDomains
             config()->set('melfina.redirect_domain_baseline', config('mcp.redirect_domains', []));
         }
 
-        $stored = User::query()
-            ->where('is_owner', true)
-            ->value('mcp_redirect_domains');
-
-        if (is_string($stored)) {
-            $stored = json_decode($stored, true);
-        }
-
-        $stored = is_array($stored) ? array_filter($stored, 'is_string') : [];
+        $stored = array_filter(
+            User::query()->where('is_owner', true)->first()?->mcp_redirect_domains ?? [],
+            'is_string',
+        );
 
         config()->set('mcp.redirect_domains', array_values(array_unique(array_merge(
             config('melfina.redirect_domain_baseline'),
