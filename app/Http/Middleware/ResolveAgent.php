@@ -17,7 +17,8 @@ use Symfony\Component\HttpFoundation\Response;
  *   its name or `melf_…` key — in the `X-Melfina-Agent-Key` header or
  *   `agent_key` query param, for shared MCP configs that hold no persona;
  *   URL-only configs can instead carry both as HTTP Basic
- *   (`https://{name}:{fleet}@host/mcp` → username is the persona);
+ *   (`https://{name}:{fleet}@host/mcp` → username is the persona — it
+ *   wins over the header/query forms when both are sent);
  * - a per-agent Bearer key (Agent::forKey) for dedicated configs;
  * - an OAuth access token bound to an agent through the consent grant
  *   (McpTokenAgent).
@@ -39,15 +40,16 @@ class ResolveAgent
 
         // Basic-auth form for clients that can only set a URL:
         // https://{persona}:{fleet-key}@host/mcp — the password proves
-        // fleet access, the username is the persona. A dedicated agent key
-        // as the password works too and needs no username, mirroring the
-        // plugin clone surface.
+        // fleet access, the username is the persona. An empty username
+        // falls back to the header/query persona, exactly like a fleet
+        // Bearer. A dedicated agent key as the password works too and
+        // needs no username, mirroring the plugin clone surface.
         $basicUser = $request->getUser();
         $basicPass = $request->getPassword();
 
         if (is_string($basicPass) && $basicPass !== '') {
-            if ($basicUser !== null && $basicUser !== '' && User::isMcpKey($basicPass)) {
-                return $this->handleFleetRequest($request, $next, $basicUser);
+            if (User::isMcpKey($basicPass)) {
+                return $this->handleFleetRequest($request, $next, $basicUser !== '' ? $basicUser : null);
             }
 
             $agent = Agent::forKey($basicPass);

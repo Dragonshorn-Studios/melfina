@@ -18,7 +18,7 @@ use Symfony\Component\Process\Process;
  *
  *     …/x.git + Basic {persona}:{fleetKey}   → Bearer melfg_… + X-Melfina-Agent-Key: <name>
  *     …/x.git + Basic {whatever}:{agentKey}  → Bearer melf_… (direct persona)
- *     …/melfina.git + Basic {whatever}:{fleetKey} → fleet-wide package; the
+ *     …/~melfina.git + Basic {whatever}:{fleetKey} → fleet-wide package; the
  *         agent fills its own name into the Basic-URL username of /mcp
  *
  * The fleet form's persona header carries the agent's *name*, not its key —
