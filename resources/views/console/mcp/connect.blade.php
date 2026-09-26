@@ -10,6 +10,12 @@
             <strong class="text-cream">name</strong>, a non-secret id it knows from its own instructions. For a
             dedicated single-agent setup instead, see that agent's <em>Connect</em> tab.
         </p>
+        @if ($endpointIsLocal)
+            <p class="mt-3 border border-red-500/60 bg-void/40 px-3 py-2 font-mono text-xs text-red-400" style="border-radius: var(--radius-console)">
+                endpoint resolves to localhost — set APP_URL to this install's public URL, or remote
+                agents get a package pointing at their own machine.
+            </p>
+        @endif
         @unless ($hasFleetKey)
             <p class="mt-3 border border-amber/50 bg-void/40 px-3 py-2 font-mono text-xs text-amber" style="border-radius: var(--radius-console)">
                 no fleet key yet — generate one on the dashboard first.

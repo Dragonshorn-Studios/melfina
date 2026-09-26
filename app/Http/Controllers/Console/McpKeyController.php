@@ -22,6 +22,13 @@ class McpKeyController extends Controller
 
         return view('console.mcp.connect', [
             'endpoint' => $endpoint,
+            // The endpoint is baked into generated packages — flag when it
+            // resolves to a host remote agents can't reach.
+            'endpointIsLocal' => in_array(
+                parse_url($endpoint, PHP_URL_HOST),
+                ['localhost', '127.0.0.1', '::1', '[::1]'],
+                true
+            ),
             'hasFleetKey' => $request->user()->mcp_key_hash !== null,
             // Public, credential-free package at an unguessable derived name
             // — for importers that never send Basic credentials.
