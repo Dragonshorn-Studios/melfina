@@ -66,7 +66,27 @@ class McpKeyController extends Controller
             // GitHub publish settings — the token itself is never rendered.
             'hasGitHubToken' => $request->user()->github_token !== null,
             'githubRepo' => $request->user()->github_repo,
+            'operatorPersona' => $request->user()->operator_persona,
         ]);
+    }
+
+    /**
+     * Save the shared operator persona — who the human behind the console
+     * is — appended to every agent's read_instructions response.
+     */
+    public function storeOperatorPersona(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'operator_persona' => ['nullable', 'string', 'max:20000'],
+        ]);
+
+        $user = $request->user();
+        $user->operator_persona = $validated['operator_persona'] ?: null;
+        $user->save();
+
+        return redirect()
+            ->route('console.mcp.connect')
+            ->with('status', 'Operator persona saved.');
     }
 
     /**

@@ -149,6 +149,7 @@ class AgentController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('agents', 'name')->ignore($agent->id), $this->reservedNameRule()],
+            'description' => ['nullable', 'string', 'max:500'],
             'status' => ['required', 'string', 'in:'.Agent::STATUS_ACTIVE.','.Agent::STATUS_DISABLED],
         ]);
 

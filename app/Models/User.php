@@ -20,8 +20,9 @@ use Laravel\Passport\HasApiTokens;
  * @property array<int, string>|null $mcp_redirect_domains
  * @property string|null $github_token (encrypted at rest)
  * @property string|null $github_repo
+ * @property string|null $operator_persona
  */
-#[Fillable(['name', 'email', 'password', 'is_owner', 'mcp_key_hash', 'mcp_key_issued_at', 'mcp_redirect_domains'])]
+#[Fillable(['name', 'email', 'password', 'is_owner', 'mcp_key_hash', 'mcp_key_issued_at', 'mcp_redirect_domains', 'operator_persona'])]
 #[Hidden(['password', 'remember_token', 'mcp_key_hash', 'github_token'])]
 class User extends Authenticatable implements OAuthenticatable
 {
@@ -50,6 +51,17 @@ class User extends Authenticatable implements OAuthenticatable
             'mcp_redirect_domains' => 'array',
             'github_token' => 'encrypted',
         ];
+    }
+
+    /**
+     * The owner-authored persona every agent sees appended to its
+     * instructions — who the human is, how to address them.
+     */
+    public static function operatorPersona(): ?string
+    {
+        $persona = static::query()->where('is_owner', true)->value('operator_persona');
+
+        return is_string($persona) && $persona !== '' ? $persona : null;
     }
 
     /**

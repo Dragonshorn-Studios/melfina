@@ -54,8 +54,9 @@ it('lists the private and shared tools', function () {
         ->pluck('name')->sort()->values();
 
     expect($names->all())->toBe([
-        'list_files', 'list_shared', 'read_file', 'read_instructions',
-        'read_shared', 'write_file', 'write_shared',
+        'list_agents', 'list_files', 'list_shared', 'read_file',
+        'read_instructions', 'read_persona', 'read_shared',
+        'update_persona', 'write_file', 'write_shared',
     ]);
 });
 
@@ -94,8 +95,12 @@ it('rejects traversal paths on write', function (string $path) {
 })->with(['../escape.txt', 'a/../../b.txt', '..\\win.txt', 'a\\b.txt']);
 
 it('returns empty instructions when none are set', function () {
-    expect(json_decode(mcpText(($this->mcpTool)('read_instructions')), true))
-        ->toBe(['content' => '', 'layers' => []]);
+    $decoded = json_decode(mcpText(($this->mcpTool)('read_instructions')), true);
+
+    expect($decoded['content'])->toBe('')
+        ->and($decoded['layers'])->toBe([])
+        ->and($decoded['operator'])->toBe('')
+        ->and($decoded['persona_hint'])->toContain('read_persona');
 });
 
 it('returns the agent\'s instruction layers', function () {
@@ -106,7 +111,8 @@ it('returns the agent\'s instruction layers', function () {
 
     $decoded = json_decode(mcpText(($this->mcpTool)('read_instructions')), true);
 
-    expect($decoded)->toBe(['content' => 'Base rules.', 'layers' => ['layer one', 'layer two']]);
+    expect($decoded['content'])->toBe('Base rules.')
+        ->and($decoded['layers'])->toBe(['layer one', 'layer two']);
 });
 
 it('rate limits writes per agent', function () {
