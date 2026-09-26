@@ -52,7 +52,7 @@ it('lets the owner into the console', function () {
         ->get(route('console.dashboard'))
         ->assertOk()
         ->assertSee('id="melfina-confirm"', false)
-        ->assertSee('data-confirm="Rotate the fleet key?', false)
+        ->assertSee('data-confirm="Issue a fleet key under this name?', false)
         ->assertSee('onsubmit="return window.__melfinaConfirm', false)
         ->assertSee('lg:sticky', false);
 });

@@ -735,3 +735,57 @@ it('drops plugin repos embedding a rotated key and rebuilds on demand', function
     $this->withBasicAuth('x', $newKey)->get('/plugins/a.git/info/refs')->assertOk();
     expect(is_dir($repos->repoDir($this->agent, 'direct')))->toBeTrue();
 });
+
+it('runs multiple named fleet keys independently — revoke one, keep the rest', function () {
+    $agent = $this->agent;
+    $mcp = fn (string $bearer) => ($this->mcp)('tools/list', [], $bearer, ['X-Melfina-Agent-Key' => $agent->name]);
+
+    $this->actingAs($this->owner)->post(route('console.mcp-key.store'), ['name' => 'grokbot']);
+    $grokKey = session('plaintext_mcp_key');
+    $this->actingAs($this->owner)->post(route('console.mcp-key.store'), ['name' => 'minimax']);
+    $miniKey = session('plaintext_mcp_key');
+
+    $mcp($grokKey)->assertOk();
+    $mcp($miniKey)->assertOk();
+
+    $key = $this->owner->mcpFleetKeys()->where('name', 'grokbot')->firstOrFail();
+    $this->actingAs($this->owner)
+        ->delete(route('console.mcp-key.destroy', $key))
+        ->assertRedirect(route('console.dashboard'));
+
+    $mcp($grokKey)->assertUnauthorized();
+    $mcp($miniKey)->assertOk();
+});
+
+it('rolling a name revokes only that name — other keys keep working', function () {
+    $agent = $this->agent;
+    $mcp = fn (string $bearer) => ($this->mcp)('tools/list', [], $bearer, ['X-Melfina-Agent-Key' => $agent->name]);
+
+    $this->actingAs($this->owner)->post(route('console.mcp-key.store'), ['name' => 'grokbot']);
+    $old = session('plaintext_mcp_key');
+    $this->actingAs($this->owner)->post(route('console.mcp-key.store'), ['name' => 'minimax']);
+    $other = session('plaintext_mcp_key');
+
+    // Re-issue under the same name = roll.
+    $this->actingAs($this->owner)->post(route('console.mcp-key.store'), ['name' => 'grokbot']);
+    $new = session('plaintext_mcp_key');
+
+    $mcp($old)->assertUnauthorized();
+    $mcp($new)->assertOk();
+    $mcp($other)->assertOk();
+});
+
+it('keeps non-owners off fleet-key revoke and rejects foreign keys', function () {
+    $this->actingAs($this->owner)->post(route('console.mcp-key.store'), ['name' => 'grokbot']);
+    $key = $this->owner->mcpFleetKeys()->firstOrFail();
+
+    auth()->logout();
+    $this->delete(route('console.mcp-key.destroy', $key))->assertRedirect(route('login'));
+
+    $other = User::factory()->owner()->create();
+    $this->actingAs($other)
+        ->delete(route('console.mcp-key.destroy', $key))
+        ->assertNotFound();
+
+    expect($key->fresh()->isLive())->toBeTrue();
+});

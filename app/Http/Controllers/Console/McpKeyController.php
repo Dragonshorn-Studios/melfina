@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Console;
 
 use App\Http\Controllers\Controller;
 use App\Mcp\PluginRepo;
+use App\Models\McpFleetKey;
 use App\Services\GitHubPublisher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,7 +33,8 @@ class McpKeyController extends Controller
                 ['localhost', '127.0.0.1', '::1', '[::1]'],
                 true
             ),
-            'hasFleetKey' => $request->user()->mcp_key_hash !== null,
+            'hasFleetKey' => $request->user()->mcp_key_hash !== null
+                || $request->user()->mcpFleetKeys()->whereNull('revoked_at')->exists(),
             // Public, credential-free package at an unguessable derived name
             // — for importers that never send Basic credentials.
             'publicRepoUrl' => url('/plugins/'.$repos->publicRepoName()),
@@ -220,13 +222,29 @@ class McpKeyController extends Controller
     }
 
     /**
-     * Rotate the install-wide fleet key: stores only the new hash and
-     * flashes the plaintext once. The old key stops resolving immediately —
-     * and cached plugin repos embedding it are dropped.
+     * Create or roll a named fleet key: same-name live keys are revoked
+     * first, so reusing a name IS the roll. The plaintext is flashed once.
      */
     public function store(Request $request, PluginRepo $repos): RedirectResponse
     {
-        $plaintext = $request->user()->rotateMcpKey();
+        $validated = $request->validate([
+            'name' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_.-]+$/'],
+        ]);
+        $name = $validated['name'] ?? null;
+        $name = $name !== null && $name !== '' ? $name : 'default';
+
+        $user = $request->user();
+
+        // Rolling 'default' also retires the legacy single-column key —
+        // otherwise isMcpKey would keep accepting it via mcp_key_hash.
+        $user->mcpFleetKeys()->where('name', $name)->whereNull('revoked_at')->get()
+            ->each(fn (McpFleetKey $key) => $key->revoke());
+        if ($name === 'default') {
+            $user->mcp_key_hash = null;
+            $user->save();
+        }
+
+        $plaintext = McpFleetKey::issue($user, $name);
 
         // Cleanup is a side effect — a filesystem failure must not eat the
         // shown-once plaintext (same contract as agent key rotation).
@@ -238,7 +256,28 @@ class McpKeyController extends Controller
 
         return redirect()
             ->route('console.dashboard')
-            ->with('plaintext_mcp_key', $plaintext);
+            ->with('plaintext_mcp_key', $plaintext)
+            ->with('plaintext_mcp_key_name', $name);
+    }
+
+    /**
+     * Revoke one named fleet key without touching the others.
+     */
+    public function destroy(Request $request, McpFleetKey $fleetKey, PluginRepo $repos): RedirectResponse
+    {
+        abort_if($fleetKey->user_id !== $request->user()->id, 404);
+
+        $fleetKey->revoke();
+
+        try {
+            $repos->dropAllRepos();
+        } catch (\Throwable $e) {
+            Log::warning('plugin repo cleanup failed', ['error' => $e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('console.dashboard')
+            ->with('status', "Fleet key '{$fleetKey->name}' revoked.");
     }
 
     /**

@@ -50,14 +50,20 @@
         <section class="mt-8">
             <div class="flex items-center justify-between">
                 <p class="font-mono text-xs tracking-[0.16em] text-steel">MCP ACCESS</p>
-                <form method="POST" action="{{ route('console.mcp-key.store') }}"
-                    onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Rotate the fleet key? Every shared MCP config using the old key stops working immediately.">
-                    @csrf
-                    <button type="submit"
-                        class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
-                        style="border-radius: var(--radius-console)">{{ $owner->mcp_key_hash ? 'rotate fleet key' : 'generate fleet key' }}</button>
-                </form>
             </div>
+            <form method="POST" action="{{ route('console.mcp-key.store') }}" class="mt-3 flex gap-2"
+                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Issue a fleet key under this name? An existing live key with the same name is revoked.">
+                @csrf
+                <input type="text" name="name" placeholder="key name (e.g. grokbot)" maxlength="64"
+                    class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream placeholder:text-steel/60"
+                    style="border-radius: var(--radius-console)">
+                <button type="submit"
+                    class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                    style="border-radius: var(--radius-console)">issue key</button>
+            </form>
+            @error('name')
+                <p class="mt-2 font-mono text-xs text-red-400">{{ $message }}</p>
+            @enderror
             <p class="mt-3 text-sm text-steel">
                 The fleet key (<code>melfg_…</code>) is the shared credential you put in a shared MCP config:
                 it opens the <code>/mcp</code> endpoint but carries no persona — anyone holding it can claim
@@ -67,19 +73,39 @@
                 <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.mcp.connect') }}">Global install guide →</a>
             </p>
             <dl class="mt-4 space-y-2 font-mono text-xs">
-                <div class="flex gap-4">
-                    <dt class="w-28 text-steel">fleet key</dt>
-                    <dd class="text-cream">
-                        @if ($owner->mcp_key_issued_at)
-                            issued {{ $owner->mcp_key_issued_at->diffForHumans(short: true) }}
-                        @elseif ($owner->mcp_key_hash)
-                            issued
-                        @else
-                            not generated
-                        @endif
-                    </dd>
-                </div>
+                @if ($owner->mcp_key_hash)
+                    <div class="flex gap-4">
+                        <dt class="w-28 text-steel">fleet key</dt>
+                        <dd class="text-cream">
+                            @if ($owner->mcp_key_issued_at)
+                                issued {{ $owner->mcp_key_issued_at->diffForHumans(short: true) }} (legacy)
+                            @else
+                                issued (legacy)
+                            @endif
+                        </dd>
+                    </div>
+                @endif
             </dl>
+            @if ($fleetKeys->isNotEmpty())
+                <ul class="mt-3 space-y-1 font-mono text-xs">
+                    @foreach ($fleetKeys as $key)
+                        <li class="flex items-center justify-between gap-3 border {{ $key->isLive() ? 'border-amber/40' : 'border-border/50' }} bg-void/60 px-3 py-1.5" style="border-radius: var(--radius-console)">
+                            <span class="{{ $key->isLive() ? 'text-cream' : 'text-steel line-through' }}">{{ $key->name }}</span>
+                            <span class="flex items-center gap-3">
+                                <span class="text-steel">{{ $key->isLive() ? 'issued '.$key->created_at->diffForHumans(short: true) : 'revoked '.$key->revoked_at->diffForHumans(short: true) }}</span>
+                                @if ($key->isLive())
+                                    <form method="POST" action="{{ route('console.mcp-key.destroy', $key) }}"
+                                        onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Revoke fleet key '{{ $key->name }}'? Shared configs using it stop working immediately.">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">REVOKE</button>
+                                    </form>
+                                @endif
+                            </span>
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
         </section>
 
         <section class="mt-8">

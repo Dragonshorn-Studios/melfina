@@ -32,6 +32,7 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::get('/', DashboardController::class)->name('dashboard');
 
     Route::post('mcp-key', [McpKeyController::class, 'store'])->name('mcp-key.store');
+    Route::delete('mcp-keys/{fleetKey}', [McpKeyController::class, 'destroy'])->name('mcp-key.destroy');
     Route::get('mcp', [McpKeyController::class, 'connect'])->name('mcp.connect');
     Route::get('mcp/plugin.zip', [McpKeyController::class, 'pluginZip'])->name('mcp.plugin.zip');
     Route::post('mcp/redirect-domains', [McpKeyController::class, 'storeRedirectDomain'])->name('mcp.redirect-domains.store');

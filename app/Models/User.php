@@ -73,10 +73,28 @@ class User extends Authenticatable implements OAuthenticatable
     }
 
     /**
-     * Whether the plaintext credential is a live fleet key. Fails closed.
+     * Named fleet keys for this owner (multi-key management lives in
+     * mcp_fleet_keys; the legacy single hash is migrated into a 'default'
+     * row).
+     *
+     * @return HasMany<McpFleetKey, $this>
+     */
+    public function mcpFleetKeys(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(McpFleetKey::class);
+    }
+
+    /**
+     * Whether the plaintext credential is a live fleet key — any unrevoked
+     * named key, or the legacy single hash (pre-multi-key installs).
+     * Fails closed.
      */
     public static function isMcpKey(string $plaintext): bool
     {
+        if (McpFleetKey::isLiveKey($plaintext)) {
+            return true;
+        }
+
         if (! str_starts_with($plaintext, self::MCP_KEY_PREFIX)) {
             return false;
         }
