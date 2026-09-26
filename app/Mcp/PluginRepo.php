@@ -18,16 +18,13 @@ use Symfony\Component\Process\Process;
  *
  *     …/x.git + Basic {persona}:{fleetKey}   → Bearer melfg_… + X-Melfina-Agent-Key: <name>
  *     …/x.git + Basic {whatever}:{agentKey}  → Bearer melf_… (direct persona)
- *     …/melfina.git + Basic {whatever}:{fleetKey} → fleet-wide package; the
- *         agent fills its own name into the Basic-URL username of /mcp
  *
  * The fleet form's persona header carries the agent's *name*, not its key —
  * the name is a non-secret id the agent knows from its own instructions.
  *
- * Built repos are cached under storage/app/mcp-plugins/{id}.{mode}.git (and
- * fleet.git for the global package) and rebuilt whenever the embedded
- * credential, persona name, or endpoint change (fingerprint check under a
- * cache lock).
+ * Built repos are cached under storage/app/mcp-plugins/{id}.{mode}.git and
+ * rebuilt whenever the embedded credential, persona name, or endpoint
+ * change (fingerprint check under a per-agent cache lock).
  */
 class PluginRepo
 {
@@ -53,42 +50,10 @@ class PluginRepo
                     return $dir;
                 }
 
-                $this->build($dir, $this->packageFiles($agent, $mode, $credential), $fingerprint);
+                $this->build($agent, $mode, $credential, $fingerprint);
 
                 return $dir;
             });
-    }
-
-    /**
-     * The fleet-wide package: one clone URL for every agent on the install.
-     * It carries the fleet key but no persona — the agent (or whoever
-     * installs it) substitutes its own name, which becomes the Basic
-     * username on the /mcp URL.
-     */
-    public function ensureGlobal(string $fleetKey): string
-    {
-        $dir = $this->globalDir();
-        $fingerprint = hash('sha256', implode('|', ['global', $fleetKey, $this->endpoint(), 'v1']));
-
-        if ($this->fresh($dir, $fingerprint)) {
-            return $dir;
-        }
-
-        return Cache::lock('melfina-plugin-repo:global', 30)
-            ->block(10, function () use ($dir, $fingerprint, $fleetKey) {
-                if ($this->fresh($dir, $fingerprint)) {
-                    return $dir;
-                }
-
-                $this->build($dir, $this->globalPackageFiles($fleetKey), $fingerprint);
-
-                return $dir;
-            });
-    }
-
-    public function globalDir(): string
-    {
-        return storage_path('app/mcp-plugins/fleet.git');
     }
 
     /**
@@ -170,7 +135,7 @@ class PluginRepo
      */
     public function dropAllRepos(): void
     {
-        foreach (glob(storage_path('app/mcp-plugins/*.git*')) ?: [] as $path) {
+        foreach (glob(storage_path('app/mcp-plugins/*.*.git*')) ?: [] as $path) {
             is_dir($path) ? File::deleteDirectory($path) : File::delete($path);
         }
     }
@@ -216,16 +181,13 @@ class PluginRepo
         return rtrim((string) config('app.url'), '/').'/mcp';
     }
 
-    /**
-     * @param  array<string, string>  $files  repo-root-relative path → contents
-     */
-    private function build(string $dir, array $files, string $fingerprint): void
+    private function build(Agent $agent, string $mode, string $credential, string $fingerprint): void
     {
         $work = storage_path('app/mcp-plugins/build-'.Str::random(12));
         File::ensureDirectoryExists($work);
         chmod($work, 0700);
 
-        foreach ($files as $path => $contents) {
+        foreach ($this->packageFiles($agent, $mode, $credential) as $path => $contents) {
             $full = $work.'/'.$path;
             File::ensureDirectoryExists(dirname($full));
             file_put_contents($full, $contents);
@@ -252,6 +214,7 @@ class PluginRepo
             }
         }
 
+        $dir = $this->repoDir($agent, $mode);
         File::ensureDirectoryExists(dirname($dir));
 
         // Swap via rename: readers never see a missing directory between

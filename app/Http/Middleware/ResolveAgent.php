@@ -16,8 +16,6 @@ use Symfony\Component\HttpFoundation\Response;
  * - fleet key Bearer (`melfg_…`, User::isMcpKey) plus the agent's persona —
  *   its name or `melf_…` key — in the `X-Melfina-Agent-Key` header or
  *   `agent_key` query param, for shared MCP configs that hold no persona;
- *   URL-only configs can instead carry both as HTTP Basic
- *   (`https://{name}:{fleet}@host/mcp` → username is the persona);
  * - a per-agent Bearer key (Agent::forKey) for dedicated configs;
  * - an OAuth access token bound to an agent through the consent grant
  *   (McpTokenAgent).
@@ -37,16 +35,6 @@ class ResolveAgent
             return $this->handleFleetRequest($request, $next);
         }
 
-        // Basic-auth form for clients that can only set a URL:
-        // https://{persona}:{fleet-key}@host/mcp — the password proves
-        // fleet access, the username is the persona.
-        $basicUser = $request->getUser();
-        $basicPass = $request->getPassword();
-
-        if ($basicUser !== null && $basicUser !== '' && is_string($basicPass) && User::isMcpKey($basicPass)) {
-            return $this->handleFleetRequest($request, $next, $basicUser);
-        }
-
         $agent = $token !== null ? Agent::forKey($token) : null;
         $agent ??= $this->agentFromOAuthToken();
 
@@ -64,9 +52,9 @@ class ResolveAgent
      * comes from what the agent knows about itself — its name or key —
      * without one there is no agent to scope to, so the request fails closed.
      */
-    private function handleFleetRequest(Request $request, Closure $next, ?string $basicPersona = null): Response
+    private function handleFleetRequest(Request $request, Closure $next): Response
     {
-        $persona = $basicPersona ?? $request->header(self::AGENT_KEY_HEADER);
+        $persona = $request->header(self::AGENT_KEY_HEADER);
 
         if ($persona === null) {
             $candidate = $request->query('agent_key');
