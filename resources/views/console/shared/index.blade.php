@@ -4,7 +4,7 @@
             <div>
                 <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">SHARED</p>
                 <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">Shared folders</h1>
-                <p class="mt-2 text-sm text-steel">You set who can read and write. Not mail — that's ImpPost.</p>
+                <p class="mt-2 text-sm text-steel">You set who can read and write across agents.</p>
             </div>
             <a href="{{ route('console.shared.create') }}"
                 class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"

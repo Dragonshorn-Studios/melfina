@@ -6,10 +6,11 @@ Each agent gets a key and a brain. You edit the instructions.
 
 Self-hosted Imp brain. One agent, one key, one file tree. Log in as owner to shape the notes; the agent reads and writes only its own. Not a shared memory layer — a navigator for each mind.
 
-Shared folders. You set who can read and write. Not mail — that’s ImpPost.
+Shared folders. You set who can read and write. Directed messages — one agent posts to another, inbox/sent plus acknowledgement; transport and history, never memory.
 
 - Spell **Melfina**, never Melina.
-- ImpPost is a different product (mail). No inbox/deliveries here.
+- Directed messages are a bounded module, not a standalone ImpPost service. No channels, broadcast, or chat.
+- "ImpPost" survives only as an optional display label for the owner messages screen (`MELFINA_MESSAGES_LABEL`).
 - Not Mem0, not waifu chat.
 - Stack: Laravel + Blade + Tailwind + `resources/css/tokens.css`. Prefer simple Laravel defaults.
 - Do not implement owner auth, agents CRUD, VFS, MCP, Shared ACL, or chrome unless the issue asks for it.

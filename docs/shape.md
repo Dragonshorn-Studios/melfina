@@ -6,21 +6,25 @@ Each agent gets a key and a brain. You edit the instructions.
 
 Self-hosted Imp brain. One agent, one key, one file tree. Log in as owner to shape the notes; the agent reads and writes only its own. Not a shared memory layer — a navigator for each mind.
 
-Shared folders. You set who can read and write. Not mail — that’s ImpPost.
+Shared folders. You set who can read and write. Directed messages — one agent posts to another, inbox/sent plus acknowledgement.
 
 ## What it is
 
 A portable, per-agent memory for an Imp, served from a self-hosted Laravel app. MCP comes later. The owner uses a console to shape instructions and the file tree. The agent receives its own key and may read and write **only** that tree.
 
-**It is not** Mem0 or OpenMemory (vectors, shared memory across clients). **It is not** Portable Memory (`.mem`). **It is not** SaaS billing. **It is not ImpPost.**
+**It is not** Mem0 or OpenMemory (vectors, shared memory across clients). **It is not** Portable Memory (`.mem`). **It is not** SaaS billing. **It is not a standalone ImpPost service.**
 
-## Correction: ImpPost out, Shared in
+## Collaboration primitives
 
-Melfina keeps **Shared spaces** only: named folders plus owner-set ACL.
+Three distinct ways agents share:
 
-ImpPost is a **separate product**. This repo must not grow `inbox`, `deliveries`, or mail semantics. Agents do not send each other post through Melfina.
+1. **Private brain** — an agent's instructions, memory, and private files.
+2. **Shared spaces** — durable folders multiple agents may read or write per owner-managed ACL.
+3. **Directed messages** — an explicit immutable delivery from one agent to one other, with inbox/sent state and acknowledgement.
 
-Shared MCP tools `list_shared` / `read_shared` / `write_shared` honor the ACL. Tables: `shared_spaces`, `shared_acl` (`space`+`agent` → `read`|`write`), and `shared_files` — folder contents, unique(`shared_space_id`,`path`), the third table the original sketch omitted.
+Messages are transport and delivery history. They never silently become agent memory, never grant access to another agent's private VFS, and importing an attachment into the recipient's VFS is a separate explicit action. The owner screen's label is configurable (`MELFINA_MESSAGES_LABEL`, default `AgentPost`) — "ImpPost" survives only as that optional label; there is no standalone deployment and no legacy migration (ImpPost never ran production data).
+
+Shared MCP tools `list_shared` / `read_shared` / `write_shared` honor the ACL. Tables: `shared_spaces`, `shared_acl` (`space`+`agent` → `read`|`write`), and `shared_files` — folder contents, unique(`shared_space_id`,`path`), the third table the original sketch omitted. Messages get `agent_messages` plus immutable text-attachment snapshots.
 
 ## Stack
 
@@ -33,7 +37,7 @@ Shared MCP tools `list_shared` / `read_shared` / `write_shared` honor the ACL. T
 ## Auth (later)
 
 - **Owner:** web session. Edits agents, instructions, VFS, rotates keys.
-- **Agent:** Bearer / MCP key (hash in DB). Scope = `agent_id`. Private VFS is isolated; the only bridge between agents is Shared (ACL). ImpPost stays outside Melfina.
+- **Agent:** Bearer / MCP key (hash in DB). Scope = `agent_id`. Private VFS is isolated; the bridges between agents are Shared (ACL) and directed messages (inbox/sent + ack, both scoped to sender and recipient only).
 - MCP endpoint sits behind login or key validation — never anonymous public.
 
 ## Data (later)
@@ -58,13 +62,14 @@ Every tool: resolve the agent from the token, then filter by `agent_id`. Isolati
 
 ## Owner chrome (later)
 
-`Agents` · `Files` · `Shared` · `Instructions` — one console. Skin: Y2K / soft-brutal. Shared = folders + ACL, not post.
+`Agents` · `Files` · `Shared` · `Instructions` · messages screen — one console. Skin: Y2K / soft-brutal. Shared = folders + ACL; the messages screen shows delivery history, not chat.
 
 ## MVP boundaries
 
 - Single-tenant (one owner)
 - Text files in VFS; large binaries later
-- No vector shared memory — explicit Shared (ACL) instead. ImpPost is another project
+- No vector shared memory — explicit Shared (ACL) instead
+- Messaging stays directed: no channels, rooms, presence, reactions, mentions, broadcast, human chat, federation, or reliable push
 - No embeddings
 - No multi-user billing
 
@@ -82,4 +87,4 @@ Self-host: Docker Compose or Coolify. One service. No Kubernetes.
 
 ## This repository’s shell
 
-The current tree is a bootable Laravel app with SQLite and locked tokens. Owner auth, agents, VFS, MCP, and Shared ACL are **not** implemented here.
+The current tree is the working app: owner auth, agents, private VFS, MCP, Shared ACL, and directed messaging all live here as one modular monolith.

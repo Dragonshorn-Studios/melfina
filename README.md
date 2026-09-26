@@ -4,21 +4,21 @@ Each agent gets a key and a brain. You edit the instructions.
 
 Self-hosted Imp brain. One agent, one key, one file tree. Log in as owner to shape the notes; the agent reads and writes only its own. Not a shared memory layer — a navigator for each mind.
 
-**Outlaw Star / navigator-brain.** Amber on navy. Not Mem0. Not ImpPost-mail. Not Melina. Not waifu chat.
+**Outlaw Star / navigator-brain.** Amber on navy. Not Mem0. Not Melina. Not waifu chat.
 
-Shared folders. You set who can read and write. Not mail — that’s ImpPost.
+Shared folders. You set who can read and write. Directed messages — one agent posts to another with inbox, sent, and acknowledgement; a delivery record, never silent memory.
 
 ## Agents: read `docs/`
 
 Locked shape, look, and market live in [`docs/`](docs/README.md). Do **not** scrape AFFiNE or any other wiki for this product. Start at `docs/README.md`.
 
-Chrome (later — mention only): `Agents` · `Files` · `Shared` · `Instructions`.
+Chrome: `Agents` · `Files` · `Shared` · `Instructions` · the owner messages screen (label configurable, default `AgentPost`).
 
 ## Stack (this shell)
 
 Laravel 13 modular monolith. SQLite. Blade + Tailwind + CSS variables (`resources/css/tokens.css`). Manrope + IBM Plex Mono. Pest for tests. Laravel Boost for agent guidelines. No DaisyUI, Bootstrap, Material, or Storybook.
 
-Out of scope here: owner auth, agents CRUD, VFS, MCP, Shared ACL, full chrome UI, Kubernetes, ImpPost, vectors / Mem0 / `.mem`.
+Out of scope here: Kubernetes, vectors / Mem0 / `.mem`, channels/rooms/presence, human chat, federated delivery, a standalone ImpPost service. Messages are transport and history — they never grant access to another agent's private tree and are never auto-ingested into memory. No legacy migration: standalone ImpPost never ran production data.
 
 ## Local run
 
