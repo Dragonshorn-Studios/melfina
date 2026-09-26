@@ -35,7 +35,7 @@
                             <td class="py-2 pr-4 text-steel">{{ $row['client']->created_at?->toDateString() }}</td>
                             <td class="py-2 text-right">
                                 <form method="POST" action="{{ route('console.clients.destroy', $row['client']) }}"
-                                    onsubmit="return confirm('Revoke {{ $row['client']->name }}? Its tokens stop working immediately.')">
+                                    data-confirm="Revoke {{ $row['client']->name }}? Its tokens stop working immediately.">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="text-danger underline decoration-border underline-offset-4">revoke</button>

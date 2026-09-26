@@ -21,7 +21,7 @@
                     {{ $slot }}
                 </div>
             @else
-            <aside class="flex shrink-0 flex-col border-b border-border bg-panel lg:h-screen lg:w-64 lg:border-b-0 lg:border-r">
+            <aside class="flex shrink-0 flex-col border-b border-border bg-panel lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-b-0 lg:border-r">
                 <div class="flex items-center justify-between px-4 py-4 lg:justify-start lg:gap-3">
                     <a href="{{ route('console.dashboard') }}" class="flex items-center gap-3">
                         <svg class="h-7 w-7 shrink-0 text-amber" viewBox="0 0 48 48" fill="none" aria-hidden="true">
@@ -114,5 +114,24 @@
             </div>
             @endguest
         </div>
+
+        @auth
+            <dialog id="melfina-confirm"
+                class="w-[min(24rem,90vw)] border border-border bg-panel p-0 text-cream backdrop:bg-void/80"
+                style="border-radius: var(--radius-console)">
+                <form method="dialog" class="p-5">
+                    <p class="font-mono text-xs tracking-[0.16em] text-amber">CONFIRM</p>
+                    <p id="melfina-confirm-message" class="mt-3 text-sm text-steel"></p>
+                    <div class="mt-5 flex justify-end gap-2">
+                        <button value="cancel"
+                            class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-steel hover:border-steel hover:text-cream"
+                            style="border-radius: var(--radius-console)">cancel</button>
+                        <button id="melfina-confirm-yes" value="default"
+                            class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"
+                            style="border-radius: var(--radius-console)">confirm</button>
+                    </div>
+                </form>
+            </dialog>
+        @endauth
     </body>
 </html>

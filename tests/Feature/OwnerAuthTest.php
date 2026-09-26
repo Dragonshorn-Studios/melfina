@@ -45,7 +45,11 @@ it('lets the owner into the console', function () {
 
     $this->actingAs($owner)
         ->get(route('console.dashboard'))
-        ->assertOk();
+        ->assertOk()
+        ->assertSee('id="melfina-confirm"', false)
+        ->assertSee('data-confirm=', false)
+        ->assertDontSee('onsubmit=', false)
+        ->assertSee('lg:sticky', false);
 });
 
 it('forbids non-owner users from owner routes', function () {
