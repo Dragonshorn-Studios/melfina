@@ -69,9 +69,9 @@
             <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
                 <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">OAUTH CLIENTS</summary>
                 <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
-                    <li>OAuth-capable clients don't need the fleet key at all: point them at the endpoint, they auto-register via <code>POST /oauth/register</code>, and you bind the token to one agent on the consent screen.</li>
+                    <li>OAuth clients don't need the fleet key: point them at the endpoint, they auto-register via <code>POST /oauth/register</code>, and the token is bound to one agent — chosen on the consent screen, which needs a one-time owner click <em>per bot</em>.</li>
+                    <li>Headless bots that can't click through consent (grokbot-style, one connection per bot) use the fleet forms above instead — fleet key plus "you are &lt;name&gt;" via <code>X-Melfina-Agent-Key</code> or the Basic username.</li>
                     <li>Discovery: <code>/.well-known/oauth-protected-resource</code> and <code>/.well-known/oauth-authorization-server</code>. PKCE S256 only.</li>
-                    <li>Note OAuth binds each token to a single agent — the fleet forms above are the ones that let a shared install serve every agent.</li>
                 </ol>
             </details>
         </div>
