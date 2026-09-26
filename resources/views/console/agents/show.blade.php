@@ -36,24 +36,29 @@
             </div>
         </dl>
 
-        @if ($agent->persona || $agent->memories)
-            <div class="mt-6 border-t border-border pt-4">
-                <p class="font-mono text-xs tracking-[0.16em] text-steel">AGENT PERSONA</p>
-                @if ($agent->persona)
-                    <pre class="mt-2 whitespace-pre-wrap break-words border border-border/50 bg-void/60 px-3 py-2 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $agent->persona }}</pre>
-                @endif
-                @if ($agent->memories)
-                    <ul class="mt-3 space-y-1 font-mono text-xs">
-                        @foreach ($agent->memories as $memory)
-                            <li class="border border-border/50 bg-void/60 px-3 py-1.5" style="border-radius: var(--radius-console)">
-                                <span class="text-steel">{{ $memory['at'] ?? '' }}</span>
-                                <span class="text-cream">{{ $memory['text'] ?? '' }}</span>
-                            </li>
-                        @endforeach
-                    </ul>
-                @endif
+        <div class="mt-6 border-t border-border pt-4">
+            <div class="flex items-center justify-between">
+                <p class="font-mono text-xs tracking-[0.16em] text-steel">PERSONA &amp; MEMORY</p>
+                <a href="{{ route('console.agents.persona.edit', $agent) }}"
+                    class="font-mono text-xs text-amber underline decoration-border underline-offset-4">edit →</a>
             </div>
-        @endif
+            @if ($agent->persona)
+                <pre class="mt-2 whitespace-pre-wrap break-words border border-border/50 bg-void/60 px-3 py-2 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $agent->persona }}</pre>
+            @endif
+            @if ($agent->memories)
+                <ul class="mt-3 space-y-1 font-mono text-xs">
+                    @foreach ($agent->memories as $memory)
+                        <li class="border border-border/50 bg-void/60 px-3 py-1.5" style="border-radius: var(--radius-console)">
+                            <span class="text-steel">{{ $memory['at'] ?? '' }}</span>
+                            <span class="text-cream">{{ $memory['text'] ?? '' }}</span>
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
+            @if (! $agent->persona && ! $agent->memories)
+                <p class="mt-2 font-mono text-xs text-steel">nothing yet — the imp writes these itself via update_persona.</p>
+            @endif
+        </div>
 
         <div class="mt-8 flex items-center gap-3">
             <a href="{{ route('console.agents.edit', $agent) }}"

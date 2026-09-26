@@ -171,6 +171,56 @@ class AgentController extends Controller
     }
 
     /**
+     * The persona + memory editor: the persona text is free-form (same
+     * limits as the update_persona MCP tool) and the memory log is the
+     * agent's append-only journal — the owner can read it, append an
+     * entry, or prune one.
+     */
+    public function editPersona(Agent $agent): View
+    {
+        $this->authorize('update', $agent);
+
+        return view('console.agents.persona', ['agent' => $agent]);
+    }
+
+    public function updatePersona(Request $request, Agent $agent): RedirectResponse
+    {
+        $this->authorize('update', $agent);
+
+        $validated = $request->validate([
+            'persona' => ['nullable', 'string', 'max:20000'],
+            'remember' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $agent->persona = $validated['persona'] ?? null;
+        $agent->save();
+
+        if (filled($validated['remember'] ?? null)) {
+            $agent->remember($validated['remember']);
+        }
+
+        return redirect()->route('console.agents.persona.edit', $agent);
+    }
+
+    /**
+     * Prune one memory entry by position — indexes shift after a delete,
+     * so an out-of-range index is a plain 404.
+     */
+    public function destroyMemory(Agent $agent, int $index): RedirectResponse
+    {
+        $this->authorize('update', $agent);
+
+        $memories = $agent->memories ?? [];
+        abort_unless(isset($memories[$index]), 404);
+
+        unset($memories[$index]);
+        $agent->memories = array_values($memories);
+        $agent->save();
+
+        return redirect()->route('console.agents.persona.edit', $agent);
+    }
+
+    /**
      * Rotate the agent key: stores only the new hash and flashes the
      * plaintext once. The old key stops resolving immediately.
      */

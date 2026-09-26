@@ -38,6 +38,7 @@ it('renders the per-agent tab strip on agent pages', function () {
         ->assertOk()
         ->assertSee(route('console.files.show', $this->agent))
         ->assertSee(route('console.agents.instructions.edit', $this->agent))
+        ->assertSee(route('console.agents.persona.edit', $this->agent))
         ->assertSee(route('console.agents.show', $this->agent))
         ->assertSee(route('console.agents.connect', $this->agent));
 });
@@ -130,6 +131,62 @@ it('shows the per-agent instruction editor', function () {
         ->get(route('console.agents.instructions.edit', $this->agent))
         ->assertOk()
         ->assertSee('rules');
+});
+
+it('lets the owner read and curate an agent persona and memories', function () {
+    $this->agent->update(['persona' => 'gruff and precise']);
+    $this->agent->remember('owner prefers terse replies');
+    $this->agent->remember('prod host is melfina.dragonshorn.cloud');
+
+    $this->actingAs($this->owner)
+        ->get(route('console.agents.persona.edit', $this->agent))
+        ->assertOk()
+        ->assertSee('gruff and precise')
+        ->assertSee('owner prefers terse replies')
+        ->assertSee('prod host is melfina.dragonshorn.cloud');
+
+    // The show page links to the editor and shows the log too.
+    $this->actingAs($this->owner)
+        ->get(route('console.agents.show', $this->agent))
+        ->assertOk()
+        ->assertSee(route('console.agents.persona.edit', $this->agent))
+        ->assertSee('owner prefers terse replies');
+
+    // Persona rewrite + owner-appended memory in one submit.
+    $this->actingAs($this->owner)
+        ->put(route('console.agents.persona.update', $this->agent), [
+            'persona' => 'gentle and verbose',
+            'remember' => 'owner works from Warsaw',
+        ])->assertRedirect(route('console.agents.persona.edit', $this->agent));
+
+    $fresh = $this->agent->fresh();
+    expect($fresh->persona)->toBe('gentle and verbose')
+        ->and(collect($fresh->memories)->pluck('text'))
+        ->toContain('owner works from Warsaw');
+
+    // Pruning by index re-packs the log.
+    $this->actingAs($this->owner)
+        ->delete(route('console.agents.memories.destroy', [$this->agent, 0]))
+        ->assertRedirect(route('console.agents.persona.edit', $this->agent));
+
+    expect(collect($this->agent->fresh()->memories)->pluck('text')->all())
+        ->toEqual(['prod host is melfina.dragonshorn.cloud', 'owner works from Warsaw']);
+
+    $this->actingAs($this->owner)
+        ->delete(route('console.agents.memories.destroy', [$this->agent, 99]))
+        ->assertNotFound();
+});
+
+it('keeps non-owners off the persona editor', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->get(route('console.agents.persona.edit', $this->agent))->assertForbidden();
+    $this->actingAs($user)->put(route('console.agents.persona.update', $this->agent), [
+        'persona' => 'x',
+    ])->assertForbidden();
+    $this->actingAs($user)
+        ->delete(route('console.agents.memories.destroy', [$this->agent, 0]))
+        ->assertForbidden();
 });
 
 it('renders the dismiss control on a flashed key', function () {

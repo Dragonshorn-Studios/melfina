@@ -55,7 +55,8 @@ class Agent extends Model
 
     /**
      * Append a memory entry. Memories are an append-only log the agent
-     * curates itself — the owner reads them, nobody else writes them.
+     * curates itself; the owner can read, append, and prune entries from
+     * the console.
      */
     public function remember(string $text): void
     {
