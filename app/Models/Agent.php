@@ -14,10 +14,13 @@ use Illuminate\Support\Str;
 /**
  * @property string $name
  * @property string $status
+ * @property string|null $description
+ * @property string|null $persona
+ * @property array<int, array{at: string, text: string}>|null $memories
  * @property string|null $key_hash
  * @property Carbon|null $key_issued_at
  */
-#[Fillable(['name', 'status', 'key_hash', 'key_issued_at'])]
+#[Fillable(['name', 'status', 'description', 'persona', 'memories', 'key_hash', 'key_issued_at'])]
 class Agent extends Model
 {
     /** @use HasFactory<AgentFactory> */
@@ -31,6 +34,7 @@ class Agent extends Model
     {
         return [
             'key_issued_at' => 'datetime',
+            'memories' => 'array',
         ];
     }
 
@@ -47,6 +51,18 @@ class Agent extends Model
     public function isActive(): bool
     {
         return $this->status === self::STATUS_ACTIVE;
+    }
+
+    /**
+     * Append a memory entry. Memories are an append-only log the agent
+     * curates itself — the owner reads them, nobody else writes them.
+     */
+    public function remember(string $text): void
+    {
+        $memories = $this->memories ?? [];
+        $memories[] = ['at' => now()->toIso8601String(), 'text' => $text];
+        $this->memories = $memories;
+        $this->save();
     }
 
     /**

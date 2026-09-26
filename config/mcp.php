@@ -21,6 +21,17 @@ return [
     )))),
 
     /*
+    | The env-only baseline of the allow-list. MergeMcpRedirectDomains
+    | unions console-managed origins into 'redirect_domains' per request;
+    | this copy is never mutated so the console can render "which of these
+    | came from MCP_REDIRECT_DOMAINS" faithfully.
+    */
+    'redirect_domains_env' => array_filter(array_map('trim', explode(',', env(
+        'MCP_REDIRECT_DOMAINS',
+        'http://localhost,http://127.0.0.1',
+    )))),
+
+    /*
     |--------------------------------------------------------------------------
     | Allowed Custom Schemes
     |--------------------------------------------------------------------------

@@ -2,11 +2,14 @@
 
 namespace App\Mcp\Servers;
 
+use App\Mcp\Tools\ListAgents;
 use App\Mcp\Tools\ListFiles;
 use App\Mcp\Tools\ListShared;
 use App\Mcp\Tools\ReadFile;
 use App\Mcp\Tools\ReadInstructions;
+use App\Mcp\Tools\ReadPersona;
 use App\Mcp\Tools\ReadShared;
+use App\Mcp\Tools\UpdatePersona;
 use App\Mcp\Tools\WriteFile;
 use App\Mcp\Tools\WriteShared;
 use Laravel\Mcp\Server;
@@ -27,5 +30,8 @@ class MelfinaServer extends Server
         ListShared::class,
         ReadShared::class,
         WriteShared::class,
+        ReadPersona::class,
+        UpdatePersona::class,
+        ListAgents::class,
     ];
 }

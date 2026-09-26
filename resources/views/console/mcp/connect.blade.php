@@ -35,7 +35,8 @@
             <pre class="mt-3 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $publicRepoUrl }}</pre>
             <p class="mt-2 text-sm text-steel">
                 Importer insists on GitHub or a file upload (MiniMax)?
-                <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.mcp.plugin.zip') }}">Download the same package as a ZIP</a>.
+                <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.mcp.plugin.zip') }}">Download the same package as a ZIP</a>,
+                or publish it straight to a GitHub repo below.
                 Prefer the key baked in instead? <code>{{ $fleetRepoUrl }}</code> embeds the fleet key —
                 the clone needs Basic credentials, so use it only with clients that pass
                 <code>user:pass@</code> URLs correctly.
@@ -82,6 +83,111 @@
                     <code>X-Melfina-Agent-Key</code> (the agent's name, or its <code>melf_…</code> key):
                 </p>
                 <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $headersConfig }}</pre>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)" open>
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">PUBLISH TO GITHUB</summary>
+                <p class="mt-3 text-sm text-steel">
+                    Some importers (MiniMax) only accept <code>github.com</code> URLs. Save a GitHub
+                    personal access token (repo scope) and a target repo — <code>name</code> or
+                    <code>owner/name</code> — then publish: the credential-free package is pushed to
+                    <code>github.com/you/repo</code> (created public if missing). The token is stored
+                    encrypted and never shown again.
+                </p>
+                <form method="POST" action="{{ route('console.mcp.github.store') }}" class="mt-3 flex flex-wrap gap-2">
+                    @csrf
+                    <input type="password" name="github_token" autocomplete="off"
+                        placeholder="{{ $hasGitHubToken ? '•••••••• (saved — enter to replace)' : 'GitHub PAT (repo scope)' }}"
+                        class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream placeholder:text-steel/60"
+                        style="border-radius: var(--radius-console)">
+                    <input type="text" name="github_repo" placeholder="you/melfina-plugin" required
+                        value="{{ $githubRepo }}"
+                        class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream placeholder:text-steel/60"
+                        style="border-radius: var(--radius-console)">
+                    <button type="submit"
+                        class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                        style="border-radius: var(--radius-console)">save</button>
+                </form>
+                @if ($hasGitHubToken && $githubRepo)
+                    <form method="POST" action="{{ route('console.mcp.github.publish') }}" class="mt-2"
+                        onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Publish the fleet package to github.com/{{ $githubRepo }}? The repo is created public if it doesn't exist.">
+                        @csrf
+                        <button type="submit"
+                            class="border border-amber/50 bg-void px-3 py-1.5 font-mono text-xs text-amber hover:border-amber"
+                            style="border-radius: var(--radius-console)">publish to github.com/{{ $githubRepo }}</button>
+                    </form>
+                @endif
+                @error('github_repo')
+                    <p class="mt-2 font-mono text-xs text-red-400">{{ $message }}</p>
+                @enderror
+                @error('github_token')
+                    <p class="mt-2 font-mono text-xs text-red-400">{{ $message }}</p>
+                @enderror
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)" open>
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">OAUTH REDIRECT ORIGINS</summary>
+                <p class="mt-3 text-sm text-steel">
+                    Dynamic client registration only accepts callback URLs on allowed origins —
+                    <code>scheme://host[:port]</code>, no path. Loopback is always allowed for local
+                    clients; add remote origins here instead of editing <code>MCP_REDIRECT_DOMAINS</code>
+                    and redeploying.
+                </p>
+                @if (session('status'))
+                    <p class="mt-3 font-mono text-xs text-amber">{{ session('status') }}</p>
+                @endif
+                <ul class="mt-3 space-y-1 font-mono text-xs">
+                    @foreach ($envRedirectDomains as $domain)
+                        <li class="flex items-center justify-between gap-3 border border-border/50 bg-void/60 px-3 py-1.5 text-steel" style="border-radius: var(--radius-console)">
+                            <span>{{ $domain }}</span>
+                            <span class="text-[10px] tracking-[0.12em]">ENV</span>
+                        </li>
+                    @endforeach
+                    @foreach ($storedRedirectDomains as $domain)
+                        <li class="flex items-center justify-between gap-3 border border-amber/40 bg-void/60 px-3 py-1.5 text-cream" style="border-radius: var(--radius-console)">
+                            <span>{{ $domain }}</span>
+                            <form method="POST" action="{{ route('console.mcp.redirect-domains.destroy') }}"
+                                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Remove {{ $domain }}? Clients can no longer register callbacks on it.">
+                                @csrf
+                                @method('DELETE')
+                                <input type="hidden" name="domain" value="{{ $domain }}">
+                                <button type="submit" class="font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">REMOVE</button>
+                            </form>
+                        </li>
+                    @endforeach
+                </ul>
+                <form method="POST" action="{{ route('console.mcp.redirect-domains.store') }}" class="mt-3 flex gap-2">
+                    @csrf
+                    <input type="text" name="domain" placeholder="https://chatgpt.com" required
+                        class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream placeholder:text-steel/60"
+                        style="border-radius: var(--radius-console)">
+                    <button type="submit"
+                        class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                        style="border-radius: var(--radius-console)">allow origin</button>
+                </form>
+                @error('domain')
+                    <p class="mt-2 font-mono text-xs text-red-400">{{ $message }}</p>
+                @enderror
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">OPERATOR PERSONA</summary>
+                <p class="mt-3 text-sm text-steel">
+                    Who you are, appended to every agent's <code>read_instructions</code> — how the
+                    fleet should address its human. Leave empty to send nothing.
+                </p>
+                <form method="POST" action="{{ route('console.mcp.operator-persona.store') }}" class="mt-3">
+                    @csrf
+                    @method('PUT')
+                    <textarea name="operator_persona" rows="4"
+                        placeholder="The user is Antoni — address them as Antoni; they run Dragonshorn and prefer terse replies."
+                        class="w-full border border-border bg-void/60 px-3 py-2 font-mono text-xs text-cream placeholder:text-steel/60"
+                        style="border-radius: var(--radius-console)">{{ old('operator_persona', $operatorPersona) }}</textarea>
+                    @error('operator_persona') <p class="mt-1 font-mono text-xs text-red-400">{{ $message }}</p> @enderror
+                    <button type="submit"
+                        class="mt-2 border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                        style="border-radius: var(--radius-console)">save persona</button>
+                </form>
             </details>
 
             <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">

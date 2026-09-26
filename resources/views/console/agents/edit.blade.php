@@ -13,6 +13,13 @@
                 @error('name') <p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p> @enderror
             </div>
             <div>
+                <label for="description" class="block font-mono text-xs text-steel">description</label>
+                <input id="description" name="description" type="text" value="{{ old('description', $agent->description) }}" maxlength="500"
+                    placeholder="one line — who is this imp? (visible to other agents)"
+                    class="mt-1 w-full border border-border bg-void px-3 py-2 font-mono text-sm text-cream outline-none focus:border-amber" style="border-radius: var(--radius-console)">
+                @error('description') <p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p> @enderror
+            </div>
+            <div>
                 <label for="status" class="block font-mono text-xs text-steel">status</label>
                 <select id="status" name="status" required
                     class="mt-1 w-full border border-border bg-void px-3 py-2 font-mono text-sm text-cream outline-none focus:border-amber" style="border-radius: var(--radius-console)">

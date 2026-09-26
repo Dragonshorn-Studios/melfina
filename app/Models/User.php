@@ -17,9 +17,13 @@ use Laravel\Passport\HasApiTokens;
 /**
  * @property string|null $mcp_key_hash
  * @property Carbon|null $mcp_key_issued_at
+ * @property array<int, string>|null $mcp_redirect_domains
+ * @property string|null $github_token (encrypted at rest)
+ * @property string|null $github_repo
+ * @property string|null $operator_persona
  */
-#[Fillable(['name', 'email', 'password', 'is_owner', 'mcp_key_hash', 'mcp_key_issued_at'])]
-#[Hidden(['password', 'remember_token', 'mcp_key_hash'])]
+#[Fillable(['name', 'email', 'password', 'is_owner', 'mcp_key_hash', 'mcp_key_issued_at', 'mcp_redirect_domains', 'operator_persona'])]
+#[Hidden(['password', 'remember_token', 'mcp_key_hash', 'github_token'])]
 class User extends Authenticatable implements OAuthenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -44,7 +48,20 @@ class User extends Authenticatable implements OAuthenticatable
             'password' => 'hashed',
             'is_owner' => 'boolean',
             'mcp_key_issued_at' => 'datetime',
+            'mcp_redirect_domains' => 'array',
+            'github_token' => 'encrypted',
         ];
+    }
+
+    /**
+     * The owner-authored persona every agent sees appended to its
+     * instructions — who the human is, how to address them.
+     */
+    public static function operatorPersona(): ?string
+    {
+        $persona = static::query()->where('is_owner', true)->value('operator_persona');
+
+        return is_string($persona) && $persona !== '' ? $persona : null;
     }
 
     /**
@@ -68,10 +85,28 @@ class User extends Authenticatable implements OAuthenticatable
     }
 
     /**
-     * Whether the plaintext credential is a live fleet key. Fails closed.
+     * Named fleet keys for this owner (multi-key management lives in
+     * mcp_fleet_keys; the legacy single hash is migrated into a 'default'
+     * row).
+     *
+     * @return HasMany<McpFleetKey, $this>
+     */
+    public function mcpFleetKeys(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(McpFleetKey::class);
+    }
+
+    /**
+     * Whether the plaintext credential is a live fleet key — any unrevoked
+     * named key, or the legacy single hash (pre-multi-key installs).
+     * Fails closed.
      */
     public static function isMcpKey(string $plaintext): bool
     {
+        if (McpFleetKey::isLiveKey($plaintext)) {
+            return true;
+        }
+
         if (! str_starts_with($plaintext, self::MCP_KEY_PREFIX)) {
             return false;
         }

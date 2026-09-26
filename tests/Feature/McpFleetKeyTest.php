@@ -735,3 +735,78 @@ it('drops plugin repos embedding a rotated key and rebuilds on demand', function
     $this->withBasicAuth('x', $newKey)->get('/plugins/a.git/info/refs')->assertOk();
     expect(is_dir($repos->repoDir($this->agent, 'direct')))->toBeTrue();
 });
+
+it('runs multiple named fleet keys independently — revoke one, keep the rest', function () {
+    $agent = $this->agent;
+    $mcp = fn (string $bearer) => ($this->mcp)('tools/list', [], $bearer, ['X-Melfina-Agent-Key' => $agent->name]);
+
+    $this->actingAs($this->owner)->post(route('console.mcp-key.store'), ['name' => 'grokbot']);
+    $grokKey = session('plaintext_mcp_key');
+    $this->actingAs($this->owner)->post(route('console.mcp-key.store'), ['name' => 'minimax']);
+    $miniKey = session('plaintext_mcp_key');
+
+    $mcp($grokKey)->assertOk();
+    $mcp($miniKey)->assertOk();
+
+    $key = $this->owner->mcpFleetKeys()->where('name', 'grokbot')->firstOrFail();
+    $this->actingAs($this->owner)
+        ->delete(route('console.mcp-key.destroy', $key))
+        ->assertRedirect(route('console.dashboard'));
+
+    $mcp($grokKey)->assertUnauthorized();
+    $mcp($miniKey)->assertOk();
+});
+
+it('rolling a name revokes only that name — other keys keep working', function () {
+    $agent = $this->agent;
+    $mcp = fn (string $bearer) => ($this->mcp)('tools/list', [], $bearer, ['X-Melfina-Agent-Key' => $agent->name]);
+
+    $this->actingAs($this->owner)->post(route('console.mcp-key.store'), ['name' => 'grokbot']);
+    $old = session('plaintext_mcp_key');
+    $this->actingAs($this->owner)->post(route('console.mcp-key.store'), ['name' => 'minimax']);
+    $other = session('plaintext_mcp_key');
+
+    // Re-issue under the same name = roll.
+    $this->actingAs($this->owner)->post(route('console.mcp-key.store'), ['name' => 'grokbot']);
+    $new = session('plaintext_mcp_key');
+
+    $mcp($old)->assertUnauthorized();
+    $mcp($new)->assertOk();
+    $mcp($other)->assertOk();
+});
+
+it('keeps non-owners off fleet-key revoke and rejects foreign keys', function () {
+    $this->actingAs($this->owner)->post(route('console.mcp-key.store'), ['name' => 'grokbot']);
+    $key = $this->owner->mcpFleetKeys()->firstOrFail();
+
+    auth()->logout();
+    $this->delete(route('console.mcp-key.destroy', $key))->assertRedirect(route('login'));
+
+    $other = User::factory()->owner()->create();
+    $this->actingAs($other)
+        ->delete(route('console.mcp-key.destroy', $key))
+        ->assertNotFound();
+
+    expect($key->fresh()->isLive())->toBeTrue();
+});
+
+it('kills the legacy-column key when the same-hash default row is revoked', function () {
+    // Simulate a pre-migration install: legacy column set AND a 'default'
+    // row holding the same hash (as the migration backfill produced).
+    $legacy = User::MCP_KEY_PREFIX.Str::random(48);
+    $this->owner->update(['mcp_key_hash' => User::hashMcpKey($legacy)]);
+    $default = $this->owner->mcpFleetKeys()->create([
+        'name' => 'default',
+        'key_hash' => User::hashMcpKey($legacy),
+    ]);
+
+    $mcp = fn () => ($this->mcp)('tools/list', [], $legacy, ['X-Melfina-Agent-Key' => $this->agent->name]);
+    $mcp()->assertOk();
+
+    $this->actingAs($this->owner)
+        ->delete(route('console.mcp-key.destroy', $default))
+        ->assertRedirect();
+
+    $mcp()->assertUnauthorized();
+    expect($this->owner->fresh()->mcp_key_hash)->toBeNull();
+});

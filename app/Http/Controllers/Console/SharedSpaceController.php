@@ -43,6 +43,43 @@ class SharedSpaceController extends Controller
         return redirect()->route('console.shared.edit', $space);
     }
 
+    /**
+     * Browse the space's files — the operator can look inside anything
+     * agents share, no ACL needed (the console is owner-only).
+     */
+    public function show(SharedSpace $shared): View
+    {
+        $this->authorize('view', $shared);
+
+        return view('console.shared.show', [
+            'space' => $shared,
+            'files' => $shared->files()
+                ->orderBy('path')
+                ->select(['id', 'shared_space_id', 'path', 'updated_at'])
+                ->selectRaw('length(content) as byte_size')
+                ->paginate(50),
+        ]);
+    }
+
+    /**
+     * Read one file inside the space. The path comes via query string so
+     * nested paths don't fight route params.
+     */
+    public function file(Request $request, SharedSpace $shared): View
+    {
+        $this->authorize('view', $shared);
+
+        $path = $request->string('path')->toString();
+        $file = $shared->files()->where('path', $path)->first();
+
+        abort_if($file === null, 404);
+
+        return view('console.shared.file', [
+            'space' => $shared,
+            'file' => $file,
+        ]);
+    }
+
     public function edit(SharedSpace $shared): View
     {
         $this->authorize('update', $shared);

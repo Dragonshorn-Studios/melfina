@@ -32,8 +32,14 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::get('/', DashboardController::class)->name('dashboard');
 
     Route::post('mcp-key', [McpKeyController::class, 'store'])->name('mcp-key.store');
+    Route::delete('mcp-keys/{fleetKey}', [McpKeyController::class, 'destroy'])->name('mcp-key.destroy');
     Route::get('mcp', [McpKeyController::class, 'connect'])->name('mcp.connect');
     Route::get('mcp/plugin.zip', [McpKeyController::class, 'pluginZip'])->name('mcp.plugin.zip');
+    Route::post('mcp/redirect-domains', [McpKeyController::class, 'storeRedirectDomain'])->name('mcp.redirect-domains.store');
+    Route::delete('mcp/redirect-domains', [McpKeyController::class, 'destroyRedirectDomain'])->name('mcp.redirect-domains.destroy');
+    Route::post('mcp/github', [McpKeyController::class, 'storeGitHub'])->name('mcp.github.store');
+    Route::post('mcp/github/publish', [McpKeyController::class, 'publishGitHub'])->name('mcp.github.publish');
+    Route::put('mcp/operator-persona', [McpKeyController::class, 'storeOperatorPersona'])->name('mcp.operator-persona.store');
 
     Route::post('agents/{agent}/rotate', [AgentController::class, 'rotate'])->name('agents.rotate');
     Route::get('agents/{agent}/connect', [AgentController::class, 'connect'])->name('agents.connect');
@@ -50,7 +56,8 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::put('files/{agent}', [FileController::class, 'update'])->name('files.update');
     Route::delete('files/{agent}', [FileController::class, 'destroy'])->name('files.destroy');
 
-    Route::resource('shared', SharedSpaceController::class)->except(['destroy', 'show']);
+    Route::get('shared/{shared}/file', [SharedSpaceController::class, 'file'])->name('shared.file');
+    Route::resource('shared', SharedSpaceController::class)->except(['destroy']);
 
     Route::get('clients', [McpClientController::class, 'index'])->name('clients.index');
     Route::delete('clients/{client}', [McpClientController::class, 'destroy'])->name('clients.destroy');
