@@ -27,7 +27,9 @@ return new class extends Migration
         });
 
         // Carry the legacy single-key hash forward so existing fleet keys
-        // keep resolving after the move to named keys.
+        // keep resolving after the move to named keys — then clear the
+        // column, otherwise the legacy fallback in isMcpKey() would keep
+        // accepting a key whose 'default' row was revoked.
         DB::table('users')
             ->where('is_owner', true)
             ->whereNotNull('mcp_key_hash')
@@ -41,6 +43,8 @@ return new class extends Migration
                     'updated_at' => now(),
                 ]);
             });
+
+        DB::table('users')->where('is_owner', true)->update(['mcp_key_hash' => null]);
     }
 
     /**

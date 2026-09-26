@@ -789,3 +789,24 @@ it('keeps non-owners off fleet-key revoke and rejects foreign keys', function ()
 
     expect($key->fresh()->isLive())->toBeTrue();
 });
+
+it('kills the legacy-column key when the same-hash default row is revoked', function () {
+    // Simulate a pre-migration install: legacy column set AND a 'default'
+    // row holding the same hash (as the migration backfill produced).
+    $legacy = User::MCP_KEY_PREFIX.Str::random(48);
+    $this->owner->update(['mcp_key_hash' => User::hashMcpKey($legacy)]);
+    $default = $this->owner->mcpFleetKeys()->create([
+        'name' => 'default',
+        'key_hash' => User::hashMcpKey($legacy),
+    ]);
+
+    $mcp = fn () => ($this->mcp)('tools/list', [], $legacy, ['X-Melfina-Agent-Key' => $this->agent->name]);
+    $mcp()->assertOk();
+
+    $this->actingAs($this->owner)
+        ->delete(route('console.mcp-key.destroy', $default))
+        ->assertRedirect();
+
+    $mcp()->assertUnauthorized();
+    expect($this->owner->fresh()->mcp_key_hash)->toBeNull();
+});

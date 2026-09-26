@@ -269,6 +269,14 @@ class McpKeyController extends Controller
 
         $fleetKey->revoke();
 
+        // The legacy single-column hash can shadow a 'default' row — clear
+        // it when they carry the same plaintext or the key keeps resolving.
+        $user = $request->user();
+        if ($fleetKey->name === 'default' && $user->mcp_key_hash === $fleetKey->key_hash) {
+            $user->mcp_key_hash = null;
+            $user->save();
+        }
+
         try {
             $repos->dropAllRepos();
         } catch (\Throwable $e) {
