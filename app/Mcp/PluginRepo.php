@@ -167,6 +167,17 @@ class PluginRepo
     }
 
     /**
+     * Rebuild the public package and zip it under a lock — the zip reads
+     * the shared directory at close() time, so concurrent downloads must
+     * not see a mid-rebuild tree.
+     */
+    public function publicPackageZip(): string
+    {
+        return Cache::lock('melfina-plugin-repo:public-pkg', 30)
+            ->block(10, fn () => $this->zipDirectory($this->rebuildPublicPackage()));
+    }
+
+    /**
      * Zip a package directory into a 0600 temp file and return its path —
      * the caller streams it via response()->download()->deleteFileAfterSend().
      * tempnam's file is already 0600; OVERWRITE truncates rather than
