@@ -33,7 +33,7 @@ class ReadMessage extends Tool
             return Response::error('Message not found.');
         }
 
-        return Response::text(json_encode([
+        return $this->jsonResponse([
             'id' => $message->id,
             'from_id' => $message->sender_agent_id,
             'from' => $message->sender_name,
@@ -49,7 +49,7 @@ class ReadMessage extends Tool
                 'bytes' => strlen($a->content),
                 'content' => $a->content,
             ])->values()->all(),
-        ]));
+        ]);
     }
 
     /**

@@ -41,11 +41,11 @@ class AckMessage extends Tool
             return Response::error('Message not found.');
         }
 
-        return Response::text(json_encode([
+        return $this->jsonResponse([
             'id' => $acked->id,
             'read_at' => $acked->read_at->toIso8601String(),
             'acknowledged_at' => $acked->acknowledged_at->toIso8601String(),
-        ]));
+        ]);
     }
 
     /**

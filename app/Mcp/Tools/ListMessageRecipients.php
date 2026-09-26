@@ -23,9 +23,9 @@ class ListMessageRecipients extends Tool
      */
     public function handle(Request $request, MessageService $messages): Response
     {
-        return Response::text(json_encode([
+        return $this->jsonResponse([
             'recipients' => $messages->addressBook($this->agent())->values()->all(),
-        ]));
+        ]);
     }
 
     /**

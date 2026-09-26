@@ -5,6 +5,7 @@ use App\Models\Agent;
 use App\Models\AgentMessage;
 use App\Models\User;
 use App\Models\VfsFile;
+use App\Services\MessageService;
 use Illuminate\Support\Facades\RateLimiter;
 
 beforeEach(function () {
@@ -139,6 +140,42 @@ it('lists sent messages scoped to the sender', function () {
 
     expect($sent['total'])->toBe(1)
         ->and($sent['messages'][0]['to'])->toBe($this->recipient->name);
+});
+
+it('paginates inbox and sent past page 1', function () {
+    $service = app(MessageService::class);
+    for ($i = 1; $i <= 55; $i++) {
+        $service->send($this->sender, $this->recipient->id, null, "msg $i");
+    }
+
+    $page1 = ($this->toolJson)('list_inbox', ['page' => 1], 'melf_recipient');
+    $page2 = ($this->toolJson)('list_inbox', ['page' => 2], 'melf_recipient');
+
+    expect($page1['total'])->toBe(55)
+        ->and(count($page1['messages']))->toBe(50)
+        ->and($page1['messages'][0]['preview'])->toBe('msg 55')
+        ->and($page2['page'])->toBe(2)
+        ->and(count($page2['messages']))->toBe(5)
+        ->and($page2['messages'][0]['preview'])->toBe('msg 5');
+
+    $sent2 = ($this->toolJson)('list_sent_messages', ['page' => 2]);
+    expect($sent2['page'])->toBe(2)
+        ->and(count($sent2['messages']))->toBe(5);
+});
+
+it('does not consume send quota on a failed send', function () {
+    $rateKey = 'mcp-message-send:'.$this->sender->id;
+    for ($i = 0; $i < SendMessage::SEND_LIMIT_PER_MINUTE - 1; $i++) {
+        RateLimiter::hit($rateKey, 60);
+    }
+
+    $error = ($this->tool)('send_message', ['recipient_id' => 999999, 'body' => 'hi'])
+        ->assertOk()->json('result');
+    expect($error['isError'])->toBeTrue();
+
+    // The failed send must not have burned the last slot.
+    $ok = ($this->toolJson)('send_message', ['recipient_id' => $this->recipient->id, 'body' => 'hi']);
+    expect($ok['recipient_id'])->toBe($this->recipient->id);
 });
 
 it('marks the message read when the recipient reads it, returning attachments', function () {

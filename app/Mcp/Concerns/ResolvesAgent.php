@@ -6,6 +6,8 @@ use App\Http\Middleware\ResolveAgent;
 use App\Models\Agent;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
+use JsonException;
+use Laravel\Mcp\Response;
 
 /**
  * The agent placed on the request by {@see ResolveAgent}.
@@ -33,5 +35,21 @@ trait ResolvesAgent
         assert($agent instanceof Agent);
 
         return $agent;
+    }
+
+    /**
+     * Encode a payload as a text response — failing loudly rather than
+     * returning an empty body when the data can't be represented as JSON
+     * (e.g. non-UTF-8 attachment content).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    protected function jsonResponse(array $payload): Response
+    {
+        try {
+            return Response::text(json_encode($payload, JSON_THROW_ON_ERROR));
+        } catch (JsonException) {
+            return Response::error('Failed to encode the response.');
+        }
     }
 }

@@ -69,14 +69,14 @@ class SendMessage extends Tool
 
         RateLimiter::hit($rateKey, 60);
 
-        return Response::text(json_encode([
+        return $this->jsonResponse([
             'id' => $message->id,
             'recipient_id' => $message->recipient_agent_id,
             'recipient_name' => $message->recipient_name,
             'subject' => $message->subject,
             'attachments' => $message->attachments->count(),
             'sent_at' => $message->created_at->toIso8601String(),
-        ]));
+        ]);
     }
 
     /**
@@ -97,7 +97,11 @@ class SendMessage extends Tool
             }
 
             if (isset($item['vfs_path'])) {
-                $name = VfsFile::normalizePath((string) $item['vfs_path']);
+                if (! is_string($item['vfs_path'])) {
+                    throw new InvalidArgumentException("attachments[$i]: vfs_path must be a string.");
+                }
+
+                $name = VfsFile::normalizePath($item['vfs_path']);
                 $content = VfsFile::readFor($agent, $name);
 
                 if ($content === null) {
@@ -113,7 +117,11 @@ class SendMessage extends Tool
                 throw new InvalidArgumentException("attachments[$i] needs name+content or vfs_path.");
             }
 
-            $attachments[] = ['name' => (string) $item['name'], 'content' => (string) $item['content']];
+            if (! is_string($item['name']) || ! is_string($item['content'])) {
+                throw new InvalidArgumentException("attachments[$i]: name and content must be strings.");
+            }
+
+            $attachments[] = ['name' => $item['name'], 'content' => $item['content']];
         }
 
         return $attachments;

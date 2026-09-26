@@ -35,16 +35,14 @@ class ListInbox extends Tool
         $unreadOnly = (bool) $request->get('unread', false);
         $page = (int) $request->get('page', 1);
 
-        $paginator = $messages->inbox($agent, $unreadOnly);
-        $paginator->setPageName('page');
-        $items = $paginator->forPage($page, $paginator->perPage());
+        $paginator = $messages->inbox($agent, $unreadOnly, page: $page);
 
-        return Response::text(json_encode([
+        return $this->jsonResponse([
             'unread' => $messages->unreadCount($agent),
-            'page' => $page,
+            'page' => $paginator->currentPage(),
             'per_page' => $paginator->perPage(),
             'total' => $paginator->total(),
-            'messages' => $items->map(fn ($m) => [
+            'messages' => $paginator->collect()->map(fn ($m) => [
                 'id' => $m->id,
                 'from_id' => $m->sender_agent_id,
                 'from' => $m->sender_name,
@@ -55,7 +53,7 @@ class ListInbox extends Tool
                 'read' => $m->isRead(),
                 'acknowledged' => $m->isAcknowledged(),
             ])->values()->all(),
-        ]));
+        ]);
     }
 
     /**

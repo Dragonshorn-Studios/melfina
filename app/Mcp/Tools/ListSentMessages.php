@@ -29,14 +29,13 @@ class ListSentMessages extends Tool
         ]);
 
         $page = (int) $request->get('page', 1);
-        $paginator = $messages->sent($this->agent());
-        $items = $paginator->forPage($page, $paginator->perPage());
+        $paginator = $messages->sent($this->agent(), page: $page);
 
-        return Response::text(json_encode([
-            'page' => $page,
+        return $this->jsonResponse([
+            'page' => $paginator->currentPage(),
             'per_page' => $paginator->perPage(),
             'total' => $paginator->total(),
-            'messages' => $items->map(fn ($m) => [
+            'messages' => $paginator->collect()->map(fn ($m) => [
                 'id' => $m->id,
                 'to_id' => $m->recipient_agent_id,
                 'to' => $m->recipient_name,
@@ -47,7 +46,7 @@ class ListSentMessages extends Tool
                 'read' => $m->isRead(),
                 'acknowledged' => $m->isAcknowledged(),
             ])->values()->all(),
-        ]));
+        ]);
     }
 
     /**

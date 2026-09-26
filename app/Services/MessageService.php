@@ -94,14 +94,14 @@ class MessageService
      *
      * @return LengthAwarePaginator<int, AgentMessage>
      */
-    public function inbox(Agent $recipient, bool $unreadOnly = false, int $perPage = self::PAGE_SIZE): LengthAwarePaginator
+    public function inbox(Agent $recipient, bool $unreadOnly = false, int $perPage = self::PAGE_SIZE, int $page = 1): LengthAwarePaginator
     {
         return AgentMessage::query()
             ->where('recipient_agent_id', $recipient->id)
             ->when($unreadOnly, fn ($q) => $q->whereNull('read_at'))
             ->withCount('attachments')
             ->latest('id')
-            ->paginate(min($perPage, 100));
+            ->paginate(min(max(1, $perPage), 100), ['*'], 'page', $page);
     }
 
     /**
@@ -109,13 +109,13 @@ class MessageService
      *
      * @return LengthAwarePaginator<int, AgentMessage>
      */
-    public function sent(Agent $sender, int $perPage = self::PAGE_SIZE): LengthAwarePaginator
+    public function sent(Agent $sender, int $perPage = self::PAGE_SIZE, int $page = 1): LengthAwarePaginator
     {
         return AgentMessage::query()
             ->where('sender_agent_id', $sender->id)
             ->withCount('attachments')
             ->latest('id')
-            ->paginate(min($perPage, 100));
+            ->paginate(min(max(1, $perPage), 100), ['*'], 'page', $page);
     }
 
     /**
