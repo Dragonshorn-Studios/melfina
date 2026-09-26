@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class McpKeyController extends Controller
 {
@@ -64,5 +65,21 @@ class McpKeyController extends Controller
         return redirect()
             ->route('console.dashboard')
             ->with('plaintext_mcp_key', $plaintext);
+    }
+
+    /**
+     * Download the credential-free fleet package as a ZIP — for importers
+     * that take an upload rather than a git URL (e.g. MiniMax's plugin
+     * submit refuses non-GitHub repos).
+     */
+    public function pluginZip(PluginRepo $repos): BinaryFileResponse
+    {
+        try {
+            $zipPath = $repos->zipDirectory($repos->rebuildPublicPackage());
+        } catch (\RuntimeException $e) {
+            abort(500, $e->getMessage());
+        }
+
+        return response()->download($zipPath, 'melfina-fleet.zip')->deleteFileAfterSend();
     }
 }

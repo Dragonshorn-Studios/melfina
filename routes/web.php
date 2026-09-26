@@ -33,6 +33,7 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
 
     Route::post('mcp-key', [McpKeyController::class, 'store'])->name('mcp-key.store');
     Route::get('mcp', [McpKeyController::class, 'connect'])->name('mcp.connect');
+    Route::get('mcp/plugin.zip', [McpKeyController::class, 'pluginZip'])->name('mcp.plugin.zip');
 
     Route::post('agents/{agent}/rotate', [AgentController::class, 'rotate'])->name('agents.rotate');
     Route::get('agents/{agent}/connect', [AgentController::class, 'connect'])->name('agents.connect');

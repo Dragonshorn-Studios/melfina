@@ -522,6 +522,23 @@ it('renders the global connect page with both fleet repo URLs', function () {
         ->assertSee('NAME:melfg_…@', false);
 });
 
+it('downloads the credential-free fleet package as a zip', function () {
+    $response = $this->actingAs($this->owner)
+        ->get(route('console.mcp.plugin.zip'))
+        ->assertOk()
+        ->assertHeader('content-disposition', 'attachment; filename=melfina-fleet.zip');
+
+    $zip = new ZipArchive;
+    // Streamed file responses don't populate getContent() — read the file.
+    $zip->open($response->baseResponse->getFile()->getPathname());
+
+    // Dot-manifests ship, and nothing inside carries a credential.
+    expect($zip->statName('mcp.json'))->not->toBeFalse()
+        ->and($zip->statName('.minimax-plugin/plugin.json'))->not->toBeFalse()
+        ->and($zip->getFromName('mcp.json'))->toContain('YOUR_NAME:YOUR_KEY@');
+    $zip->close();
+});
+
 it('keeps the plugin zip owner-only', function () {
     app(PluginRepo::class)->rebuildPackage($this->agent, 'melf_testkey');
 

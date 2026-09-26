@@ -28,6 +28,8 @@
             </p>
             <pre class="mt-3 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $publicRepoUrl }}</pre>
             <p class="mt-2 text-sm text-steel">
+                Importer insists on GitHub or a file upload (MiniMax)?
+                <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.mcp.plugin.zip') }}">Download the same package as a ZIP</a>.
                 Prefer the key baked in instead? <code>{{ $fleetRepoUrl }}</code> embeds the fleet key —
                 the clone needs Basic credentials, so use it only with clients that pass
                 <code>user:pass@</code> URLs correctly.
