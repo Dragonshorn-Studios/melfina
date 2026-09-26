@@ -5,6 +5,7 @@ use App\Models\Agent;
 use App\Models\User;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Process\Process;
+use ZipArchive;
 
 beforeEach(function () {
     File::deleteDirectory(storage_path('app/mcp-plugins'));
@@ -41,18 +42,7 @@ it('resolves the persona from the agent name', function () {
     ], ['Authorization' => 'Bearer '.$this->fleetKey])->assertOk();
 });
 
-it('fails closed on an ambiguous or disabled agent name', function () {
-    Agent::factory()->withKey('melf_twin')->create(['name' => $this->agent->name]);
-
-    ($this->mcp)('tools/list', [], $this->fleetKey, ['X-Melfina-Agent-Key' => $this->agent->name])
-        ->assertUnauthorized();
-
-    $twin = Agent::where('key_hash', Agent::hashKey('melf_twin'))->firstOrFail();
-    $twin->update(['status' => Agent::STATUS_DISABLED]);
-
-    ($this->mcp)('tools/list', [], $this->fleetKey, ['X-Melfina-Agent-Key' => $this->agent->name])
-        ->assertOk();
-
+it('fails closed on a disabled agent name', function () {
     $this->agent->update(['status' => Agent::STATUS_DISABLED]);
 
     ($this->mcp)('tools/list', [], $this->fleetKey, ['X-Melfina-Agent-Key' => $this->agent->name])
@@ -211,13 +201,74 @@ it('refuses to serve paths outside the repo', function () {
 it('lets the owner download the plugin zip with live keys', function () {
     app(PluginRepo::class)->rebuildPackage($this->agent, 'melf_testkey');
 
-    $this->actingAs($this->owner)
+    $response = $this->actingAs($this->owner)
         ->get(route('console.agents.plugin', $this->agent))
         ->assertOk()
         ->assertHeader('content-disposition');
 
-    $mcp = file_get_contents(app(PluginRepo::class)->packageDir($this->agent).'/mcp.json');
-    expect($mcp)->toContain('Bearer melf_testkey');
+    // The response is a BinaryFileResponse that never sends in tests, so
+    // deleteFileAfterSend hasn't fired — the archive is inspectable.
+    $archive = new ZipArchive;
+    expect($archive->open($response->baseResponse->getFile()->getPathname()))->toBeTrue();
+
+    $names = collect(range(0, $archive->numFiles - 1))
+        ->map(fn (int $i) => $archive->getNameIndex($i));
+    $archive->close();
+
+    expect($names)
+        ->toContain('mcp.json', 'plugin.json')
+        ->toContain('.minimax-plugin/plugin.json', '.claude-plugin/plugin.json', '.mcp.json');
+});
+
+it('rejects duplicate agent names on create and rename', function () {
+    $this->actingAs($this->owner)
+        ->post(route('console.agents.store'), ['name' => $this->agent->name])
+        ->assertSessionHasErrors('name');
+
+    $other = Agent::factory()->create(['name' => 'other-agent']);
+    $this->actingAs($this->owner)
+        ->put(route('console.agents.update', $other), [
+            'name' => $this->agent->name,
+            'status' => Agent::STATUS_ACTIVE,
+        ])
+        ->assertSessionHasErrors('name');
+});
+
+it('drops plugin artifacts when the agent is disabled', function () {
+    $repos = app(PluginRepo::class);
+    $this->withBasicAuth('x', 'melf_testkey')->get('/plugins/a.git/info/refs')->assertOk();
+    $repos->rebuildPackage($this->agent, 'melf_testkey');
+
+    $this->actingAs($this->owner)
+        ->put(route('console.agents.update', $this->agent), [
+            'name' => $this->agent->name,
+            'status' => Agent::STATUS_DISABLED,
+        ]);
+
+    expect(is_dir($repos->repoDir($this->agent, 'direct')))->toBeFalse()
+        ->and(is_dir($repos->packageDir($this->agent)))->toBeFalse();
+});
+
+it('rejects a rotated-out fleet key on /mcp', function () {
+    $old = $this->fleetKey;
+    $this->actingAs($this->owner)->post(route('console.mcp-key.store'));
+
+    ($this->mcp)('tools/list', [], $old, ['X-Melfina-Agent-Key' => 'melf_testkey'])
+        ->assertUnauthorized();
+});
+
+it('404s a direct clone with a disabled agent key', function () {
+    Agent::factory()->withKey('melf_deadkey')->disabled()->create();
+    $this->withBasicAuth('x', 'melf_deadkey')->get('/plugins/a.git/info/refs')->assertNotFound();
+});
+
+it('renders the persona clone URLs on the connect page', function () {
+    $this->actingAs($this->owner)
+        ->get(route('console.agents.connect', $this->agent))
+        ->assertOk()
+        ->assertSee('INSTALL AS PLUGIN')
+        ->assertSee(':melfg_…@', false)
+        ->assertSee(rawurlencode($this->agent->name), false);
 });
 
 it('keeps the plugin zip owner-only', function () {

@@ -47,7 +47,7 @@ class AgentController extends Controller
         // Packaging is a side effect of key issuance, not part of it — a
         // filesystem failure must not eat the shown-once plaintext.
         try {
-            app(PluginRepo::class)->rebuildPackage($agent, $plaintext);
+            app(PluginRepo::class)->syncForAgent($agent, $plaintext);
         } catch (\Throwable $e) {
             Log::warning('plugin package rebuild failed', ['agent_id' => $agent->id, 'error' => $e->getMessage()]);
         }
@@ -83,8 +83,10 @@ class AgentController extends Controller
         return view('console.agents.connect', [
             'agent' => $agent,
             'endpoint' => $endpoint,
-            'pluginUrl' => preg_replace('#^(https?://)#', '$1'.$personaUser.':melfg_…@', $repoPath),
-            'pluginUrlDirect' => preg_replace('#^(https?://)#', '$1'.$personaUser.':melf_…@', $repoPath),
+            // '${1}' braces keep a digit-leading persona ('7of9') from being
+            // consumed as part of the capture-group reference.
+            'pluginUrl' => preg_replace('#^(https?://)#', '${1}'.$personaUser.':melfg_…@', $repoPath),
+            'pluginUrlDirect' => preg_replace('#^(https?://)#', '${1}'.$personaUser.':melf_…@', $repoPath),
             'hasPackage' => is_dir(app(PluginRepo::class)->packageDir($agent)),
             'snippets' => [
                 'claudeDesktop' => json_encode([
@@ -147,13 +149,16 @@ class AgentController extends Controller
 
         $agent->update($validated);
 
-        // The name is the fleet persona — a rename makes every built plugin
-        // artifact stale, and the ZIP package can only be rebuilt with a
-        // plaintext key we no longer hold, so it is dropped until rotate.
-        if ($agent->wasChanged('name')) {
-            $repos = app(PluginRepo::class);
-            $repos->dropRepo($agent);
-            $repos->dropPackage($agent);
+        // The name is the fleet persona, and a disabled agent shouldn't
+        // leave credential-bearing artifacts at rest — both make built
+        // plugin artifacts stale. Without plaintext they can only be
+        // dropped, not rebuilt (next key rotation regenerates the ZIP).
+        if ($agent->wasChanged('name') || $agent->wasChanged('status')) {
+            try {
+                app(PluginRepo::class)->syncForAgent($agent);
+            } catch (\Throwable $e) {
+                Log::warning('plugin artifacts drop failed', ['agent_id' => $agent->id, 'error' => $e->getMessage()]);
+            }
         }
 
         return redirect()->route('console.agents.show', $agent);
@@ -170,9 +175,7 @@ class AgentController extends Controller
         $plaintext = $agent->rotateKey();
 
         try {
-            $repos = app(PluginRepo::class);
-            $repos->rebuildPackage($agent, $plaintext);
-            $repos->dropRepo($agent);
+            app(PluginRepo::class)->syncForAgent($agent, $plaintext);
         } catch (\Throwable $e) {
             Log::warning('plugin artifacts refresh failed', ['agent_id' => $agent->id, 'error' => $e->getMessage()]);
         }
@@ -194,9 +197,9 @@ class AgentController extends Controller
         abort_unless(is_dir($dir), 404);
         abort_unless(class_exists(ZipArchive::class), 500, 'PHP ext-zip is not installed');
 
+        // tempnam's file is 0600 — keep that path (OVERWRITE truncates it)
+        // so the credential-bearing archive is never world-readable.
         $zipPath = tempnam(sys_get_temp_dir(), 'melfina-plugin-');
-        unlink($zipPath);
-        $zipPath .= '.zip';
 
         $zip = new ZipArchive;
         abort_unless($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true, 500);
@@ -209,6 +212,7 @@ class AgentController extends Controller
         }
 
         abort_unless($zip->close(), 500);
+        chmod($zipPath, 0600);
 
         $slug = Str::slug($agent->name) ?: 'agent';
 

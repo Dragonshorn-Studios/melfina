@@ -23,6 +23,7 @@ Mcp::web('/mcp', MelfinaServer::class)->middleware(ResolveAgent::class);
 // converts it to an Authorization header), never in the logged path; the
 // {repo} segment is decorative.
 Route::get('plugins/{repo}/{path?}', [PluginRepoController::class, 'show'])
+    ->middleware('throttle:60,1')
     ->where([
         'repo' => '[^/]+\.git',
         'path' => '.*',

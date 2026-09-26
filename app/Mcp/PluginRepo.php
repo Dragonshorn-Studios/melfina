@@ -80,8 +80,27 @@ class PluginRepo
     }
 
     /**
+     * The single entry point for keeping an agent's derived plugin artifacts
+     * (clone repos + ZIP package) in step with credential/persona changes.
+     * With a plaintext key in hand the package is rebuilt; without one —
+     * rename, disable — every artifact is dropped because it embeds stale
+     * credentials and cannot be regenerated.
+     */
+    public function syncForAgent(Agent $agent, ?string $plaintext = null): void
+    {
+        $this->dropRepo($agent);
+
+        if ($plaintext !== null) {
+            $this->rebuildPackage($agent, $plaintext);
+        } else {
+            $this->dropPackage($agent);
+        }
+    }
+
+    /**
      * Regenerate the flat package directory used for ZIP downloads. Called
-     * when a plaintext agent key is in hand (create / rotate).
+     * via syncForAgent when a plaintext agent key is in hand (create /
+     * rotate).
      */
     public function rebuildPackage(Agent $agent, string $agentKey): void
     {
@@ -93,6 +112,9 @@ class PluginRepo
             File::ensureDirectoryExists(dirname($full));
             file_put_contents($full, $contents);
         }
+
+        // These trees embed live credentials — keep them owner-only.
+        chmod($dir, 0700);
     }
 
     /**
@@ -146,13 +168,24 @@ class PluginRepo
 
     private function fingerprint(Agent $agent, string $mode, string $credential): string
     {
-        return hash('sha256', implode('|', [$agent->name, $mode, $credential, url('/mcp'), 'v1']));
+        return hash('sha256', implode('|', [$agent->name, $mode, $credential, $this->endpoint(), 'v1']));
+    }
+
+    /**
+     * The MCP endpoint baked into packages — pinned to config('app.url')
+     * rather than url(), which reflects the request's Host/X-Forwarded-Host
+     * and would let any credential holder invalidate the cache at will.
+     */
+    private function endpoint(): string
+    {
+        return rtrim((string) config('app.url'), '/').'/mcp';
     }
 
     private function build(Agent $agent, string $mode, string $credential, string $fingerprint): void
     {
         $work = storage_path('app/mcp-plugins/build-'.Str::random(12));
         File::ensureDirectoryExists($work);
+        chmod($work, 0700);
 
         foreach ($this->packageFiles($agent, $mode, $credential) as $path => $contents) {
             $full = $work.'/'.$path;
@@ -184,14 +217,14 @@ class PluginRepo
         $dir = $this->repoDir($agent, $mode);
         File::ensureDirectoryExists(dirname($dir));
 
-        // Swap via rename: the old dir moves aside and the new one lands in
-        // one step each, so in-flight reads see one repo or the other, not
-        // a missing directory between delete and move.
+        // Swap via rename: readers never see a missing directory between
+        // the old dir moving aside and the new one landing.
         $trash = $dir.'.old-'.Str::random(8);
         if (is_dir($dir)) {
             rename($dir, $trash);
         }
         rename($work.'/.git', $dir);
+        chmod($dir, 0700);
         file_put_contents($dir.'.fingerprint', $fingerprint);
         File::deleteDirectory($trash);
         File::deleteDirectory($work);
@@ -207,7 +240,7 @@ class PluginRepo
      */
     private function packageFiles(Agent $agent, string $mode, string $credential): array
     {
-        $endpoint = url('/mcp');
+        $endpoint = $this->endpoint();
         $slug = Str::slug($agent->name) ?: 'agent';
         $name = 'melfina-'.$slug;
 

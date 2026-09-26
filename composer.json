@@ -7,7 +7,6 @@
     "license": "MIT",
     "require": {
         "php": "^8.4",
-        "ext-zip": "*",
         "laravel/framework": "^13.17",
         "laravel/mcp": "1.0.0",
         "laravel/passport": "^13.8",
@@ -88,5 +87,8 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "suggest": {
+        "ext-zip": "Required to download plugin packages as ZIP archives (the git-clone install path works without it). The plugin endpoints also need a `git` binary (>= 2.28)."
+    }
 }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mcp\PluginRepo;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class McpKeyController extends Controller
 {
@@ -17,7 +18,14 @@ class McpKeyController extends Controller
     public function store(Request $request, PluginRepo $repos): RedirectResponse
     {
         $plaintext = $request->user()->rotateMcpKey();
-        $repos->dropAllRepos();
+
+        // Cleanup is a side effect — a filesystem failure must not eat the
+        // shown-once plaintext (same contract as agent key rotation).
+        try {
+            $repos->dropAllRepos();
+        } catch (\Throwable $e) {
+            Log::warning('plugin repo cleanup failed', ['error' => $e->getMessage()]);
+        }
 
         return redirect()
             ->route('console.dashboard')
