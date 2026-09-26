@@ -568,7 +568,7 @@ MD;
      *
      * @return array<string, string>
      */
-    private function publicPackageFiles(): array
+    public function publicPackageFiles(): array
     {
         $endpoint = $this->endpoint();
 

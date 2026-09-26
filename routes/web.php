@@ -36,6 +36,8 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::get('mcp/plugin.zip', [McpKeyController::class, 'pluginZip'])->name('mcp.plugin.zip');
     Route::post('mcp/redirect-domains', [McpKeyController::class, 'storeRedirectDomain'])->name('mcp.redirect-domains.store');
     Route::delete('mcp/redirect-domains', [McpKeyController::class, 'destroyRedirectDomain'])->name('mcp.redirect-domains.destroy');
+    Route::post('mcp/github', [McpKeyController::class, 'storeGitHub'])->name('mcp.github.store');
+    Route::post('mcp/github/publish', [McpKeyController::class, 'publishGitHub'])->name('mcp.github.publish');
 
     Route::post('agents/{agent}/rotate', [AgentController::class, 'rotate'])->name('agents.rotate');
     Route::get('agents/{agent}/connect', [AgentController::class, 'connect'])->name('agents.connect');

@@ -35,7 +35,8 @@
             <pre class="mt-3 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $publicRepoUrl }}</pre>
             <p class="mt-2 text-sm text-steel">
                 Importer insists on GitHub or a file upload (MiniMax)?
-                <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.mcp.plugin.zip') }}">Download the same package as a ZIP</a>.
+                <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.mcp.plugin.zip') }}">Download the same package as a ZIP</a>,
+                or publish it straight to a GitHub repo below.
                 Prefer the key baked in instead? <code>{{ $fleetRepoUrl }}</code> embeds the fleet key —
                 the clone needs Basic credentials, so use it only with clients that pass
                 <code>user:pass@</code> URLs correctly.
@@ -82,6 +83,46 @@
                     <code>X-Melfina-Agent-Key</code> (the agent's name, or its <code>melf_…</code> key):
                 </p>
                 <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $headersConfig }}</pre>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)" open>
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">PUBLISH TO GITHUB</summary>
+                <p class="mt-3 text-sm text-steel">
+                    Some importers (MiniMax) only accept <code>github.com</code> URLs. Save a GitHub
+                    personal access token (repo scope) and a target repo — <code>name</code> or
+                    <code>owner/name</code> — then publish: the credential-free package is pushed to
+                    <code>github.com/you/repo</code> (created public if missing). The token is stored
+                    encrypted and never shown again.
+                </p>
+                <form method="POST" action="{{ route('console.mcp.github.store') }}" class="mt-3 flex flex-wrap gap-2">
+                    @csrf
+                    <input type="password" name="github_token" autocomplete="off"
+                        placeholder="{{ $hasGitHubToken ? '•••••••• (saved — enter to replace)' : 'GitHub PAT (repo scope)' }}"
+                        class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream placeholder:text-steel/60"
+                        style="border-radius: var(--radius-console)">
+                    <input type="text" name="github_repo" placeholder="you/melfina-plugin" required
+                        value="{{ $githubRepo }}"
+                        class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream placeholder:text-steel/60"
+                        style="border-radius: var(--radius-console)">
+                    <button type="submit"
+                        class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                        style="border-radius: var(--radius-console)">save</button>
+                </form>
+                @if ($hasGitHubToken && $githubRepo)
+                    <form method="POST" action="{{ route('console.mcp.github.publish') }}" class="mt-2"
+                        onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Publish the fleet package to github.com/{{ $githubRepo }}? The repo is created public if it doesn't exist.">
+                        @csrf
+                        <button type="submit"
+                            class="border border-amber/50 bg-void px-3 py-1.5 font-mono text-xs text-amber hover:border-amber"
+                            style="border-radius: var(--radius-console)">publish to github.com/{{ $githubRepo }}</button>
+                    </form>
+                @endif
+                @error('github_repo')
+                    <p class="mt-2 font-mono text-xs text-red-400">{{ $message }}</p>
+                @enderror
+                @error('github_token')
+                    <p class="mt-2 font-mono text-xs text-red-400">{{ $message }}</p>
+                @enderror
             </details>
 
             <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)" open>

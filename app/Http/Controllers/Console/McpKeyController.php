@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Console;
 
 use App\Http\Controllers\Controller;
 use App\Mcp\PluginRepo;
+use App\Services\GitHubPublisher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -59,7 +61,58 @@ class McpKeyController extends Controller
                 $request->user()->mcp_redirect_domains ?? [],
                 config('mcp.redirect_domains_env', []),
             )),
+            // GitHub publish settings — the token itself is never rendered.
+            'hasGitHubToken' => $request->user()->github_token !== null,
+            'githubRepo' => $request->user()->github_repo,
         ]);
+    }
+
+    /**
+     * Store the GitHub PAT + target repo used by publishGitHub(). The token
+     * is Laravel-encrypted on the model and never echoed back to the page.
+     */
+    public function storeGitHub(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'github_token' => ['nullable', 'string', 'max:255'],
+            'github_repo' => ['required', 'string', 'max:255', 'regex:#^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)?$#'],
+        ]);
+
+        $user = $request->user();
+        $user->github_repo = trim($validated['github_repo'], " \t/");
+        if (filled($validated['github_token'] ?? null)) {
+            $user->github_token = $validated['github_token'];
+        }
+        $user->save();
+
+        return redirect()
+            ->route('console.mcp.connect')
+            ->with('status', 'GitHub settings saved.');
+    }
+
+    /**
+     * Push the credential-free fleet package to the owner's GitHub repo —
+     * the importer-facing path for GitHub-only clients (MiniMax).
+     */
+    public function publishGitHub(Request $request, PluginRepo $repos, GitHubPublisher $github): RedirectResponse
+    {
+        $user = $request->user();
+
+        if ($user->github_token === null || $user->github_repo === null) {
+            throw ValidationException::withMessages([
+                'github_repo' => 'Save a GitHub token and repo first.',
+            ]);
+        }
+
+        try {
+            $url = $github->publish($user->github_token, $user->github_repo, $repos->publicPackageFiles());
+        } catch (\RuntimeException $e) {
+            throw ValidationException::withMessages(['github_repo' => $e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('console.mcp.connect')
+            ->with('status', "Published to {$url}");
     }
 
     /**
