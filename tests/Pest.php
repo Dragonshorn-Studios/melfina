@@ -48,3 +48,77 @@ function something()
 {
     // ..
 }
+
+/**
+ * Shared MCP/OAuth test helpers — usable from any feature test file.
+ */
+use App\Models\Agent;
+use App\Models\User;
+
+function pkcePair(): array
+{
+    $verifier = bin2hex(random_bytes(32));
+
+    return [$verifier, rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=')];
+}
+
+function registerClient(array $redirectUris = ['http://localhost/callback'])
+{
+    return test()->postJson('/oauth/register', [
+        'client_name' => 'Test MCP Client',
+        'redirect_uris' => $redirectUris,
+    ]);
+}
+
+function mcpCall(string $method, array $params = [], ?string $bearer = null)
+{
+    $headers = ['Accept' => 'application/json'];
+
+    if ($bearer !== null) {
+        $headers['Authorization'] = 'Bearer '.$bearer;
+    }
+
+    return test()->postJson('/mcp', [
+        'jsonrpc' => '2.0',
+        'id' => 1,
+        'method' => $method,
+        'params' => $params,
+    ], $headers);
+}
+
+function issueOAuthToken(User $owner, Agent $agent, string $clientId): string
+{
+    [$verifier, $challenge] = pkcePair();
+    $redirectUri = 'http://localhost/callback';
+
+    test()->actingAs($owner)->get('/oauth/authorize?'.http_build_query([
+        'response_type' => 'code',
+        'client_id' => $clientId,
+        'redirect_uri' => $redirectUri,
+        'scope' => 'mcp:use',
+        'state' => 'xyz',
+        'code_challenge' => $challenge,
+        'code_challenge_method' => 'S256',
+    ]))->assertOk();
+
+    $approve = test()->actingAs($owner)
+        ->withSession(['authToken' => session('authToken')])
+        ->post(route('passport.authorizations.approve'), [
+            'client_id' => $clientId,
+            'auth_token' => session('authToken'),
+            'agent_id' => $agent->id,
+        ]);
+
+    $location = $approve->headers->get('Location');
+    parse_str((string) parse_url($location, PHP_URL_QUERY), $query);
+
+    $token = test()->postJson('/oauth/token', [
+        'grant_type' => 'authorization_code',
+        'client_id' => $clientId,
+        'redirect_uri' => $redirectUri,
+        'code' => $query['code'],
+        'code_verifier' => $verifier,
+    ])->assertOk();
+
+    return $token->json('access_token');
+}

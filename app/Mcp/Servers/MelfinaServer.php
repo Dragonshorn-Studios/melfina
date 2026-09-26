@@ -2,13 +2,19 @@
 
 namespace App\Mcp\Servers;
 
+use App\Mcp\Tools\AckMessage;
 use App\Mcp\Tools\ListAgents;
 use App\Mcp\Tools\ListFiles;
+use App\Mcp\Tools\ListInbox;
+use App\Mcp\Tools\ListMessageRecipients;
+use App\Mcp\Tools\ListSentMessages;
 use App\Mcp\Tools\ListShared;
 use App\Mcp\Tools\ReadFile;
 use App\Mcp\Tools\ReadInstructions;
+use App\Mcp\Tools\ReadMessage;
 use App\Mcp\Tools\ReadPersona;
 use App\Mcp\Tools\ReadShared;
+use App\Mcp\Tools\SendMessage;
 use App\Mcp\Tools\UpdatePersona;
 use App\Mcp\Tools\WriteFile;
 use App\Mcp\Tools\WriteShared;
@@ -33,5 +39,11 @@ class MelfinaServer extends Server
         ReadPersona::class,
         UpdatePersona::class,
         ListAgents::class,
+        ListMessageRecipients::class,
+        SendMessage::class,
+        ListInbox::class,
+        ListSentMessages::class,
+        ReadMessage::class,
+        AckMessage::class,
     ];
 }
