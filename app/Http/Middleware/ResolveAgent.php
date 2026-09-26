@@ -39,12 +39,24 @@ class ResolveAgent
 
         // Basic-auth form for clients that can only set a URL:
         // https://{persona}:{fleet-key}@host/mcp — the password proves
-        // fleet access, the username is the persona.
+        // fleet access, the username is the persona. A dedicated agent key
+        // as the password works too and needs no username, mirroring the
+        // plugin clone surface.
         $basicUser = $request->getUser();
         $basicPass = $request->getPassword();
 
-        if ($basicUser !== null && $basicUser !== '' && is_string($basicPass) && User::isMcpKey($basicPass)) {
-            return $this->handleFleetRequest($request, $next, $basicUser);
+        if (is_string($basicPass) && $basicPass !== '') {
+            if ($basicUser !== null && $basicUser !== '' && User::isMcpKey($basicPass)) {
+                return $this->handleFleetRequest($request, $next, $basicUser);
+            }
+
+            $agent = Agent::forKey($basicPass);
+
+            if ($agent !== null) {
+                $request->attributes->set('agent', $agent);
+
+                return $next($request);
+            }
         }
 
         $agent = $token !== null ? Agent::forKey($token) : null;

@@ -18,13 +18,14 @@ use Symfony\Component\HttpFoundation\Response;
  *
  *     https://{persona}:{fleetKey}@host/plugins/anything.git
  *     https://{persona}:{agentKey}@host/plugins/anything.git
- *     https://melfina:{fleetKey}@host/plugins/melfina.git
+ *     https://melfina:{fleetKey}@host/plugins/~melfina.git
  *
  * The username picks the persona (agent name or `melf_…` key) in fleet
  * mode and is cosmetic in direct mode; the path segment is decorative —
- * except `melfina.git`, which serves the fleet-wide package gated only by
- * the fleet key. Missing credentials get a Basic challenge, dead ones a
- * flat 404.
+ * except `~melfina.git`, which serves the fleet-wide package gated only by
+ * the fleet key. The `~` prefix can never collide with a per-agent URL:
+ * those are built from `Str::slug($agent->name)`, and slugs never contain
+ * `~`. Missing credentials get a Basic challenge, dead ones a flat 404.
  */
 class PluginRepoController extends Controller
 {
@@ -39,7 +40,8 @@ class PluginRepoController extends Controller
 
         // The fleet-wide package: one repo for the whole install, keyed
         // only by the fleet credential — each agent fills in its own name.
-        if ($repo === 'melfina.git' && User::isMcpKey($password)) {
+        // `~melfina.git` is a reserved path — no agent slug can produce it.
+        if ($repo === '~melfina.git' && User::isMcpKey($password)) {
             try {
                 $dir = $repos->ensureGlobal($password);
             } catch (\Throwable) {

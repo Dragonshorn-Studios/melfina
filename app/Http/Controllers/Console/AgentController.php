@@ -90,7 +90,7 @@ class AgentController extends Controller
             // One clone URL for the whole install — persona-free, gated by
             // the fleet key; each agent writes its own name into the
             // package's MCP URL.
-            'pluginUrlFleet' => preg_replace('#^(https?://)#', '${1}melfina:melfg_…@', url('/plugins/melfina.git')),
+            'pluginUrlFleet' => preg_replace('#^(https?://)#', '${1}melfina:melfg_…@', url('/plugins/~melfina.git')),
             // URL-only clients fold persona + fleet key into the endpoint
             // as Basic userinfo: https://{name}:{fleet}@host/mcp.
             'endpointPersonaUrl' => preg_replace('#^(https?://)#', '${1}'.$personaUser.':melfg_…@', $endpoint),

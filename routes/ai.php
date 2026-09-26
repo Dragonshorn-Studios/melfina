@@ -21,7 +21,9 @@ Mcp::web('/mcp', MelfinaServer::class)->middleware(ResolveAgent::class);
 // Per-agent plugin repositories, cloneable over git's dumb HTTP protocol.
 // Credentials ride in HTTP Basic auth (userinfo in the clone URL — git
 // converts it to an Authorization header), never in the logged path; the
-// {repo} segment is decorative.
+// {repo} segment is decorative, except the reserved ~melfina.git which
+// serves the persona-free fleet package (~ can never appear in an agent
+// slug, so it can't collide).
 Route::get('plugins/{repo}/{path?}', [PluginRepoController::class, 'show'])
     ->middleware('throttle:60,1')
     ->where([
