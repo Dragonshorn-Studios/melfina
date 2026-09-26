@@ -349,7 +349,10 @@ it('serves the credential-free fleet package at the public derived URL', functio
     $url = '/plugins/'.$repos->publicRepoName().'/';
 
     // No Basic credentials at all — dumb importers get the repo directly.
-    $this->get($url.'info/refs')->assertOk();
+    // Lazily-built content is marked no-store so shared caches can't pin
+    // a stale package after APP_URL or key changes.
+    $response = $this->get($url.'info/refs')->assertOk();
+    expect($response->headers->get('cache-control'))->toContain('no-store');
     $this->get($url.'HEAD')->assertOk();
 
     $dir = $repos->publicDir();

@@ -87,7 +87,13 @@ class PluginRepoController extends Controller
             abort(404);
         }
 
-        return response()->file($file, ['Content-Type' => 'application/octet-stream']);
+        // Repo contents are built lazily and rebuilt when the endpoint or
+        // embedded credentials change — shared caches (Cloudflare etc.)
+        // must never serve a stale snapshot.
+        return response()->file($file, [
+            'Content-Type' => 'application/octet-stream',
+            'Cache-Control' => 'no-store, private',
+        ]);
     }
 
     /**
