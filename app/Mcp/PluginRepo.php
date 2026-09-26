@@ -3,6 +3,7 @@
 namespace App\Mcp;
 
 use App\Models\Agent;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -12,42 +13,47 @@ use Symfony\Component\Process\Process;
 /**
  * Builds and serves the "fake plugin repository" for an agent: a real,
  * dumb-HTTP-cloneable git repo whose package wires the install's MCP
- * endpoint to the credentials carried in the clone URL.
+ * endpoint to the credentials presented in the clone request's HTTP Basic
+ * auth (never the logged request path).
  *
- * The clone URL embeds the credentials, so the repo only ever materializes
- * for someone already holding them:
- *
- *     /plugins/{agentKey}.git                    → Bearer melf_… (direct persona)
- *     /plugins/{fleetKey}/{agentKey|name}.git    → Bearer melfg_… + X-Melfina-Agent-Key: <name>
+ *     …/x.git + Basic {persona}:{fleetKey}   → Bearer melfg_… + X-Melfina-Agent-Key: <name>
+ *     …/x.git + Basic {whatever}:{agentKey}  → Bearer melf_… (direct persona)
  *
  * The fleet form's persona header carries the agent's *name*, not its key —
  * the name is a non-secret id the agent knows from its own instructions.
  *
- * Built repos are cached under storage/app/mcp-plugins and rebuilt whenever
- * the embedded credentials or endpoint change (fingerprint check).
+ * Built repos are cached under storage/app/mcp-plugins/{id}.{mode}.git and
+ * rebuilt whenever the embedded credential, persona name, or endpoint
+ * change (fingerprint check under a per-agent cache lock).
  */
 class PluginRepo
 {
     /**
      * Ensure a fresh repo exists for these credentials and return its path.
-     * Both key arguments are plaintexts taken from the request URL.
+     * `$mode` is 'fleet' or 'direct'; `$credential` is the plaintext secret
+     * embedded in the package (fleet key or agent key).
      */
-    public function ensureBuilt(Agent $agent, string $agentKey, ?string $fleetKey): string
+    public function ensureBuilt(Agent $agent, string $mode, string $credential): string
     {
-        $dir = $this->repoDir($agent);
-        $fingerprint = $this->fingerprint($agentKey, $fleetKey);
+        $dir = $this->repoDir($agent, $mode);
+        $fingerprint = $this->fingerprint($agent, $mode, $credential);
 
-        if (
-            is_file($dir.'/info/refs')
-            && is_file($dir.'.fingerprint')
-            && trim((string) file_get_contents($dir.'.fingerprint')) === $fingerprint
-        ) {
+        if ($this->fresh($dir, $fingerprint)) {
             return $dir;
         }
 
-        $this->build($agent, $agentKey, $fleetKey, $fingerprint);
+        // Serialize builds per agent+mode: concurrent clones wait for the
+        // first build instead of racing the directory swap.
+        return Cache::lock('melfina-plugin-repo:'.$agent->id.':'.$mode, 30)
+            ->block(10, function () use ($agent, $mode, $credential, $dir, $fingerprint) {
+                if ($this->fresh($dir, $fingerprint)) {
+                    return $dir;
+                }
 
-        return $dir;
+                $this->build($agent, $mode, $credential, $fingerprint);
+
+                return $dir;
+            });
     }
 
     /**
@@ -64,7 +70,9 @@ class PluginRepo
 
         $full = realpath($base.'/'.ltrim($path, '/'));
 
-        if ($full === false || ! str_starts_with($full, $base) || ! is_file($full)) {
+        // Require the base's trailing slash — a bare prefix compare would
+        // also match sibling files like `{id}.git.fingerprint`.
+        if ($full === false || ! str_starts_with($full, $base.'/') || ! is_file($full)) {
             return null;
         }
 
@@ -77,10 +85,10 @@ class PluginRepo
      */
     public function rebuildPackage(Agent $agent, string $agentKey): void
     {
-        $dir = storage_path('app/mcp-plugins/'.$agent->id.'.pkg');
+        $dir = $this->packageDir($agent);
         File::deleteDirectory($dir);
 
-        foreach ($this->packageFiles($agent, $agentKey, null) as $path => $contents) {
+        foreach ($this->packageFiles($agent, 'direct', $agentKey) as $path => $contents) {
             $full = $dir.'/'.$path;
             File::ensureDirectoryExists(dirname($full));
             file_put_contents($full, $contents);
@@ -88,13 +96,15 @@ class PluginRepo
     }
 
     /**
-     * Drop the cached repo for an agent — its packs embed the old plaintext
-     * key, so stale copies are deleted on rotation rather than left on disk.
+     * Drop the cached repos for an agent — their packs embed plaintext
+     * credentials (and the persona name), so stale copies are deleted on
+     * rotation and rename rather than left on disk.
      */
     public function dropRepo(Agent $agent): void
     {
-        File::deleteDirectory($this->repoDir($agent));
-        File::delete($this->repoDir($agent).'.fingerprint');
+        foreach (glob(storage_path('app/mcp-plugins/'.$agent->id.'.*.git*')) ?: [] as $path) {
+            is_dir($path) ? File::deleteDirectory($path) : File::delete($path);
+        }
     }
 
     /**
@@ -103,9 +113,18 @@ class PluginRepo
      */
     public function dropAllRepos(): void
     {
-        foreach (glob(storage_path('app/mcp-plugins/*.git*')) ?: [] as $path) {
+        foreach (glob(storage_path('app/mcp-plugins/*.*.git*')) ?: [] as $path) {
             is_dir($path) ? File::deleteDirectory($path) : File::delete($path);
         }
+    }
+
+    /**
+     * Drop the flat ZIP package — done on rename, since rebuilding it needs
+     * a plaintext key we only hold at create/rotate time.
+     */
+    public function dropPackage(Agent $agent): void
+    {
+        File::deleteDirectory($this->packageDir($agent));
     }
 
     public function packageDir(Agent $agent): string
@@ -113,22 +132,29 @@ class PluginRepo
         return storage_path('app/mcp-plugins/'.$agent->id.'.pkg');
     }
 
-    public function repoDir(Agent $agent): string
+    public function repoDir(Agent $agent, string $mode): string
     {
-        return storage_path('app/mcp-plugins/'.$agent->id.'.git');
+        return storage_path('app/mcp-plugins/'.$agent->id.'.'.$mode.'.git');
     }
 
-    private function fingerprint(string $agentKey, ?string $fleetKey): string
+    private function fresh(string $dir, string $fingerprint): bool
     {
-        return hash('sha256', implode('|', [$agentKey, $fleetKey ?? '', url('/mcp'), 'v1']));
+        return is_file($dir.'/info/refs')
+            && is_file($dir.'.fingerprint')
+            && trim((string) file_get_contents($dir.'.fingerprint')) === $fingerprint;
     }
 
-    private function build(Agent $agent, string $agentKey, ?string $fleetKey, string $fingerprint): void
+    private function fingerprint(Agent $agent, string $mode, string $credential): string
+    {
+        return hash('sha256', implode('|', [$agent->name, $mode, $credential, url('/mcp'), 'v1']));
+    }
+
+    private function build(Agent $agent, string $mode, string $credential, string $fingerprint): void
     {
         $work = storage_path('app/mcp-plugins/build-'.Str::random(12));
         File::ensureDirectoryExists($work);
 
-        foreach ($this->packageFiles($agent, $agentKey, $fleetKey) as $path => $contents) {
+        foreach ($this->packageFiles($agent, $mode, $credential) as $path => $contents) {
             $full = $work.'/'.$path;
             File::ensureDirectoryExists(dirname($full));
             file_put_contents($full, $contents);
@@ -155,11 +181,19 @@ class PluginRepo
             }
         }
 
-        $dir = $this->repoDir($agent);
+        $dir = $this->repoDir($agent, $mode);
         File::ensureDirectoryExists(dirname($dir));
-        File::deleteDirectory($dir);
-        File::moveDirectory($work.'/.git', $dir);
+
+        // Swap via rename: the old dir moves aside and the new one lands in
+        // one step each, so in-flight reads see one repo or the other, not
+        // a missing directory between delete and move.
+        $trash = $dir.'.old-'.Str::random(8);
+        if (is_dir($dir)) {
+            rename($dir, $trash);
+        }
+        rename($work.'/.git', $dir);
         file_put_contents($dir.'.fingerprint', $fingerprint);
+        File::deleteDirectory($trash);
         File::deleteDirectory($work);
     }
 
@@ -171,18 +205,18 @@ class PluginRepo
      *
      * @return array<string, string>
      */
-    private function packageFiles(Agent $agent, string $agentKey, ?string $fleetKey): array
+    private function packageFiles(Agent $agent, string $mode, string $credential): array
     {
         $endpoint = url('/mcp');
         $slug = Str::slug($agent->name) ?: 'agent';
         $name = 'melfina-'.$slug;
 
-        $headers = $fleetKey !== null
+        $headers = $mode === 'fleet'
             ? [
-                'Authorization' => 'Bearer '.$fleetKey,
+                'Authorization' => 'Bearer '.$credential,
                 'X-Melfina-Agent-Key' => $agent->name,
             ]
-            : ['Authorization' => 'Bearer '.$agentKey];
+            : ['Authorization' => 'Bearer '.$credential];
 
         $mcp = json_encode([
             '$schema' => 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json',

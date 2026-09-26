@@ -7,7 +7,10 @@ use App\Mcp\PluginRepo;
 use App\Models\Agent;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use ZipArchive;
@@ -35,12 +38,19 @@ class AgentController extends Controller
         $this->authorize('create', Agent::class);
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255', Rule::unique('agents', 'name')],
         ]);
 
         $agent = Agent::query()->create(['name' => $validated['name']]);
         $plaintext = $agent->rotateKey();
-        app(PluginRepo::class)->rebuildPackage($agent, $plaintext);
+
+        // Packaging is a side effect of key issuance, not part of it — a
+        // filesystem failure must not eat the shown-once plaintext.
+        try {
+            app(PluginRepo::class)->rebuildPackage($agent, $plaintext);
+        } catch (\Throwable $e) {
+            Log::warning('plugin package rebuild failed', ['agent_id' => $agent->id, 'error' => $e->getMessage()]);
+        }
 
         return redirect()
             ->route('console.agents.show', $agent)
@@ -64,10 +74,18 @@ class AgentController extends Controller
 
         $endpoint = url('/mcp');
 
+        // The clone URL carries credentials as userinfo — git folds
+        // `user:pass@` into an Authorization header, so keys never appear
+        // in request-path logs. Username is the persona, password the key.
+        $personaUser = rawurlencode($agent->name);
+        $repoPath = url('/plugins/'.(Str::slug($agent->name) ?: 'agent').'.git');
+
         return view('console.agents.connect', [
             'agent' => $agent,
             'endpoint' => $endpoint,
-            'pluginUrl' => url('/plugins/melfg_…/melf_….git'),
+            'pluginUrl' => preg_replace('#^(https?://)#', '$1'.$personaUser.':melfg_…@', $repoPath),
+            'pluginUrlDirect' => preg_replace('#^(https?://)#', '$1'.$personaUser.':melf_…@', $repoPath),
+            'hasPackage' => is_dir(app(PluginRepo::class)->packageDir($agent)),
             'snippets' => [
                 'claudeDesktop' => json_encode([
                     'mcpServers' => [
@@ -80,7 +98,7 @@ class AgentController extends Controller
                 'claudeCode' => 'claude mcp add --transport http melfina '.$endpoint,
                 'claudeCodeKey' => 'claude mcp add --transport http'
                     .' --header "Authorization: Bearer melfg_…"'
-                    .' --header "X-Melfina-Agent-Key: '.$agent->name.'"'
+                    .' --header '.escapeshellarg('X-Melfina-Agent-Key: '.$agent->name)
                     .' melfina '.$endpoint,
                 'cursor' => json_encode([
                     'mcpServers' => [
@@ -123,11 +141,20 @@ class AgentController extends Controller
         $this->authorize('update', $agent);
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255', Rule::unique('agents', 'name')->ignore($agent->id)],
             'status' => ['required', 'string', 'in:'.Agent::STATUS_ACTIVE.','.Agent::STATUS_DISABLED],
         ]);
 
         $agent->update($validated);
+
+        // The name is the fleet persona — a rename makes every built plugin
+        // artifact stale, and the ZIP package can only be rebuilt with a
+        // plaintext key we no longer hold, so it is dropped until rotate.
+        if ($agent->wasChanged('name')) {
+            $repos = app(PluginRepo::class);
+            $repos->dropRepo($agent);
+            $repos->dropPackage($agent);
+        }
 
         return redirect()->route('console.agents.show', $agent);
     }
@@ -141,9 +168,14 @@ class AgentController extends Controller
         $this->authorize('update', $agent);
 
         $plaintext = $agent->rotateKey();
-        $repos = app(PluginRepo::class);
-        $repos->rebuildPackage($agent, $plaintext);
-        $repos->dropRepo($agent);
+
+        try {
+            $repos = app(PluginRepo::class);
+            $repos->rebuildPackage($agent, $plaintext);
+            $repos->dropRepo($agent);
+        } catch (\Throwable $e) {
+            Log::warning('plugin artifacts refresh failed', ['agent_id' => $agent->id, 'error' => $e->getMessage()]);
+        }
 
         return redirect()
             ->route('console.agents.show', $agent)
@@ -160,41 +192,26 @@ class AgentController extends Controller
 
         $dir = $repos->packageDir($agent);
         abort_unless(is_dir($dir), 404);
+        abort_unless(class_exists(ZipArchive::class), 500, 'PHP ext-zip is not installed');
 
         $zipPath = tempnam(sys_get_temp_dir(), 'melfina-plugin-');
         unlink($zipPath);
         $zipPath .= '.zip';
 
         $zip = new ZipArchive;
-        $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+        abort_unless($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true, 500);
 
-        foreach (glob($dir.'/{,.}*', GLOB_BRACE) as $root) {
-            $this->zipTree($zip, $root, $dir);
+        // allFiles with $hidden=true ships the dot-prefixed manifests
+        // (.minimax-plugin/, .claude-plugin/, .mcp.json) — and needs no
+        // GLOB_BRACE, which musl/Alpine PHP builds lack.
+        foreach (File::allFiles($dir, hidden: true) as $file) {
+            $zip->addFile($file->getPathname(), $file->getRelativePathname());
         }
 
-        $zip->close();
+        abort_unless($zip->close(), 500);
 
         $slug = Str::slug($agent->name) ?: 'agent';
 
         return response()->download($zipPath, 'melfina-'.$slug.'.zip')->deleteFileAfterSend();
-    }
-
-    private function zipTree(ZipArchive $zip, string $path, string $base): void
-    {
-        $name = basename($path);
-
-        if ($name === '.' || $name === '..') {
-            return;
-        }
-
-        if (is_dir($path)) {
-            foreach (glob($path.'/{,.}*', GLOB_BRACE) ?: [] as $child) {
-                $this->zipTree($zip, $child, $base);
-            }
-
-            return;
-        }
-
-        $zip->addFile($path, ltrim(substr($path, strlen($base)), '/'));
     }
 }

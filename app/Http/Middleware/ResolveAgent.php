@@ -54,7 +54,17 @@ class ResolveAgent
      */
     private function handleFleetRequest(Request $request, Closure $next): Response
     {
-        $persona = $request->header(self::AGENT_KEY_HEADER) ?? $request->query('agent_key');
+        $persona = $request->header(self::AGENT_KEY_HEADER);
+
+        if ($persona === null) {
+            $candidate = $request->query('agent_key');
+
+            // Query strings land in access logs — accept only the non-secret
+            // name form there; keys belong in the header.
+            $persona = is_string($candidate) && ! str_starts_with($candidate, 'melf_')
+                ? $candidate
+                : null;
+        }
 
         $agent = is_string($persona) ? Agent::forPersona($persona) : null;
 

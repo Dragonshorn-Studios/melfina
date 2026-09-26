@@ -64,13 +64,21 @@ it('resolves the persona from the agent key header', function () {
         ->assertOk();
 });
 
-it('resolves the persona from the agent_key query param', function () {
-    $this->postJson('/mcp?agent_key=melf_testkey', [
+it('resolves the persona from the agent_key query param (names only)', function () {
+    $this->postJson('/mcp?agent_key='.$this->agent->name, [
         'jsonrpc' => '2.0',
         'id' => 1,
         'method' => 'tools/list',
         'params' => [],
     ], ['Authorization' => 'Bearer '.$this->fleetKey])->assertOk();
+
+    // Secrets stay out of query strings — the key form is header-only.
+    $this->postJson('/mcp?agent_key=melf_testkey', [
+        'jsonrpc' => '2.0',
+        'id' => 1,
+        'method' => 'tools/list',
+        'params' => [],
+    ], ['Authorization' => 'Bearer '.$this->fleetKey])->assertUnauthorized();
 });
 
 it('rejects a fleet bearer with an unknown or disabled agent key', function () {
@@ -123,13 +131,23 @@ it('keeps non-owners off the fleet key rotation', function () {
     $this->actingAs($plain)->post(route('console.mcp-key.store'))->assertForbidden();
 });
 
-it('serves the plugin repo over the dumb git protocol', function () {
-    $this->get('/plugins/melf_testkey.git/info/refs')->assertOk();
-    $this->get('/plugins/melf_testkey.git/HEAD')->assertOk();
+it('challenges anonymous plugin repo requests', function () {
+    $this->get('/plugins/melfina.git/info/refs')
+        ->assertUnauthorized()
+        ->assertHeader('WWW-Authenticate', 'Basic realm="melfina-plugins"');
+});
+
+it('serves the direct-form plugin repo over the dumb git protocol', function () {
+    $clone = fn (string $path) => $this
+        ->withBasicAuth('whatever', 'melf_testkey')
+        ->get('/plugins/melfina.git/'.$path);
+
+    $clone('info/refs')->assertOk();
+    $clone('HEAD')->assertOk();
 
     // BinaryFileResponse content isn't captured in tests — assert on the
     // built repo files behind the 200s.
-    $dir = app(PluginRepo::class)->repoDir($this->agent);
+    $dir = app(PluginRepo::class)->repoDir($this->agent, 'direct');
 
     expect(file_get_contents($dir.'/info/refs'))->toContain('refs/heads/main');
     expect(file_get_contents($dir.'/HEAD'))->toContain('refs/heads/main');
@@ -139,14 +157,18 @@ it('serves the plugin repo over the dumb git protocol', function () {
         ->filter()
         ->first();
 
-    $this->get('/plugins/melf_testkey.git/objects/pack/'.$pack)->assertOk();
+    $clone('objects/pack/'.$pack)->assertOk();
 });
 
-it('serves the fleet-form repo URL keyed by name or key', function () {
-    $this->get("/plugins/{$this->fleetKey}/{$this->agent->name}.git/info/refs")->assertOk();
-    $this->get("/plugins/{$this->fleetKey}/melf_testkey.git/info/refs")->assertOk();
+it('serves the fleet-form repo keyed by persona name or agent key', function () {
+    $clone = fn (string $user) => $this
+        ->withBasicAuth($user, $this->fleetKey)
+        ->get('/plugins/melfina.git/info/refs');
 
-    $repo = app(PluginRepo::class)->repoDir($this->agent);
+    $clone($this->agent->name)->assertOk();
+    $clone('melf_testkey')->assertOk();
+
+    $repo = app(PluginRepo::class)->repoDir($this->agent, 'fleet');
     $mcp = new Process(['git', '--git-dir='.$repo, 'show', 'HEAD:mcp.json']);
     $mcp->run();
 
@@ -157,14 +179,33 @@ it('serves the fleet-form repo URL keyed by name or key', function () {
         ->not->toContain('melf_testkey');
 });
 
-it('rejects a bare name in the direct repo form', function () {
-    $this->get('/plugins/'.$this->agent->name.'.git/info/refs')->assertNotFound();
+it('keeps the two clone modes in separate repos', function () {
+    $this->withBasicAuth('x', 'melf_testkey')->get('/plugins/a.git/info/refs')->assertOk();
+    $this->withBasicAuth($this->agent->name, $this->fleetKey)->get('/plugins/a.git/info/refs')->assertOk();
+
+    $repos = app(PluginRepo::class);
+    expect(is_dir($repos->repoDir($this->agent, 'direct')))->toBeTrue()
+        ->and(is_dir($repos->repoDir($this->agent, 'fleet')))->toBeTrue();
 });
 
 it('404s plugin repo requests with dead credentials', function () {
-    $this->get('/plugins/melf_deadkey.git/info/refs')->assertNotFound();
-    $this->get('/plugins/melfg_dead/melf_testkey.git/info/refs')->assertNotFound();
-    $this->get("/plugins/{$this->fleetKey}/no-such-agent.git/info/refs")->assertNotFound();
+    $this->withBasicAuth('x', 'melf_deadkey')->get('/plugins/a.git/info/refs')->assertNotFound();
+    $this->withBasicAuth('x', 'melfg_dead')->get('/plugins/a.git/info/refs')->assertNotFound();
+    $this->withBasicAuth('no-such-agent', $this->fleetKey)->get('/plugins/a.git/info/refs')->assertNotFound();
+});
+
+it('refuses to serve paths outside the repo', function () {
+    $repos = app(PluginRepo::class);
+    $dir = $repos->ensureBuilt($this->agent, 'direct', 'melf_testkey');
+
+    // The fingerprint sits beside the repo and shares its name prefix —
+    // a bare prefix check would leak it.
+    expect($repos->file($dir, '../'.basename($dir).'.fingerprint'))->toBeNull()
+        ->and($repos->file($dir, '../../.env'))->toBeNull();
+
+    $this->withBasicAuth('x', 'melf_testkey')
+        ->get('/plugins/a.git/../'.basename($dir).'.fingerprint')
+        ->assertNotFound();
 });
 
 it('lets the owner download the plugin zip with live keys', function () {
@@ -179,24 +220,86 @@ it('lets the owner download the plugin zip with live keys', function () {
     expect($mcp)->toContain('Bearer melf_testkey');
 });
 
+it('keeps the plugin zip owner-only', function () {
+    app(PluginRepo::class)->rebuildPackage($this->agent, 'melf_testkey');
+
+    $this->get(route('console.agents.plugin', $this->agent))->assertRedirect(route('login'));
+
+    $plain = User::factory()->create();
+    $this->actingAs($plain)->get(route('console.agents.plugin', $this->agent))->assertForbidden();
+});
+
+it('builds the zip package as part of agent create and rotate', function () {
+    $repos = app(PluginRepo::class);
+
+    $this->actingAs($this->owner)
+        ->post(route('console.agents.store'), ['name' => 'packaged'])
+        ->assertSessionHas('plaintext_key');
+
+    $newAgent = Agent::where('name', 'packaged')->firstOrFail();
+    $mcp = file_get_contents($repos->packageDir($newAgent).'/mcp.json');
+    expect($mcp)->toContain('Bearer melf_')->not->toContain('melf_testkey');
+
+    $this->actingAs($this->owner)
+        ->post(route('console.agents.rotate', $this->agent))
+        ->assertSessionHas('plaintext_key');
+
+    $mcp = file_get_contents($repos->packageDir($this->agent).'/mcp.json');
+    expect($mcp)->toContain('Bearer '.session('plaintext_key'))
+        ->not->toContain('melf_testkey');
+});
+
+it('drops the stale package and repos when the agent is renamed', function () {
+    $repos = app(PluginRepo::class);
+    $this->withBasicAuth('x', 'melf_testkey')->get('/plugins/a.git/info/refs')->assertOk();
+    $repos->rebuildPackage($this->agent, 'melf_testkey');
+
+    $this->actingAs($this->owner)
+        ->put(route('console.agents.update', $this->agent), [
+            'name' => 'renamed-agent',
+            'status' => Agent::STATUS_ACTIVE,
+        ]);
+
+    expect(is_dir($repos->repoDir($this->agent, 'direct')))->toBeFalse()
+        ->and(is_dir($repos->packageDir($this->agent)))->toBeFalse();
+});
+
+it('claims an agent named like a key by name', function () {
+    $melfNamed = Agent::factory()->withKey('melf_namedx')->create(['name' => 'melf_helper']);
+
+    ($this->mcp)('tools/list', [], $this->fleetKey, ['X-Melfina-Agent-Key' => 'melf_helper'])
+        ->assertOk();
+});
+
+it('does not treat an agent key as a fleet key', function () {
+    expect(User::isMcpKey('melf_testkey'))->toBeFalse();
+});
+
 it('404s the plugin zip before a package exists', function () {
     $this->actingAs($this->owner)
         ->get(route('console.agents.plugin', $this->agent))
         ->assertNotFound();
 });
 
-it('drops plugin repos embedding a rotated key', function () {
-    $this->get("/plugins/{$this->fleetKey}/melf_testkey.git/info/refs")->assertOk();
+it('drops plugin repos embedding a rotated key and rebuilds on demand', function () {
     $repos = app(PluginRepo::class);
-    expect(is_dir($repos->repoDir($this->agent)))->toBeTrue();
+
+    $this->withBasicAuth($this->agent->name, $this->fleetKey)
+        ->get('/plugins/a.git/info/refs')->assertOk();
+    expect(is_dir($repos->repoDir($this->agent, 'fleet')))->toBeTrue();
 
     $this->actingAs($this->owner)->post(route('console.mcp-key.store'));
-    expect(is_dir($repos->repoDir($this->agent)))->toBeFalse();
+    expect(is_dir($repos->repoDir($this->agent, 'fleet')))->toBeFalse();
 
-    $this->get('/plugins/melf_testkey.git/info/refs')->assertOk();
-    expect(is_dir($repos->repoDir($this->agent)))->toBeTrue();
+    $this->withBasicAuth('x', 'melf_testkey')->get('/plugins/a.git/info/refs')->assertOk();
+    expect(is_dir($repos->repoDir($this->agent, 'direct')))->toBeTrue();
 
     $this->actingAs($this->owner)
         ->post(route('console.agents.rotate', $this->agent));
-    expect(is_dir($repos->repoDir($this->agent)))->toBeFalse();
+    expect(is_dir($repos->repoDir($this->agent, 'direct')))->toBeFalse();
+
+    // A fresh clone under the new key rebuilds and serves again.
+    $newKey = session('plaintext_key');
+    $this->withBasicAuth('x', $newKey)->get('/plugins/a.git/info/refs')->assertOk();
+    expect(is_dir($repos->repoDir($this->agent, 'direct')))->toBeTrue();
 });

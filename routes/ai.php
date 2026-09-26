@@ -19,18 +19,11 @@ Route::post('oauth/revoke', RevokeOAuthTokenController::class)->name('oauth.revo
 Mcp::web('/mcp', MelfinaServer::class)->middleware(ResolveAgent::class);
 
 // Per-agent plugin repositories, cloneable over git's dumb HTTP protocol.
-// The credentials ride in the path: /plugins/{fleet}/{agent}.git for the
-// fleet form (agent = name or melf_ key), /plugins/{agentKey}.git when no
-// fleet key is in play.
-Route::get('plugins/{fleet}/{repo}/{path?}', [PluginRepoController::class, 'showFleet'])
-    ->where([
-        'fleet' => 'melfg_[A-Za-z0-9]+',
-        'repo' => '[A-Za-z0-9_.-]+\.git',
-        'path' => '.*',
-    ]);
-
+// Credentials ride in HTTP Basic auth (userinfo in the clone URL — git
+// converts it to an Authorization header), never in the logged path; the
+// {repo} segment is decorative.
 Route::get('plugins/{repo}/{path?}', [PluginRepoController::class, 'show'])
     ->where([
-        'repo' => '[A-Za-z0-9_.-]+\.git',
+        'repo' => '[^/]+\.git',
         'path' => '.*',
     ]);

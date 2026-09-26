@@ -10,7 +10,8 @@
             as the Bearer credential, plus this agent's persona — its <strong class="text-cream">name</strong>
             or its key (<code>melf_…</code>, shown once on the
             <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.show', $agent) }}">Key</a> tab)
-            as <code>X-Melfina-Agent-Key</code>. The name is not a secret — the agent just has to know it.
+            as <code>X-Melfina-Agent-Key</code> (or <code>?agent_key=</code> — names only there, keys
+            stay out of query strings). The name is not a secret — the agent just has to know it.
             On a shared config the fleet key is identical for every agent — the persona is what gives each
             one its brain.
         </p>
@@ -21,14 +22,21 @@
             <p class="mt-2 text-sm text-steel">
                 For clients that install MCP servers from a plugin repo (MiniMax Code, mavis, zcode,
                 Claude plugin marketplaces, …) Melfina serves a ready-made package as a git URL —
-                substitute the fleet key and this agent's name or key:
+                substitute the fleet key after the <code>:</code>. The credentials travel as HTTP
+                Basic auth, not in the request path, so they stay out of server access logs:
             </p>
             <pre class="mt-3 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $pluginUrl }}</pre>
             <p class="mt-2 text-sm text-steel">
-                Without a fleet key, <code>{{ url('/plugins/melf_….git') }}</code> works too — the package
-                then carries just the agent key. For upload-only flows,
-                <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.plugin', $agent) }}">download the plugin ZIP</a>
-                (it contains live keys — treat it like a password).
+                Without a fleet key, <code>{{ $pluginUrlDirect }}</code> works too — the package
+                then carries just the agent key.
+                @if ($hasPackage)
+                    For upload-only flows,
+                    <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.plugin', $agent) }}">download the plugin ZIP</a>
+                    (it contains live keys — treat it like a password).
+                @else
+                    The upload-flow ZIP is built on key create/rotate — rotate this agent's key once
+                    from the <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.show', $agent) }}">Key</a> tab to enable it.
+                @endif
             </p>
         </div>
 

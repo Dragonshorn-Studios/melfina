@@ -82,7 +82,7 @@ One owner per install. After first boot, open [http://localhost:8000/register](h
 
 `/mcp` accepts three credential shapes:
 
-- **Fleet key + persona** — for shared MCP configs. The install-wide fleet key (`melfg_…`, generate/rotate on the dashboard) goes in the shared config as `Authorization: Bearer melfg_…`; each agent then claims its persona with `X-Melfina-Agent-Key` (or `?agent_key=`) holding **its name or its `melf_…` key**. The name is not a secret — it's an id the agent can know from its own instructions (e.g. soul.md). A fleet key alone resolves to no agent and fails closed; anyone holding it can claim any persona, so treat the fleet key as install-wide access.
+- **Fleet key + persona** — for shared MCP configs. The install-wide fleet key (`melfg_…`, generate/rotate on the dashboard) goes in the shared config as `Authorization: Bearer melfg_…`; each agent then claims its persona with `X-Melfina-Agent-Key` holding **its name or its `melf_…` key** (`?agent_key=` works too but accepts names only — query strings land in access logs, keys don't belong there). The name is not a secret — it's an id the agent can know from its own instructions (e.g. soul.md). A fleet key alone resolves to no agent and fails closed; anyone holding it can claim any persona, so treat the fleet key as install-wide access.
 - **Agent key** — a dedicated config may send `Authorization: Bearer melf_…` directly.
 - **OAuth 2.1 with Dynamic Client Registration** — `POST /oauth/register` (rate-limited; discovery at `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`, PKCE S256 only). OAuth access tokens live ~2h and refresh tokens ~30d — so **Clients → revoke** kills access immediately, while an unrevoked client can keep refreshing for a month. Consent binds each token to one agent; rotating a key never touches OAuth clients (and vice versa).
 
@@ -90,7 +90,7 @@ One owner per install. After first boot, open [http://localhost:8000/register](h
 
 For clients that install MCP servers from a plugin repo or package, each agent gets a ready-made one — see an agent's **Connect** page:
 
-- **Git URL** — `https://<host>/plugins/<melfg_fleet>/<agent>.git` (agent name or `melf_…` key; or `plugins/<melf_agent>.git` without a fleet key) is a real cloneable repo (dumb HTTP) carrying `.minimax-plugin/plugin.json`, `plugin.json`, `.claude-plugin/plugin.json`, `mcp.json`, and a skill. The URL embeds credentials — treat it as a secret.
+- **Git URL** — `https://<persona>:<key>@<host>/plugins/anything.git` is a real cloneable repo (dumb HTTP). Git folds the `user:pass@` userinfo into an HTTP Basic header on retry, so credentials travel in the `Authorization` header and never land in access-log request paths. Username = agent name (or `melf_…` key), password = the fleet key `melfg_…` (package carries fleet Bearer + name persona) or the agent key itself (package carries `Bearer melf_…`). The URL embeds credentials — treat it as a secret.
 - **ZIP** — `console/agents/{agent}/plugin.zip` downloads the same package for upload-only flows; it embeds the agent key captured at last create/rotate.
 
 ## Tokens
