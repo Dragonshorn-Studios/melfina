@@ -42,7 +42,11 @@ class MelfinaServer extends Server
         $this->addMethod('subscriptions/listen', MailListen::class);
     }
 
-    protected array $tools = [
+    /**
+     * The tool surface — the single list ToolCatalog derives the HTTP
+     * fallback endpoints and generated skills from.
+     */
+    public const TOOLS = [
         ListFiles::class,
         ReadFile::class,
         WriteFile::class,
@@ -63,4 +67,6 @@ class MelfinaServer extends Server
         KnowledgeSearch::class,
         KnowledgeUpsert::class,
     ];
+
+    protected array $tools = self::TOOLS;
 }

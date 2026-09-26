@@ -2,8 +2,10 @@
 
 use App\Http\Controllers\Mcp\PluginRepoController;
 use App\Http\Controllers\Mcp\RevokeOAuthTokenController;
+use App\Http\Controllers\Mcp\ToolCallController;
 use App\Http\Middleware\MergeMcpRedirectDomains;
 use App\Http\Middleware\ResolveAgent;
+use App\Http\Middleware\ResolveApiAgent;
 use App\Mcp\Servers\MelfinaServer;
 use Illuminate\Support\Facades\Route;
 use Laravel\Mcp\Facades\Mcp;
@@ -21,6 +23,19 @@ Route::post('oauth/register', OAuthRegisterController::class)
 Route::post('oauth/revoke', RevokeOAuthTokenController::class)->name('oauth.revoke');
 
 Mcp::web('/mcp', MelfinaServer::class)->middleware(ResolveAgent::class);
+
+// The MCP-first HTTP fallback: every catalogued tool is also callable as
+// plain JSON for runtimes that can't install an MCP server. The request
+// body is the tool's arguments object (same shape as MCP
+// tools/call params.arguments); GET lists the surface. Dedicated agent
+// keys, scoped API keys (melfs_…), and fleet keys all authenticate.
+Route::get('api/tools', [ToolCallController::class, 'index'])
+    ->middleware(['throttle:60,1', ResolveApiAgent::class])
+    ->name('api.tools.index');
+Route::post('api/tools/{tool}', ToolCallController::class)
+    ->middleware(['throttle:60,1', ResolveApiAgent::class])
+    ->where('tool', '[a-z0-9_]+')
+    ->name('api.tools.call');
 
 // Per-agent plugin repositories, cloneable over git's dumb HTTP protocol.
 // Credentials ride in HTTP Basic auth (userinfo in the clone URL — git

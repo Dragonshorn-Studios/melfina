@@ -48,6 +48,11 @@ class Agent extends Model
         return $this->hasMany(VfsFile::class);
     }
 
+    public function apiKeys(): HasMany
+    {
+        return $this->hasMany(AgentApiKey::class);
+    }
+
     public function isActive(): bool
     {
         return $this->status === self::STATUS_ACTIVE;

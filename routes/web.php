@@ -43,6 +43,9 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::put('mcp/operator-persona', [McpKeyController::class, 'storeOperatorPersona'])->name('mcp.operator-persona.store');
 
     Route::post('agents/{agent}/rotate', [AgentController::class, 'rotate'])->name('agents.rotate');
+    Route::post('agents/{agent}/api-keys', [AgentController::class, 'storeApiKey'])->name('agents.api-keys.store');
+    Route::delete('agents/{agent}/api-keys/{agentApiKey}', [AgentController::class, 'destroyApiKey'])
+        ->name('agents.api-keys.destroy');
     Route::get('agents/{agent}/persona', [AgentController::class, 'editPersona'])->name('agents.persona.edit');
     Route::put('agents/{agent}/persona', [AgentController::class, 'updatePersona'])->name('agents.persona.update');
     Route::delete('agents/{agent}/memories/{index}', [AgentController::class, 'destroyMemory'])

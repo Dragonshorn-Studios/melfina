@@ -32,6 +32,11 @@ use Symfony\Component\Process\Process;
  */
 class PluginRepo
 {
+    public function __construct(
+        private readonly ToolCatalog $catalog,
+        private readonly SkillDocs $skills,
+    ) {}
+
     /**
      * Ensure a fresh repo exists for these credentials and return its path.
      * `$mode` is 'fleet' or 'direct'; `$credential` is the plaintext secret
@@ -301,7 +306,28 @@ class PluginRepo
      */
     private function endpoint(): string
     {
-        return rtrim((string) config('app.url'), '/').'/mcp';
+        return $this->baseUrl().'/mcp';
+    }
+
+    /**
+     * The install's public origin — base for the /api/tools endpoints the
+     * generated HTTP fallback skills document. Pinned to config for the
+     * same reason as endpoint().
+     */
+    private function baseUrl(): string
+    {
+        return rtrim((string) config('app.url'), '/');
+    }
+
+    /**
+     * The generated HTTP-fallback skill files (one SKILL.md per tool under
+     * skills/, plus melfina-api.json) shared by every package variant.
+     *
+     * @return array<string, string>
+     */
+    private function skillFiles(): array
+    {
+        return $this->skills->files($this->baseUrl());
     }
 
     /**
@@ -416,7 +442,7 @@ class PluginRepo
             'author' => 'Melfina',
             'category' => 'Productivity',
             'mcpServers' => ['mcp.json'],
-            'skills' => ['skills/melfina/SKILL.md'],
+            'skills' => ['skills/melfina/SKILL.md', ...$this->skills->skillPaths()],
             'apps' => [],
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n";
 
@@ -471,9 +497,10 @@ MD;
             '.minimax-plugin/plugin.json' => $minimax,
             'plugin.json' => $agentPlugins,
             '.claude-plugin/plugin.json' => $claude,
-            'skills/melfina/SKILL.md' => $skill."\n",
+            'skills/melfina/SKILL.md' => $skill.$this->skills->appendix(credentialEmbedded: true)."\n",
             'README.md' => $readme."\n",
             'LICENSE' => $license,
+            ...$this->skillFiles(),
         ];
     }
 
@@ -549,9 +576,9 @@ MD;
         return array_merge($this->fleetManifestFiles(), [
             'mcp.json' => $mcp,
             '.mcp.json' => $mcp,
-            'skills/melfina/SKILL.md' => $skill."\n",
+            'skills/melfina/SKILL.md' => $skill.$this->skills->appendix(credentialEmbedded: true)."\n",
             'README.md' => $readme."\n",
-        ]);
+        ], $this->skillFiles());
     }
 
     /**
@@ -629,9 +656,9 @@ MD;
         return array_merge($this->fleetManifestFiles(), [
             'mcp.json' => $mcp,
             '.mcp.json' => $mcp,
-            'skills/melfina/SKILL.md' => $skill."\n",
+            'skills/melfina/SKILL.md' => $skill.$this->skills->appendix()."\n",
             'README.md' => $readme."\n",
-        ]);
+        ], $this->skillFiles());
     }
 
     /**
@@ -655,7 +682,7 @@ MD;
                 'author' => 'Melfina',
                 'category' => 'Productivity',
                 'mcpServers' => ['mcp.json'],
-                'skills' => ['skills/melfina/SKILL.md'],
+                'skills' => ['skills/melfina/SKILL.md', ...$this->skills->skillPaths()],
                 'apps' => [],
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n",
             'plugin.json' => json_encode([
