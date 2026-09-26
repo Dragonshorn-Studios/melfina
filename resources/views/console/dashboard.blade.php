@@ -68,8 +68,9 @@
                 The fleet key (<code>melfg_…</code>) is the shared credential you put in a shared MCP config:
                 it opens the <code>/mcp</code> endpoint but carries no persona — discovery works without one,
                 and each agent says who it is inside the call (the <code>name</code> argument), or with
-                <code>X-Melfina-Agent-Key</code> / <code>?agent_key=</code> carrying its name or key — that is
-                what gives every agent or discussion its own brain on a shared server.
+                <code>X-Melfina-Agent-Key</code> carrying its name or key / <code>?agent_key=</code>
+                carrying its name only — that is what gives every agent or discussion its own brain
+                on a shared server.
                 <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.mcp.connect') }}">Global install guide →</a>
             </p>
             <dl class="mt-4 space-y-2 font-mono text-xs">
