@@ -53,6 +53,7 @@ class ListShared extends Tool
     {
         return [
             'space' => $schema->string()->description('Optional shared space name; when given, lists paths inside it.'),
+            ...$this->personaSchema($schema),
         ];
     }
 }

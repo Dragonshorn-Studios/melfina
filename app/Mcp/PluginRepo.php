@@ -602,7 +602,8 @@ the password instead.
 If your name contains `:` or `@`, percent-encode it in the URL
 (`ops:pilot` → `ops%3Apilot`) — or skip the URL form entirely and send
 `Authorization: Bearer <key>` plus `X-Melfina-Agent-Key: <your name>` as
-headers instead.
+headers instead. You can also just pass your name as the `name` argument
+on any tool call — every tool accepts it.
 
 - `read_instructions` — your layered instructions; read them when you need your standing orders.
 - `list_files` / `read_file` / `write_file` — your private tree. Nobody else can see or touch it.

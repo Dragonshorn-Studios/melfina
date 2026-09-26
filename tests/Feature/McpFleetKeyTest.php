@@ -522,6 +522,65 @@ it('renders the global connect page with both fleet repo URLs', function () {
         ->assertSee('NAME:melfg_…@', false);
 });
 
+it('resolves the persona from a `name` tool argument on fleet auth', function () {
+    // Grokbot-style shared client: one fleet credential, imps name
+    // themselves inside each tools/call.
+    $this->postJson('/mcp', [
+        'jsonrpc' => '2.0',
+        'id' => 1,
+        'method' => 'tools/call',
+        'params' => [
+            'name' => 'write_file',
+            'arguments' => ['path' => 'who.txt', 'content' => 'me', 'name' => $this->agent->name],
+        ],
+    ], ['Authorization' => 'Bearer '.$this->fleetKey])->assertOk();
+
+    expect($this->agent->files()->where('path', 'who.txt')->exists())->toBeTrue();
+
+    // tools/list can't carry an argument persona — still needs the header.
+    ($this->mcp)('tools/list', [], $this->fleetKey)
+        ->assertUnauthorized()
+        ->assertJson(['error' => 'agent persona required']);
+});
+
+it('fails a personal-key call whose `name` argument is a different agent', function () {
+    $other = Agent::factory()->withKey('melf_other')->create(['name' => 'otherbot']);
+
+    $this->postJson('/mcp', [
+        'jsonrpc' => '2.0',
+        'id' => 1,
+        'method' => 'tools/call',
+        'params' => [
+            'name' => 'write_file',
+            'arguments' => ['path' => 'x.txt', 'content' => 'y', 'name' => $other->name],
+        ],
+    ], ['Authorization' => 'Bearer melf_testkey'])->assertUnauthorized();
+
+    // Same name as the key's agent is fine.
+    $this->postJson('/mcp', [
+        'jsonrpc' => '2.0',
+        'id' => 2,
+        'method' => 'tools/call',
+        'params' => [
+            'name' => 'write_file',
+            'arguments' => ['path' => 'x.txt', 'content' => 'y', 'name' => $this->agent->name],
+        ],
+    ], ['Authorization' => 'Bearer melf_testkey'])->assertOk();
+});
+
+it('advertises the name argument in every tool schema', function () {
+    $names = ($this->mcp)('tools/list', [], 'melf_testkey')
+        ->assertOk()
+        ->collect('result.tools')
+        ->mapWithKeys(fn ($t) => [$t['name'] => $t]);
+
+    expect($names)->not->toBeEmpty();
+
+    foreach ($names as $tool => $def) {
+        expect($def['inputSchema']['properties'] ?? [])->toHaveKey('name');
+    }
+});
+
 it('downloads the credential-free fleet package as a zip', function () {
     $response = $this->actingAs($this->owner)
         ->get(route('console.mcp.plugin.zip'))

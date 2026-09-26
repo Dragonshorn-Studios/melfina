@@ -64,6 +64,18 @@
             </details>
 
             <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">SHARED-KEY CLIENTS (ONE CONFIG, MANY IMPS)</summary>
+                <p class="mt-3 text-sm text-steel">
+                    Bots like grokbot share one connection config across every imp — nothing per-agent can be
+                    set at all. Point that config at the endpoint with just the fleet key, and tell each imp
+                    <em>"you are &lt;name&gt;"</em> in its instructions: every tool accepts a
+                    <code>name</code> argument, and on a fleet-authenticated connection the imp's name in that
+                    argument becomes its persona. On a dedicated <code>melf_…</code> key a mismatched
+                    <code>name</code> fails instead of silently impersonating.
+                </p>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
                 <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">HEADER-BASED CONFIGS</summary>
                 <p class="mt-3 text-sm text-steel">
                     Clients that let you set headers send the fleet key as Bearer plus the persona in

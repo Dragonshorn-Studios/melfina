@@ -64,6 +64,7 @@ class WriteFile extends Tool
         return [
             'path' => $schema->string()->description('Path of the file to write, e.g. "notes/todo.txt".')->required(),
             'content' => $schema->string()->description('Full text content to store (replaces existing).')->required(),
+            ...$this->personaSchema($schema),
         ];
     }
 }
