@@ -24,10 +24,9 @@ use Symfony\Component\Process\Process;
  * The fleet form's persona header carries the agent's *name*, not its key —
  * the name is a non-secret id the agent knows from its own instructions.
  *
- * Built repos are cached under storage/app/mcp-plugins/{id}.{mode}.git (and
- * fleet.git for the global package) and rebuilt whenever the embedded
- * credential, persona name, or endpoint change (fingerprint check under a
- * cache lock).
+ * Repos are rebuilt on every request under storage/app/mcp-plugins/ —
+ * plugin downloads are rare enough that always-fresh beats cached
+ * (a stale bake once shipped a localhost endpoint to agents).
  */
 class PluginRepo
 {
@@ -39,21 +38,12 @@ class PluginRepo
     public function ensureBuilt(Agent $agent, string $mode, string $credential): string
     {
         $dir = $this->repoDir($agent, $mode);
-        $fingerprint = $this->fingerprint($agent, $mode, $credential);
 
-        if ($this->fresh($dir, $fingerprint)) {
-            return $dir;
-        }
-
-        // Serialize builds per agent+mode: concurrent clones wait for the
-        // first build instead of racing the directory swap.
+        // No caching: every request rebuilds. Plugin repos are fetched
+        // rarely (once per agent install), so freshness beats speed.
         return Cache::lock('melfina-plugin-repo:'.$agent->id.':'.$mode, 30)
-            ->block(10, function () use ($agent, $mode, $credential, $dir, $fingerprint) {
-                if ($this->fresh($dir, $fingerprint)) {
-                    return $dir;
-                }
-
-                $this->build($dir, $this->packageFiles($agent, $mode, $credential), $fingerprint);
+            ->block(10, function () use ($agent, $mode, $credential, $dir) {
+                $this->build($dir, $this->packageFiles($agent, $mode, $credential));
 
                 return $dir;
             });
@@ -68,19 +58,10 @@ class PluginRepo
     public function ensureGlobal(string $fleetKey): string
     {
         $dir = $this->globalDir();
-        $fingerprint = hash('sha256', implode('|', ['global', $fleetKey, $this->endpoint(), 'v1']));
-
-        if ($this->fresh($dir, $fingerprint)) {
-            return $dir;
-        }
 
         return Cache::lock('melfina-plugin-repo:global', 30)
-            ->block(10, function () use ($dir, $fingerprint, $fleetKey) {
-                if ($this->fresh($dir, $fingerprint)) {
-                    return $dir;
-                }
-
-                $this->build($dir, $this->globalPackageFiles($fleetKey), $fingerprint);
+            ->block(10, function () use ($dir, $fleetKey) {
+                $this->build($dir, $this->globalPackageFiles($fleetKey));
 
                 return $dir;
             });
@@ -121,19 +102,10 @@ class PluginRepo
     public function ensureGlobalPublic(): string
     {
         $dir = $this->publicDir();
-        $fingerprint = hash('sha256', implode('|', ['public', $this->endpoint(), 'v1']));
-
-        if ($this->fresh($dir, $fingerprint)) {
-            return $dir;
-        }
 
         return Cache::lock('melfina-plugin-repo:global-public', 30)
-            ->block(10, function () use ($dir, $fingerprint) {
-                if ($this->fresh($dir, $fingerprint)) {
-                    return $dir;
-                }
-
-                $this->build($dir, $this->publicPackageFiles(), $fingerprint);
+            ->block(10, function () use ($dir) {
+                $this->build($dir, $this->publicPackageFiles());
 
                 return $dir;
             });
@@ -220,7 +192,7 @@ class PluginRepo
         $full = realpath($base.'/'.ltrim($path, '/'));
 
         // Require the base's trailing slash — a bare prefix compare would
-        // also match sibling files like `{id}.git.fingerprint`.
+        // also match sibling files like `{id}.git.old-*` trash dirs.
         if ($full === false || ! str_starts_with($full, $base.'/') || ! is_file($full)) {
             return null;
         }
@@ -308,18 +280,6 @@ class PluginRepo
         return storage_path('app/mcp-plugins/'.$agent->id.'.'.$mode.'.git');
     }
 
-    private function fresh(string $dir, string $fingerprint): bool
-    {
-        return is_file($dir.'/info/refs')
-            && is_file($dir.'.fingerprint')
-            && trim((string) file_get_contents($dir.'.fingerprint')) === $fingerprint;
-    }
-
-    private function fingerprint(Agent $agent, string $mode, string $credential): string
-    {
-        return hash('sha256', implode('|', [$agent->name, $mode, $credential, $this->endpoint(), 'v1']));
-    }
-
     /**
      * The MCP endpoint baked into packages — pinned to config('app.url')
      * rather than url(), which reflects the request's Host/X-Forwarded-Host
@@ -333,8 +293,19 @@ class PluginRepo
     /**
      * @param  array<string, string>  $files  repo-root-relative path → contents
      */
-    private function build(string $dir, array $files, string $fingerprint): void
+    private function build(string $dir, array $files): void
     {
+        // Temporary debugging for the stale-endpoint issue: record exactly
+        // which URL source the serving process resolved.
+        Log::info('plugin repo build', [
+            'dir' => basename($dir),
+            'config_app_url' => config('app.url'),
+            'env_app_url' => env('APP_URL'),
+            'request_host' => request()?->getHost(),
+            'config_cached' => app()->configurationIsCached(),
+            'endpoint' => $this->endpoint(),
+        ]);
+
         $work = storage_path('app/mcp-plugins/build-'.Str::random(12));
         File::ensureDirectoryExists($work);
         chmod($work, 0700);
@@ -376,7 +347,6 @@ class PluginRepo
         }
         rename($work.'/.git', $dir);
         chmod($dir, 0700);
-        file_put_contents($dir.'.fingerprint', $fingerprint);
         File::deleteDirectory($trash);
         File::deleteDirectory($work);
     }
