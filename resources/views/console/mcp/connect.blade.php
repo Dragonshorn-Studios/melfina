@@ -92,6 +92,9 @@
                     clients; add remote origins here instead of editing <code>MCP_REDIRECT_DOMAINS</code>
                     and redeploying.
                 </p>
+                @if (session('status'))
+                    <p class="mt-3 font-mono text-xs text-amber">{{ session('status') }}</p>
+                @endif
                 <ul class="mt-3 space-y-1 font-mono text-xs">
                     @foreach ($envRedirectDomains as $domain)
                         <li class="flex items-center justify-between gap-3 border border-border/50 bg-void/60 px-3 py-1.5 text-steel" style="border-radius: var(--radius-console)">

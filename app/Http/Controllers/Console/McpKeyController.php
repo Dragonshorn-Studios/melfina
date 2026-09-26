@@ -52,8 +52,13 @@ class McpKeyController extends Controller
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
             // Env-provided origins (uneditable here — they come from
             // MCP_REDIRECT_DOMAINS) vs. the owner's console-managed ones.
-            'envRedirectDomains' => config('mcp.redirect_domains', []),
-            'storedRedirectDomains' => $request->user()->mcp_redirect_domains ?? [],
+            // redirect_domains_env is the never-mutated env baseline;
+            // 'redirect_domains' may already carry the merged console list.
+            'envRedirectDomains' => config('mcp.redirect_domains_env', []),
+            'storedRedirectDomains' => array_values(array_diff(
+                $request->user()->mcp_redirect_domains ?? [],
+                config('mcp.redirect_domains_env', []),
+            )),
         ]);
     }
 
@@ -66,8 +71,8 @@ class McpKeyController extends Controller
     public function storeRedirectDomain(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'domain' => ['required', 'string', 'max:255', function (string $attribute, string $value, \Closure $fail): void {
-                if (self::normalizeRedirectOrigin($value) === null) {
+            'domain' => ['bail', 'required', 'string', 'max:255', function (string $attribute, mixed $value, \Closure $fail): void {
+                if (! is_string($value) || self::normalizeRedirectOrigin($value) === null) {
                     $fail('Must be an origin like https://app.example.com — http(s) scheme, host, optional port, no path.');
                 }
             }],
@@ -94,18 +99,24 @@ class McpKeyController extends Controller
      */
     public function destroyRedirectDomain(Request $request): RedirectResponse
     {
-        $validated = $request->validate(['domain' => ['required', 'string', 'max:255']]);
+        $validated = $request->validate(['domain' => ['bail', 'required', 'string', 'max:255']]);
+        $origin = self::normalizeRedirectOrigin($validated['domain']) ?? $validated['domain'];
         $user = $request->user();
 
+        $stored = $user->mcp_redirect_domains ?? [];
+        $removed = in_array($origin, $stored, true);
+
         $user->mcp_redirect_domains = array_values(array_filter(
-            $user->mcp_redirect_domains ?? [],
-            fn (string $domain): bool => $domain !== $validated['domain'],
+            $stored,
+            fn (mixed $domain): bool => ! is_string($domain) || $domain !== $origin,
         ));
         $user->save();
 
         return redirect()
             ->route('console.mcp.connect')
-            ->with('status', "Redirect origin {$validated['domain']} removed.");
+            ->with('status', $removed
+                ? "Redirect origin {$origin} removed."
+                : "Redirect origin {$origin} wasn't in the list.");
     }
 
     /**
@@ -124,7 +135,12 @@ class McpKeyController extends Controller
             return null;
         }
 
-        $parts = parse_url($input);
+        try {
+            $parts = parse_url($input);
+        } catch (\ValueError) {
+            return null;
+        }
+
         $scheme = is_array($parts) ? strtolower((string) ($parts['scheme'] ?? '')) : '';
         $host = is_array($parts) ? (string) ($parts['host'] ?? '') : '';
 
@@ -136,6 +152,16 @@ class McpKeyController extends Controller
             || isset($parts['user']) || isset($parts['pass'])) {
             return null;
         }
+
+        // A leftover bracket means the host was malformed (parse_url
+        // strips the brackets of a well-formed IPv6 literal).
+        if (str_contains($host, '[') || str_contains($host, ']')) {
+            return null;
+        }
+
+        // Restore IPv6 brackets or the stored origin is malformed and can
+        // never match a redirect URI.
+        $host = str_contains($host, ':') ? '['.$host.']' : $host;
 
         return $scheme.'://'.strtolower($host).(isset($parts['port']) ? ':'.$parts['port'] : '');
     }
