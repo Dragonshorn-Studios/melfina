@@ -22,10 +22,11 @@ class McpKeyController extends Controller
 
         return view('console.mcp.connect', [
             'endpoint' => $endpoint,
-            // The endpoint is baked into generated packages — flag when it
-            // resolves to a host remote agents can't reach.
+            // Packages bake config('app.url'), not the request URL — flag
+            // when what they embed resolves to a host remote agents
+            // can't reach.
             'endpointIsLocal' => in_array(
-                parse_url($endpoint, PHP_URL_HOST),
+                parse_url(rtrim((string) config('app.url'), '/'), PHP_URL_HOST),
                 ['localhost', '127.0.0.1', '::1', '[::1]'],
                 true
             ),
@@ -82,7 +83,7 @@ class McpKeyController extends Controller
     public function pluginZip(PluginRepo $repos): BinaryFileResponse
     {
         try {
-            $zipPath = $repos->zipDirectory($repos->rebuildPublicPackage());
+            $zipPath = $repos->publicPackageZip();
         } catch (\RuntimeException $e) {
             abort(500, $e->getMessage());
         }

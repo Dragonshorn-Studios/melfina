@@ -594,8 +594,35 @@ it('downloads the credential-free fleet package as a zip', function () {
     // Dot-manifests ship, and nothing inside carries a credential.
     expect($zip->statName('mcp.json'))->not->toBeFalse()
         ->and($zip->statName('.minimax-plugin/plugin.json'))->not->toBeFalse()
-        ->and($zip->getFromName('mcp.json'))->toContain('YOUR_NAME:YOUR_KEY@');
+        ->and($zip->getFromName('mcp.json'))->toContain('YOUR_NAME:YOUR_KEY@')
+        ->not->toContain($this->fleetKey)
+        ->not->toContain('melf_testkey');
     $zip->close();
+});
+
+it('keeps the fleet plugin zip owner-only', function () {
+    $this->get(route('console.mcp.plugin.zip'))->assertRedirect(route('login'));
+
+    $plain = User::factory()->create();
+    $this->actingAs($plain)->get(route('console.mcp.plugin.zip'))->assertForbidden();
+});
+
+it('warns on the connect page only when the baked endpoint is local', function () {
+    // The banner tracks what packages actually embed — config('app.url'),
+    // not the request Host the owner happens to browse on.
+    config(['app.url' => 'http://localhost:8000']);
+
+    $this->actingAs($this->owner)
+        ->get(route('console.mcp.connect'))
+        ->assertOk()
+        ->assertSee('endpoint resolves to localhost', false);
+
+    config(['app.url' => 'https://melfina.example.test']);
+
+    $this->actingAs($this->owner)
+        ->get(route('console.mcp.connect'))
+        ->assertOk()
+        ->assertDontSee('endpoint resolves to localhost', false);
 });
 
 it('keeps the plugin zip owner-only', function () {
