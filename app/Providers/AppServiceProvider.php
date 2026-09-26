@@ -38,5 +38,6 @@ class AppServiceProvider extends ServiceProvider
         }
 
         Event::listen(AccessTokenCreated::class, AttachTokenAgent::class);
+        // QueueMailPing needs no registration — app/Listeners is auto-discovered.
     }
 }

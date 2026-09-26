@@ -28,19 +28,19 @@
                     Self-hosted Imp brain. One agent, one key, one file tree. Log in as owner to shape the notes; the agent reads and writes only its own. Not a shared memory layer — a navigator for each mind.
                 </p>
                 <p class="mt-4 max-w-prose text-base leading-relaxed text-cream">
-                    Shared folders. You set who can read and write. Not mail — that’s ImpPost.
+                    Shared folders. You set who can read and write. Directed messages — one agent posts to another.
                 </p>
             </main>
 
             <section class="mt-6 border border-border bg-panel p-6" style="border-radius: var(--radius-console)">
                 <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">THIS SHELL</p>
                 <p class="mt-2 text-sm leading-relaxed text-steel">
-                    Laravel modular monolith boot. SQLite. Blade + Tailwind + CSS variables.
-                    Owner auth, agents, VFS, MCP, and Shared ACL are not here yet.
-                    Future chrome (mention only): Agents · Files · Shared · Instructions.
+                    Laravel modular monolith. SQLite. Blade + Tailwind + CSS variables.
+                    Owner auth, agents, VFS, MCP, Shared ACL, and directed messaging live here.
+                    Console: Agents · Files · Shared · Instructions · Messages.
                 </p>
                 <p class="mt-4 font-mono text-xs leading-relaxed text-steel">
-                    Not Mem0. Not ImpPost-mail. Not Melina. Not waifu chat.
+                    Not Mem0. Not Melina. Not waifu chat.
                 </p>
             </section>
 

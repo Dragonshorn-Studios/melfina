@@ -6,7 +6,7 @@ Each agent gets a key and a brain. You edit the instructions.
 
 Self-hosted Imp brain. One agent, one key, one file tree. Log in as owner to shape the notes; the agent reads and writes only its own. Not a shared memory layer — a navigator for each mind.
 
-Shared folders. You set who can read and write. Not mail — that’s ImpPost.
+Shared folders. You set who can read and write. Directed messages — one agent posts to another, inbox/sent plus acknowledgement.
 
 ## Character
 
@@ -14,30 +14,32 @@ Outlaw Star navigator-brain. Soft-brutal / Y2K ship console. Amber phosphor on d
 
 ## What Melfina is
 
-A self-hosted **Imp brain**: Laravel now, MCP later. One agent = one key = one private file tree. The owner logs in and shapes instructions and notes; the agent reads and writes only its own tree.
+A self-hosted **Imp brain**: Laravel + MCP. One agent = one key = one private file tree. The owner logs in and shapes instructions and notes; the agent reads and writes only its own tree.
 
-**Shared** (in-scope as a later feature, not mail): named folders plus owner ACL.
+**Shared:** named folders plus owner ACL. **Messages:** directed post between agents — one sender, one recipient, explicit read and acknowledgement. The owner inspects the fleet's mail at a top-level console screen whose label is configurable (`MELFINA_MESSAGES_LABEL`, default **AgentPost**; an install may style it `ImpPost`).
+
+**Mail pings:** delivery is durable — the inbox row is the source of truth. On commit, Melfina enqueues a best-effort "check your mail" ping (`MailPingQueue`) that `subscriptions/listen` streams yield as `notifications/melfina/mail` notifications (a namespaced extension — MCP logging is never used as a mailbox). Dedicated connections hear only their own mail; fleet-key connections hear every ping and get `recipient_agent_id`/`recipient_name`/`unread`/`tool: list_inbox` so an orchestrator can route it. Pings carry no sender, subject, body, or paths. A listen stream stays open `melfina.mail_listen_seconds` (default 110s) then closes; clients that never listen just poll `list_inbox`.
 
 ## What Melfina is not
 
-- **ImpPost** — a separate product. No inbox, deliveries, or agent mail belong in this repo.
+- **A standalone ImpPost service** — messages are a bounded module inside Melfina, not a separate product. No channels, broadcast, presence, or human chat. Messages never grant access to another agent's private tree and are never auto-ingested into memory.
 - **Mem0 / OpenMemory / Portable Memory (`.mem`)** — not a vector shared-memory layer and not Slack-for-agents.
 - **Melina** — homophone; forbidden in copy.
 - Waifu chat, character-on-a-background, purple Inter SaaS.
 
-## Chrome (later — mention only)
+## Chrome
 
-`Agents` · `Files` · `Shared` · `Instructions`
+`Agents` · `Files` · `Shared` · `Instructions` · messages screen (label configurable, default `AgentPost`)
 
-Do not implement owner auth, agent CRUD, VFS, MCP, Shared ACL, or that chrome in this shell.
+Owner auth, agent CRUD, VFS, MCP, Shared ACL, and that chrome are implemented — extend them in place; keep the modular monolith.
 
 ## Index
 
 | Doc | What it locks |
 | --- | --- |
-| [shape.md](shape.md) | Architecture, stack, data, security, Shared-in / ImpPost-out |
+| [shape.md](shape.md) | Architecture, stack, data, security, the three collaboration primitives |
 | [look.md](look.md) | Palette, type, mark, CSS rules |
 | [market.md](market.md) | Positioning, locked Liter copy, discovery |
 | [theme/](theme/README.md) | Token swatch for the locked palette |
 
-Product names **Imp** and **ImpPost** stay as-is.
+Product name **Imp** stays as-is. **ImpPost** is retired as a product boundary — it survives only as an optional label for the owner messages screen.
