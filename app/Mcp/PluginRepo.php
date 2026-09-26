@@ -24,23 +24,28 @@ use Symfony\Component\Process\Process;
  * The fleet form's persona header carries the agent's *name*, not its key —
  * the name is a non-secret id the agent knows from its own instructions.
  *
- * Repos are rebuilt on every request under storage/app/mcp-plugins/ —
- * plugin downloads are rare enough that always-fresh beats cached
- * (a stale bake once shipped a localhost endpoint to agents).
+ * Repos live under storage/app/mcp-plugins/ and are rebuilt on each
+ * clone's entrypoint request (info/refs / HEAD) — never fingerprint-
+ * cached, so a stale bake can't linger; object fetches inside that clone
+ * serve the dir the entrypoint built.
  */
 class PluginRepo
 {
     /**
      * Ensure a fresh repo exists for these credentials and return its path.
      * `$mode` is 'fleet' or 'direct'; `$credential` is the plaintext secret
-     * embedded in the package (fleet key or agent key).
+     * embedded in the package. `$fresh` marks a clone entrypoint request
+     * (info/refs, HEAD) — those rebuild; object fetches serve the existing
+     * dir so a clone spanning many requests sees one consistent repo.
      */
-    public function ensureBuilt(Agent $agent, string $mode, string $credential): string
+    public function ensureBuilt(Agent $agent, string $mode, string $credential, bool $fresh = true): string
     {
         $dir = $this->repoDir($agent, $mode);
 
-        // No caching: every request rebuilds. Plugin repos are fetched
-        // rarely (once per agent install), so freshness beats speed.
+        if (! $fresh && is_file($dir.'/info/refs')) {
+            return $dir;
+        }
+
         return Cache::lock('melfina-plugin-repo:'.$agent->id.':'.$mode, 30)
             ->block(10, function () use ($agent, $mode, $credential, $dir) {
                 $this->build($dir, $this->packageFiles($agent, $mode, $credential));
@@ -55,9 +60,13 @@ class PluginRepo
      * installs it) substitutes its own name, which becomes the Basic
      * username on the /mcp URL.
      */
-    public function ensureGlobal(string $fleetKey): string
+    public function ensureGlobal(string $fleetKey, bool $fresh = true): string
     {
         $dir = $this->globalDir();
+
+        if (! $fresh && is_file($dir.'/info/refs')) {
+            return $dir;
+        }
 
         return Cache::lock('melfina-plugin-repo:global', 30)
             ->block(10, function () use ($dir, $fleetKey) {
@@ -99,9 +108,13 @@ class PluginRepo
      * value in mcp.json is a placeholder the installer fills in) and
      * return its repo path.
      */
-    public function ensureGlobalPublic(): string
+    public function ensureGlobalPublic(bool $fresh = true): string
     {
         $dir = $this->publicDir();
+
+        if (! $fresh && is_file($dir.'/info/refs')) {
+            return $dir;
+        }
 
         return Cache::lock('melfina-plugin-repo:global-public', 30)
             ->block(10, function () use ($dir) {
@@ -324,8 +337,16 @@ class PluginRepo
             ['-C', $work, 'update-server-info'],
         ];
 
+        // Fixed timestamps keep every rebuild byte-identical (same commit
+        // SHA, same pack names) — a clone spanning several requests sees
+        // one consistent repo even though each request rebuilds it.
+        $env = [
+            'GIT_AUTHOR_DATE' => '2026-01-01T00:00:00Z',
+            'GIT_COMMITTER_DATE' => '2026-01-01T00:00:00Z',
+        ];
+
         foreach ($steps as $args) {
-            $process = new Process(array_merge(['git'], $args));
+            $process = new Process(array_merge(['git'], $args), null, $env);
             $process->run();
 
             if (! $process->isSuccessful()) {

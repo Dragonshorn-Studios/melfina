@@ -367,6 +367,24 @@ it('serves the credential-free fleet package at the public derived URL', functio
         ->not->toContain('X-Melfina-Agent-Key');
 });
 
+it('rebuilds the public repo byte-identically across requests', function () {
+    // A dumb-HTTP clone spans several requests (info/refs → HEAD →
+    // objects/pack/…); each rebuilds the repo, so the commit is pinned to
+    // a fixed date — otherwise every build gets a new SHA and mid-clone
+    // object fetches 404.
+    $repos = app(PluginRepo::class);
+    $packs = fn () => collect(File::files($repos->publicDir().'/objects/pack'))
+        ->map->getFilename()->sort()->values()->all();
+
+    $repos->ensureGlobalPublic();
+    $first = $packs();
+
+    $repos->ensureGlobalPublic();
+
+    expect($first)->not->toBeEmpty()
+        ->and($packs())->toEqual($first);
+});
+
 it('does not answer unknown public-looking repo names', function () {
     $this->get('/plugins/g-'.str_repeat('ab', 16).'.git/info/refs')
         ->assertUnauthorized(); // falls through to the Basic challenge
