@@ -117,7 +117,7 @@ it('requires authentication for listen', function () {
         ->assertUnauthorized();
 });
 
-it('still fails closed when a persona-less fleet request is not a listen', function () {
+it('still fails closed when a persona-less fleet request is a tool call', function () {
     $fleet = McpFleetKey::issue($this->owner, 'grokbot');
 
     test()->postJson('/mcp', [

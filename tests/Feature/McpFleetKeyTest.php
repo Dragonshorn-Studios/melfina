@@ -238,6 +238,43 @@ it('scopes fleet-mode calls to the presented agent', function () {
         ->and($this->agent->files()->where('path', 'note.txt')->exists())->toBeFalse();
 });
 
+it('fails closed on a tools/call name argument that resolves no agent', function () {
+    foreach (['no-such-agent', 'melf_deadkey'] as $persona) {
+        ($this->mcp)('tools/call', [
+            'name' => 'list_files',
+            'arguments' => ['name' => $persona],
+        ], $this->fleetKey)->assertUnauthorized();
+    }
+
+    $this->agent->update(['status' => Agent::STATUS_DISABLED]);
+    ($this->mcp)('tools/call', [
+        'name' => 'list_files',
+        'arguments' => ['name' => $this->agent->name],
+    ], $this->fleetKey)->assertUnauthorized();
+});
+
+it('resolves the query persona on tools/call and prefers the header over arguments', function () {
+    // ?agent_key=<name> on a tools/call resolves the same as the header.
+    $this->postJson('/mcp?agent_key='.$this->agent->name, [
+        'jsonrpc' => '2.0',
+        'id' => 1,
+        'method' => 'tools/call',
+        'params' => ['name' => 'list_files', 'arguments' => []],
+    ], ['Authorization' => 'Bearer '.$this->fleetKey])->assertOk();
+
+    // Header persona wins over a mismatched arguments.name — on a fleet
+    // connection the header is the declared persona, the argument is a
+    // last resort for clients that can't set headers.
+    $other = Agent::factory()->withKey('melf_otherkey')->create(['name' => 'otherbot']);
+    ($this->mcp)('tools/call', [
+        'name' => 'write_file',
+        'arguments' => ['name' => 'otherbot', 'path' => 'h.txt', 'content' => 'x'],
+    ], $this->fleetKey, ['X-Melfina-Agent-Key' => $this->agent->name])->assertOk();
+
+    expect($this->agent->files()->where('path', 'h.txt')->exists())->toBeTrue()
+        ->and($other->files()->where('path', 'h.txt')->exists())->toBeFalse();
+});
+
 it('rejects a bogus fleet bearer', function () {
     ($this->mcp)('tools/list', [], 'melfg_wrong', ['X-Melfina-Agent-Key' => 'melf_testkey'])
         ->assertUnauthorized();
