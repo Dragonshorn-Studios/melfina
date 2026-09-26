@@ -104,13 +104,23 @@ class PluginRepo
     }
 
     /**
+     * Deliberately lacks the `.git` suffix so `dropAllRepos` (which wipes
+     * `*.git*` on credential rotation) leaves it alone — the public
+     * package contains no credentials, so rotation doesn't stale it.
+     */
+    public function publicDir(): string
+    {
+        return storage_path('app/mcp-plugins/public-repo');
+    }
+
+    /**
      * Build the public, credential-free fleet package (every sensitive
      * value in mcp.json is a placeholder the installer fills in) and
      * return its repo path.
      */
     public function ensureGlobalPublic(): string
     {
-        $dir = $this->globalDir().'-public';
+        $dir = $this->publicDir();
         $fingerprint = hash('sha256', implode('|', ['public', $this->endpoint(), 'v1']));
 
         if ($this->fresh($dir, $fingerprint)) {
@@ -481,6 +491,11 @@ agent on the install — before connecting, replace `YOUR_AGENT_NAME` in the
 `mcp.json` URL with your own agent name. That name is your persona: it is
 not a secret, and you can find it in your own instructions.
 
+If your name contains `:` or `@`, percent-encode it in the URL
+(`ops:pilot` → `ops%3Apilot`) — or skip the URL form entirely and send
+`Authorization: Bearer <fleet key>` plus `X-Melfina-Agent-Key: <your name>`
+as headers instead.
+
 - `read_instructions` — your layered instructions; read them when you need your standing orders.
 - `list_files` / `read_file` / `write_file` — your private tree. Nobody else can see or touch it.
 - `list_shared` / `read_shared` / `write_shared` — shared spaces you hold an ACL grant on.
@@ -502,8 +517,9 @@ with that agent's name:
     {$personaUrl}
 
 The Basic-auth username is the persona (an agent name, not a secret); the
-password is the fleet key. Clients that can't put credentials in the URL
-can send the same values as `Authorization: Bearer <fleet key>` plus an
+password is the fleet key. Percent-encode names containing `:` or `@`
+(`ops:pilot` → `ops%3Apilot`). Clients that can't put credentials in the
+URL can send the same values as `Authorization: Bearer <fleet key>` plus an
 `X-Melfina-Agent-Key: <agent name>` header instead.
 
 The endpoint is {$endpoint}.
@@ -596,6 +612,11 @@ instructions) and `YOUR_KEY` with your own `melf_…` key. On a shared
 install, the owner can also hand you the fleet key (`melfg_…`) to use as
 the password instead.
 
+If your name contains `:` or `@`, percent-encode it in the URL
+(`ops:pilot` → `ops%3Apilot`) — or skip the URL form entirely and send
+`Authorization: Bearer <key>` plus `X-Melfina-Agent-Key: <your name>` as
+headers instead.
+
 - `read_instructions` — your layered instructions; read them when you need your standing orders.
 - `list_files` / `read_file` / `write_file` — your private tree. Nobody else can see or touch it.
 - `list_shared` / `read_shared` / `write_shared` — shared spaces you hold an ACL grant on.
@@ -614,7 +635,8 @@ Before an agent connects, it edits `mcp.json`:
 
     {$personaUrl}
 
-`YOUR_NAME` → the agent's name (the persona, not a secret).
+`YOUR_NAME` → the agent's name (the persona, not a secret) —
+percent-encode `:` or `@` (`ops:pilot` → `ops%3Apilot`).
 `YOUR_KEY`  → the agent's own `melf_…` key, or the install's fleet key
 (`melfg_…`) for shared setups where the agent key isn't known.
 
