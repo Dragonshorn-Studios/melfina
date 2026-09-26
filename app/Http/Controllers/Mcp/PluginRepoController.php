@@ -18,10 +18,14 @@ use Symfony\Component\HttpFoundation\Response;
  *
  *     https://{persona}:{fleetKey}@host/plugins/anything.git
  *     https://{persona}:{agentKey}@host/plugins/anything.git
+ *     https://melfina:{fleetKey}@host/plugins/~melfina.git
  *
  * The username picks the persona (agent name or `melf_…` key) in fleet
- * mode and is cosmetic in direct mode; the path segment is decorative.
- * Missing credentials get a Basic challenge, dead ones a flat 404.
+ * mode and is cosmetic in direct mode; the path segment is decorative —
+ * except `~melfina.git`, which serves the fleet-wide package gated only by
+ * the fleet key. The `~` prefix can never collide with a per-agent URL:
+ * those are built from `Str::slug($agent->name)`, and slugs never contain
+ * `~`. Missing credentials get a Basic challenge, dead ones a flat 404.
  */
 class PluginRepoController extends Controller
 {
@@ -32,6 +36,19 @@ class PluginRepoController extends Controller
 
         if (! is_string($password) || $password === '') {
             return response('', 401, ['WWW-Authenticate' => 'Basic realm="melfina-plugins"']);
+        }
+
+        // The fleet-wide package: one repo for the whole install, keyed
+        // only by the fleet credential — each agent fills in its own name.
+        // `~melfina.git` is a reserved path — no agent slug can produce it.
+        if ($repo === '~melfina.git' && User::isMcpKey($password)) {
+            try {
+                $dir = $repos->ensureGlobal($password);
+            } catch (\Throwable) {
+                abort(500);
+            }
+
+            return $this->sendFile($repos, $dir, $path);
         }
 
         [$agent, $mode] = $this->resolve($user, $password);
@@ -46,6 +63,11 @@ class PluginRepoController extends Controller
             abort(500);
         }
 
+        return $this->sendFile($repos, $dir, $path);
+    }
+
+    private function sendFile(PluginRepo $repos, string $dir, string $path): Response
+    {
         $file = $repos->file($dir, $path === '' ? 'info/refs' : $path);
 
         if ($file === null) {

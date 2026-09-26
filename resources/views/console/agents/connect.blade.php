@@ -13,7 +13,9 @@
             as <code>X-Melfina-Agent-Key</code> (or <code>?agent_key=</code> — names only there, keys
             stay out of query strings). The name is not a secret — the agent just has to know it.
             On a shared config the fleet key is identical for every agent — the persona is what gives each
-            one its brain.
+            one its brain. URL-only clients can fold both into the endpoint itself:
+            <code>{{ $endpointPersonaUrl }}</code> —
+            the Basic username is the persona, the password the fleet key.
         </p>
         <pre class="mt-4 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $endpoint }}</pre>
 
@@ -28,7 +30,9 @@
             <pre class="mt-3 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $pluginUrl }}</pre>
             <p class="mt-2 text-sm text-steel">
                 Without a fleet key, <code>{{ $pluginUrlDirect }}</code> works too — the package
-                then carries just the agent key.
+                then carries just the agent key. And for a multi-agent setup on one provider,
+                <code>{{ $pluginUrlFleet }}</code> is a single fleet-wide package: the agent fills
+                its own name into the MCP URL's Basic username to claim its persona.
                 @if ($hasPackage)
                     For upload-only flows,
                     <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.plugin', $agent) }}">download the plugin ZIP</a>
