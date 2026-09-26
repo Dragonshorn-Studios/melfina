@@ -171,13 +171,22 @@ it('lets the owner read and curate an agent persona and memories', function () {
         ])->assertRedirect();
     expect($this->agent->fresh()->persona)->toBe('gentle and verbose');
 
-    // Pruning by index re-packs the log.
+    // Pruning by index re-packs the log — the form echoes a hash of the
+    // entry it rendered so a stale page can't silently prune the wrong one.
+    $expect = md5(json_encode($this->agent->fresh()->memories[0]));
     $this->actingAs($this->owner)
-        ->delete(route('console.agents.memories.destroy', [$this->agent, 0]))
+        ->delete(route('console.agents.memories.destroy', [$this->agent, 0]), ['expect' => $expect])
         ->assertRedirect(route('console.agents.persona.edit', $this->agent));
 
     expect(collect($this->agent->fresh()->memories)->pluck('text')->all())
         ->toEqual(['prod host is melfina.dragonshorn.cloud', 'owner works from Warsaw', 'persona untouched']);
+
+    // A mismatched expect (stale index after a shift) is a 404, not a
+    // wrong-entry delete.
+    $this->actingAs($this->owner)
+        ->delete(route('console.agents.memories.destroy', [$this->agent, 0]), ['expect' => $expect])
+        ->assertNotFound();
+    expect($this->agent->fresh()->memories)->toHaveCount(3);
 
     $this->actingAs($this->owner)
         ->delete(route('console.agents.memories.destroy', [$this->agent, 99]))

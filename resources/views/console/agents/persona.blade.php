@@ -47,6 +47,7 @@
                                 onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Delete this memory?">
                                 @csrf
                                 @method('DELETE')
+                                <input type="hidden" name="expect" value="{{ md5(json_encode($memory)) }}">
                                 <button type="submit" class="shrink-0 font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">REMOVE</button>
                             </form>
                         </li>

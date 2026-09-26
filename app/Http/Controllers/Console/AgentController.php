@@ -7,6 +7,7 @@ use App\Mcp\PluginRepo;
 use App\Models\Agent;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -192,34 +193,50 @@ class AgentController extends Controller
             'remember' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        // Only touch persona when the field was actually submitted — a bare
-        // "append memory" request must not wipe it.
-        if ($request->has('persona')) {
-            $agent->persona = $validated['persona'];
-            $agent->save();
-        }
+        // Both writes in one transaction — a failed remember must not
+        // leave a half-applied persona edit behind.
+        DB::transaction(function () use ($agent, $request, $validated): void {
+            // Only touch persona when the field was actually submitted — a
+            // bare "append memory" request must not wipe it.
+            if ($request->has('persona')) {
+                $agent->persona = $validated['persona'];
+                $agent->save();
+            }
 
-        if (filled($validated['remember'] ?? null)) {
-            $agent->remember($validated['remember']);
-        }
+            if (filled($validated['remember'] ?? null)) {
+                $agent->remember($validated['remember']);
+            }
+        });
 
         return redirect()->route('console.agents.persona.edit', $agent);
     }
 
     /**
-     * Prune one memory entry by position — indexes shift after a delete,
-     * so an out-of-range index is a plain 404.
+     * Prune one memory entry by position. Indexes shift after every write,
+     * so the form echoes a hash of the entry it rendered — a stale page
+     * pointing at a shifted index 404s instead of pruning the wrong entry.
      */
-    public function destroyMemory(Agent $agent, int $index): RedirectResponse
+    public function destroyMemory(Request $request, Agent $agent, int $index): RedirectResponse
     {
         $this->authorize('update', $agent);
 
-        $memories = $agent->memories ?? [];
-        abort_unless(isset($memories[$index]), 404);
+        DB::transaction(function () use ($request, $agent, $index): void {
+            // Re-read inside the transaction: the imp appends to this log
+            // autonomously, and a fresh read keeps an interleaved append
+            // from being clobbered by the read-modify-write.
+            $agent->refresh();
 
-        unset($memories[$index]);
-        $agent->memories = array_values($memories);
-        $agent->save();
+            $memories = $agent->memories ?? [];
+            abort_unless(isset($memories[$index]), 404);
+            abort_unless(
+                hash_equals(md5(json_encode($memories[$index])), $request->string('expect')->toString()),
+                404,
+            );
+
+            unset($memories[$index]);
+            $agent->memories = array_values($memories);
+            $agent->save();
+        });
 
         return redirect()->route('console.agents.persona.edit', $agent);
     }
