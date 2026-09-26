@@ -30,7 +30,7 @@
 
         @if ($path !== '')
             <form method="POST" action="{{ route('console.files.destroy', $agent) }}" class="mt-8 border-t border-border pt-6"
-                onsubmit="return confirm('Delete {{ $path }}?');">
+                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Delete {{ $path }}?">
                 @csrf
                 @method('DELETE')
                 <input type="hidden" name="path" value="{{ $path }}">

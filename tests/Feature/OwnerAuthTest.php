@@ -38,6 +38,11 @@ it('closes registration once an owner exists', function () {
 
 it('redirects guests away from the owner console', function () {
     $this->get(route('console.dashboard'))->assertRedirect(route('login'));
+
+    // The shared confirm dialog is owner chrome — guests never see it.
+    $this->get(route('login'))
+        ->assertOk()
+        ->assertDontSee('id="melfina-confirm"', false);
 });
 
 it('lets the owner into the console', function () {
@@ -45,7 +50,11 @@ it('lets the owner into the console', function () {
 
     $this->actingAs($owner)
         ->get(route('console.dashboard'))
-        ->assertOk();
+        ->assertOk()
+        ->assertSee('id="melfina-confirm"', false)
+        ->assertSee('data-confirm="Rotate the fleet key?', false)
+        ->assertSee('onsubmit="return window.__melfinaConfirm', false)
+        ->assertSee('lg:sticky', false);
 });
 
 it('forbids non-owner users from owner routes', function () {

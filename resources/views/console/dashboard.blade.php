@@ -51,7 +51,7 @@
             <div class="flex items-center justify-between">
                 <p class="font-mono text-xs tracking-[0.16em] text-steel">MCP ACCESS</p>
                 <form method="POST" action="{{ route('console.mcp-key.store') }}"
-                    onsubmit="return confirm('Rotate the fleet key? Every shared MCP config using the old key stops working immediately.');">
+                    onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Rotate the fleet key? Every shared MCP config using the old key stops working immediately.">
                     @csrf
                     <button type="submit"
                         class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"

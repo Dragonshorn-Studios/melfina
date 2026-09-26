@@ -40,7 +40,7 @@
                 class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
                 style="border-radius: var(--radius-console)">instructions</a>
             <form method="POST" action="{{ route('console.agents.rotate', $agent) }}"
-                onsubmit="return confirm('Rotate key? The old key stops working immediately.');">
+                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Rotate key? The old key stops working immediately.">
                 @csrf
                 <button type="submit"
                     class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"
