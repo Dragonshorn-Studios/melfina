@@ -25,8 +25,15 @@ beforeEach(function () {
     };
 });
 
-it('rejects a fleet bearer without an agent key', function () {
-    ($this->mcp)('tools/list', [], $this->fleetKey)
+it('lets a fleet bearer discover persona-free but fails closed on tools/call', function () {
+    ($this->mcp)('initialize', [], $this->fleetKey)->assertOk();
+    ($this->mcp)('tools/list', [], $this->fleetKey)->assertOk();
+    ($this->mcp)('ping', [], $this->fleetKey)->assertOk();
+
+    // Only agent-scoped calls need a persona.
+    ($this->mcp)('tools/call', [
+        'name' => 'list_files', 'arguments' => [],
+    ], $this->fleetKey)
         ->assertUnauthorized()
         ->assertJson(['error' => 'agent persona required']);
 });
@@ -46,7 +53,13 @@ it('resolves the persona from the agent name', function () {
 it('fails closed on a disabled agent name', function () {
     $this->agent->update(['status' => Agent::STATUS_DISABLED]);
 
+    // Discovery still answers — only the agent-scoped call is refused.
     ($this->mcp)('tools/list', [], $this->fleetKey, ['X-Melfina-Agent-Key' => $this->agent->name])
+        ->assertOk();
+
+    ($this->mcp)('tools/call', [
+        'name' => 'list_files', 'arguments' => [],
+    ], $this->fleetKey, ['X-Melfina-Agent-Key' => $this->agent->name])
         ->assertUnauthorized();
 });
 
@@ -63,12 +76,13 @@ it('resolves the persona from the agent_key query param (names only)', function 
         'params' => [],
     ], ['Authorization' => 'Bearer '.$this->fleetKey])->assertOk();
 
-    // Secrets stay out of query strings — the key form is header-only.
+    // Secrets stay out of query strings — the key form is header-only, so
+    // a key in the query resolves no persona and tools/call fails closed.
     $this->postJson('/mcp?agent_key=melf_testkey', [
         'jsonrpc' => '2.0',
         'id' => 1,
-        'method' => 'tools/list',
-        'params' => [],
+        'method' => 'tools/call',
+        'params' => ['name' => 'list_files', 'arguments' => []],
     ], ['Authorization' => 'Bearer '.$this->fleetKey])->assertUnauthorized();
 });
 
@@ -106,7 +120,8 @@ it('claims the persona from a Basic username on /mcp', function () {
         ->postJson('/mcp', [
             'jsonrpc' => '2.0',
             'id' => 1,
-            'method' => 'tools/list',
+            'method' => 'tools/call',
+            'params' => ['name' => 'list_files', 'arguments' => []],
         ])->assertUnauthorized();
 
     // A disabled agent's name fails closed through the same path.
@@ -115,7 +130,8 @@ it('claims the persona from a Basic username on /mcp', function () {
         ->postJson('/mcp', [
             'jsonrpc' => '2.0',
             'id' => 1,
-            'method' => 'tools/list',
+            'method' => 'tools/call',
+            'params' => ['name' => 'list_files', 'arguments' => []],
         ])->assertUnauthorized();
     $this->agent->update(['status' => Agent::STATUS_ACTIVE]);
 });
@@ -129,12 +145,21 @@ it('treats an empty Basic username like a bare fleet Bearer', function () {
             'method' => 'tools/list',
         ])->assertOk();
 
-    // No persona anywhere still fails closed.
+    // No persona anywhere: discovery answers, the agent-scoped call
+    // fails closed.
     $this->withBasicAuth('', $this->fleetKey)
         ->postJson('/mcp', [
             'jsonrpc' => '2.0',
             'id' => 1,
             'method' => 'tools/list',
+        ])->assertOk();
+
+    $this->withBasicAuth('', $this->fleetKey)
+        ->postJson('/mcp', [
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'tools/call',
+            'params' => ['name' => 'list_files', 'arguments' => []],
         ])->assertUnauthorized();
 });
 
@@ -177,12 +202,16 @@ it('accepts a dedicated agent key as the Basic password', function () {
 });
 
 it('rejects a fleet bearer with an unknown or disabled agent key', function () {
-    ($this->mcp)('tools/list', [], $this->fleetKey, ['X-Melfina-Agent-Key' => 'melf_wrong'])
+    ($this->mcp)('tools/call', [
+        'name' => 'list_files', 'arguments' => [],
+    ], $this->fleetKey, ['X-Melfina-Agent-Key' => 'melf_wrong'])
         ->assertUnauthorized();
 
     $this->agent->update(['status' => Agent::STATUS_DISABLED]);
 
-    ($this->mcp)('tools/list', [], $this->fleetKey, ['X-Melfina-Agent-Key' => 'melf_testkey'])
+    ($this->mcp)('tools/call', [
+        'name' => 'list_files', 'arguments' => [],
+    ], $this->fleetKey, ['X-Melfina-Agent-Key' => 'melf_testkey'])
         ->assertUnauthorized();
 });
 
@@ -287,14 +316,15 @@ it('serves the fleet-wide ~melfina.git package without a persona', function () {
 
     $mcp = $show('mcp.json');
     expect($mcp)
-        ->toContain('YOUR_AGENT_NAME:'.$this->fleetKey.'@')
+        ->toContain('Bearer '.$this->fleetKey)
         ->toContain('/mcp')
+        ->not->toContain('YOUR_AGENT_NAME')
         ->not->toContain('X-Melfina-Agent-Key')
         ->not->toContain('melf_testkey');
 
     expect(json_decode($show('plugin.json'), true)['name'])->toBe('melfina')
         ->and(json_decode($show('.minimax-plugin/plugin.json'), true)['name'])->toBe('melfina')
-        ->and($show('skills/melfina/SKILL.md'))->toContain('YOUR_AGENT_NAME');
+        ->and($show('skills/melfina/SKILL.md'))->toContain('`name` argument');
 
     // An agent key presented as the password still gets the per-agent
     // direct repo, not the fleet package — even on the reserved path.
@@ -361,7 +391,8 @@ it('serves the credential-free fleet package at the public derived URL', functio
     // Placeholders only — the public repo must embed no credential.
     $mcp = $show('mcp.json');
     expect($mcp)
-        ->toContain('YOUR_NAME:YOUR_KEY@')
+        ->toContain('Bearer YOUR_KEY')
+        ->not->toContain('YOUR_NAME')
         ->not->toContain($this->fleetKey)
         ->not->toContain('melf_testkey')
         ->not->toContain('X-Melfina-Agent-Key');
@@ -558,10 +589,8 @@ it('resolves the persona from a `name` tool argument on fleet auth', function ()
 
     expect($this->agent->files()->where('path', 'who.txt')->exists())->toBeTrue();
 
-    // tools/list can't carry an argument persona — still needs the header.
-    ($this->mcp)('tools/list', [], $this->fleetKey)
-        ->assertUnauthorized()
-        ->assertJson(['error' => 'agent persona required']);
+    // tools/list needs no persona at all — discovery is fleet-level.
+    ($this->mcp)('tools/list', [], $this->fleetKey)->assertOk();
 });
 
 it('fails a personal-key call whose `name` argument is a different agent', function () {
@@ -615,7 +644,7 @@ it('downloads the credential-free fleet package as a zip', function () {
     // Dot-manifests ship, and nothing inside carries a credential.
     expect($zip->statName('mcp.json'))->not->toBeFalse()
         ->and($zip->statName('.minimax-plugin/plugin.json'))->not->toBeFalse()
-        ->and($zip->getFromName('mcp.json'))->toContain('YOUR_NAME:YOUR_KEY@')
+        ->and($zip->getFromName('mcp.json'))->toContain('Bearer YOUR_KEY')
         ->not->toContain($this->fleetKey)
         ->not->toContain('melf_testkey');
     $zip->close();

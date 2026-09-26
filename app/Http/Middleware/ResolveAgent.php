@@ -82,9 +82,12 @@ class ResolveAgent
     }
 
     /**
-     * Fleet-mode request: the fleet key only opens the endpoint. The persona
+     * Fleet-mode request: the fleet key opens the endpoint. The persona
      * comes from what the agent knows about itself — its name or key —
-     * without one there is no agent to scope to, so the request fails closed.
+     * and only agent-scoped calls (`tools/call`) need one: discovery
+     * (initialize, tools/list, ping, notifications, the listen stream)
+     * works persona-less, so a shared client can connect before any imp
+     * has named itself.
      */
     private function handleFleetRequest(Request $request, Closure $next, ?string $basicPersona = null): Response
     {
@@ -111,17 +114,19 @@ class ResolveAgent
 
         $agent = is_string($persona) ? Agent::forPersona($persona) : null;
 
-        // A fleet subscription stream needs no persona — it listens for
-        // every imp the connection hosts. Tool calls still fail closed.
-        if ($agent === null && $request->input('method') === 'subscriptions/listen') {
+        if ($agent !== null) {
+            $request->attributes->set('agent', $agent);
+
             return $next($request);
         }
 
-        if ($agent === null) {
+        // Everything except tools/call is fleet-level discovery, persona
+        // or not — the listen stream included, since it hears every imp's
+        // mail. Only a tool call binds to an agent, so it alone fails
+        // closed when no persona resolves.
+        if ($request->input('method') === 'tools/call') {
             return $this->unauthorized('agent persona required');
         }
-
-        $request->attributes->set('agent', $agent);
 
         return $next($request);
     }
