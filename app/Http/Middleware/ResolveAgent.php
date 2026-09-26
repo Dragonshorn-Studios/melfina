@@ -30,6 +30,26 @@ class ResolveAgent
 {
     public const AGENT_KEY_HEADER = 'X-Melfina-Agent-Key';
 
+    /**
+     * Methods a fleet-key connection may call without a persona — the
+     * endpoint's discovery surface only. Deliberately an allowlist:
+     * tools/call needs a persona, and any future agent-scoped method added
+     * to the server fails closed until it's consciously listed here.
+     */
+    private const FLEET_DISCOVERY_METHODS = [
+        'initialize',
+        'ping',
+        'tools/list',
+        'resources/list',
+        'resources/read',
+        'resources/templates/list',
+        'prompts/list',
+        'prompts/get',
+        'completion/complete',
+        'server/discover',
+        'subscriptions/listen',
+    ];
+
     public function handle(Request $request, Closure $next): Response
     {
         $token = $request->bearerToken();
@@ -84,8 +104,8 @@ class ResolveAgent
     /**
      * Fleet-mode request: the fleet key opens the endpoint. The persona
      * comes from what the agent knows about itself — its name or key —
-     * and only agent-scoped calls (`tools/call`) need one: discovery
-     * (initialize, tools/list, ping, notifications, the listen stream)
+     * and agent-scoped calls need one. Discovery (initialize, tools/list,
+     * ping, notifications, the listen stream — see FLEET_DISCOVERY_METHODS)
      * works persona-less, so a shared client can connect before any imp
      * has named itself.
      */
@@ -120,11 +140,14 @@ class ResolveAgent
             return $next($request);
         }
 
-        // Everything except tools/call is fleet-level discovery, persona
-        // or not — the listen stream included, since it hears every imp's
-        // mail. Only a tool call binds to an agent, so it alone fails
-        // closed when no persona resolves.
-        if ($request->input('method') === 'tools/call') {
+        // Discovery answers persona-less — the listen stream included,
+        // since it hears every imp's mail. Anything else needs a resolved
+        // agent, so unknown or future agent-scoped methods fail closed.
+        $method = $request->input('method');
+        $discovery = in_array($method, self::FLEET_DISCOVERY_METHODS, true)
+            || (is_string($method) && str_starts_with($method, 'notifications/'));
+
+        if (! $discovery) {
             return $this->unauthorized('agent persona required');
         }
 

@@ -29,11 +29,22 @@ it('lets a fleet bearer discover persona-free but fails closed on tools/call', f
     ($this->mcp)('initialize', [], $this->fleetKey)->assertOk();
     ($this->mcp)('tools/list', [], $this->fleetKey)->assertOk();
     ($this->mcp)('ping', [], $this->fleetKey)->assertOk();
+    ($this->mcp)('resources/list', [], $this->fleetKey)->assertOk();
+    ($this->mcp)('server/discover', [], $this->fleetKey)->assertOk();
 
-    // Only agent-scoped calls need a persona.
+    // Notifications pass the middleware persona-less; the transport then
+    // 404s the unknown notification — the point is it's not a 401.
+    expect(($this->mcp)('notifications/initialized', [], $this->fleetKey)->status())->not->toBe(401);
+
+    // Agent-scoped calls — and anything the allowlist doesn't know —
+    // fail closed.
     ($this->mcp)('tools/call', [
         'name' => 'list_files', 'arguments' => [],
     ], $this->fleetKey)
+        ->assertUnauthorized()
+        ->assertJson(['error' => 'agent persona required']);
+
+    ($this->mcp)('melfina/future-agent-method', [], $this->fleetKey)
         ->assertUnauthorized()
         ->assertJson(['error' => 'agent persona required']);
 });
