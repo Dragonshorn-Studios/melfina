@@ -74,6 +74,9 @@
                         <a href="{{ route('console.shared.index') }}"
                             class="border px-3 py-1.5 font-mono text-xs {{ request()->routeIs('console.shared.*') ? 'border-amber bg-void text-amber' : 'border-transparent text-steel hover:border-border hover:text-cream' }}"
                             style="border-radius: var(--radius-console)">shared</a>
+                        <a href="{{ route('console.mcp.connect') }}"
+                            class="border px-3 py-1.5 font-mono text-xs {{ request()->routeIs('console.mcp.*') ? 'border-amber bg-void text-amber' : 'border-transparent text-steel hover:border-border hover:text-cream' }}"
+                            style="border-radius: var(--radius-console)">mcp</a>
                         <a href="{{ route('console.clients.index') }}"
                             class="border px-3 py-1.5 font-mono text-xs {{ request()->routeIs('console.clients.*') ? 'border-amber bg-void text-amber' : 'border-transparent text-steel hover:border-border hover:text-cream' }}"
                             style="border-radius: var(--radius-console)">clients</a>
@@ -116,8 +119,10 @@
         </div>
 
         @auth
+            {{-- m-auto restores the UA's margin:auto dialog centering that
+                 the Tailwind preflight margin reset strips away. --}}
             <dialog id="melfina-confirm"
-                class="w-[min(24rem,90vw)] border border-border bg-panel p-0 text-cream backdrop:bg-void/80"
+                class="m-auto w-[min(24rem,90vw)] border border-border bg-panel p-0 text-cream backdrop:bg-void/80"
                 style="border-radius: var(--radius-console)">
                 <form method="dialog" class="p-5">
                     <p class="font-mono text-xs tracking-[0.16em] text-amber">CONFIRM</p>

@@ -4,6 +4,7 @@ use App\Mcp\PluginRepo;
 use App\Models\Agent;
 use App\Models\User;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use Symfony\Component\Process\Process;
 use ZipArchive;
 
@@ -343,6 +344,68 @@ it('never serves the fleet package at a slug-colliding path', function () {
         ->and(is_dir($repos->globalDir()))->toBeFalse();
 });
 
+it('serves the credential-free fleet package at the public derived URL', function () {
+    $repos = app(PluginRepo::class);
+    $url = '/plugins/'.$repos->publicRepoName().'/';
+
+    // No Basic credentials at all — dumb importers get the repo directly.
+    $this->get($url.'info/refs')->assertOk();
+    $this->get($url.'HEAD')->assertOk();
+
+    $dir = $repos->publicDir();
+    $show = fn (string $f) => tap(new Process(['git', '--git-dir='.$dir, 'show', 'HEAD:'.$f]), fn ($p) => $p->run())->getOutput();
+
+    // Placeholders only — the public repo must embed no credential.
+    $mcp = $show('mcp.json');
+    expect($mcp)
+        ->toContain('YOUR_NAME:YOUR_KEY@')
+        ->not->toContain($this->fleetKey)
+        ->not->toContain('melf_testkey')
+        ->not->toContain('X-Melfina-Agent-Key');
+});
+
+it('does not answer unknown public-looking repo names', function () {
+    $this->get('/plugins/g-'.str_repeat('ab', 16).'.git/info/refs')
+        ->assertUnauthorized(); // falls through to the Basic challenge
+});
+
+it('rejects an agent name that slugs to the public repo name', function () {
+    $reserved = Str::beforeLast(app(PluginRepo::class)->publicRepoName(), '.git');
+
+    $this->actingAs($this->owner)
+        ->post(route('console.agents.store'), ['name' => $reserved])
+        ->assertSessionHasErrors('name');
+
+    $this->assertDatabaseMissing('agents', ['name' => $reserved]);
+});
+
+it('does not wipe the public repo on fleet rotation', function () {
+    $repos = app(PluginRepo::class);
+    $repos->ensureGlobalPublic();
+    expect(is_dir($repos->publicDir()))->toBeTrue();
+
+    $repos->dropAllRepos();
+
+    // Credential-free, so rotation must not invalidate it.
+    expect(is_dir($repos->publicDir()))->toBeTrue();
+});
+
+it('tells installers to percent-encode colon names in the fleet packages', function () {
+    $repos = app(PluginRepo::class);
+    $this->actingAs($this->owner)
+        ->withBasicAuth('melfina', $this->fleetKey)
+        ->get('/plugins/~melfina.git/info/refs');
+    $repos->ensureGlobalPublic();
+
+    $show = fn (string $dir, string $f) => tap(new Process(['git', '--git-dir='.$dir, 'show', 'HEAD:'.$f]), fn ($p) => $p->run())->getOutput();
+
+    foreach ([$repos->globalDir(), $repos->publicDir()] as $dir) {
+        $docs = $show($dir, 'README.md').$show($dir, 'skills/melfina/SKILL.md');
+        expect($docs)->toContain('percent-encode')
+            ->toContain('X-Melfina-Agent-Key');
+    }
+});
+
 it('keeps the two clone modes in separate repos', function () {
     $this->withBasicAuth('x', 'melf_testkey')->get('/plugins/a.git/info/refs')->assertOk();
     $this->withBasicAuth($this->agent->name, $this->fleetKey)->get('/plugins/a.git/info/refs')->assertOk();
@@ -445,6 +508,18 @@ it('renders the persona clone URLs on the connect page', function () {
         ->assertSee(rawurlencode($this->agent->name), false)
         ->assertSee('/plugins/~melfina.git', false)
         ->assertSee('melfina:melfg_…@', false);
+});
+
+it('renders the global connect page with both fleet repo URLs', function () {
+    $repos = app(PluginRepo::class);
+
+    $this->actingAs($this->owner)
+        ->get(route('console.mcp.connect'))
+        ->assertOk()
+        ->assertSee('INSTALL AS PLUGIN', false)
+        ->assertSee('/plugins/~melfina.git', false)
+        ->assertSee('/plugins/'.$repos->publicRepoName(), false)
+        ->assertSee('NAME:melfg_…@', false);
 });
 
 it('keeps the plugin zip owner-only', function () {

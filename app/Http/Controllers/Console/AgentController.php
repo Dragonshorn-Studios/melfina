@@ -38,7 +38,7 @@ class AgentController extends Controller
         $this->authorize('create', Agent::class);
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('agents', 'name')],
+            'name' => ['required', 'string', 'max:255', Rule::unique('agents', 'name'), $this->reservedNameRule()],
         ]);
 
         $agent = Agent::query()->create(['name' => $validated['name']]);
@@ -150,7 +150,7 @@ class AgentController extends Controller
         $this->authorize('update', $agent);
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('agents', 'name')->ignore($agent->id)],
+            'name' => ['required', 'string', 'max:255', Rule::unique('agents', 'name')->ignore($agent->id), $this->reservedNameRule()],
             'status' => ['required', 'string', 'in:'.Agent::STATUS_ACTIVE.','.Agent::STATUS_DISABLED],
         ]);
 
@@ -224,5 +224,19 @@ class AgentController extends Controller
         $slug = Str::slug($agent->name) ?: 'agent';
 
         return response()->download($zipPath, 'melfina-'.$slug.'.zip')->deleteFileAfterSend();
+    }
+
+    /**
+     * Reject names whose plugin-repo slug would collide with a reserved
+     * repo path — the public fleet package's derived name shadows any
+     * per-agent clone URL that maps to it.
+     */
+    private function reservedNameRule(): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail): void {
+            if (Str::slug((string) $value).'.git' === app(PluginRepo::class)->publicRepoName()) {
+                $fail('This name is reserved by the fleet plugin repo.');
+            }
+        };
     }
 }

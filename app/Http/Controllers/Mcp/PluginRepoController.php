@@ -31,6 +31,19 @@ class PluginRepoController extends Controller
 {
     public function show(Request $request, PluginRepo $repos, string $repo, string $path = ''): Response
     {
+        // Public fleet package: a credential-free repo at an unguessable
+        // derived name, for importers that never retry with credentials.
+        // Nothing in it is secret, so no Basic challenge is issued.
+        if ($repo === $repos->publicRepoName()) {
+            try {
+                $dir = $repos->ensureGlobalPublic();
+            } catch (\Throwable) {
+                abort(500);
+            }
+
+            return $this->sendFile($repos, $dir, $path);
+        }
+
         $user = $request->getUser();
         $password = $request->getPassword();
 
