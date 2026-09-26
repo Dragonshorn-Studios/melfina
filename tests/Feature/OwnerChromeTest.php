@@ -189,6 +189,39 @@ it('lets the owner read and curate an agent persona and memories', function () {
         ->assertNotFound();
 });
 
+it('enforces the same field limits as the update_persona tool', function () {
+    $this->actingAs($this->owner)
+        ->put(route('console.agents.persona.update', $this->agent), [
+            'persona' => str_repeat('x', 20001),
+        ])->assertSessionHasErrors('persona');
+
+    $this->actingAs($this->owner)
+        ->put(route('console.agents.persona.update', $this->agent), [
+            'remember' => str_repeat('x', 2001),
+        ])->assertSessionHasErrors('remember');
+
+    expect($this->agent->fresh()->persona)->toBeNull()
+        ->and($this->agent->fresh()->memories)->toBeNull();
+});
+
+it('renders persona and memory text escaped', function () {
+    $this->agent->update(['persona' => '<script>alert(1)</script>']);
+    $this->agent->remember('<img src=x onerror=alert(1)>');
+
+    $this->actingAs($this->owner)
+        ->get(route('console.agents.persona.edit', $this->agent))
+        ->assertOk()
+        ->assertSee('&lt;script&gt;alert(1)&lt;/script&gt;', false)
+        ->assertSee('&lt;img src=x onerror=alert(1)&gt;', false)
+        ->assertDontSee('<script>alert(1)</script>', false);
+});
+
+it('redirects guests from the persona editor to login', function () {
+    $this->get(route('console.agents.persona.edit', $this->agent))->assertRedirect(route('login'));
+    $this->put(route('console.agents.persona.update', $this->agent), ['persona' => 'x'])->assertRedirect(route('login'));
+    $this->delete(route('console.agents.memories.destroy', [$this->agent, 0]))->assertRedirect(route('login'));
+});
+
 it('keeps non-owners off the persona editor', function () {
     $user = User::factory()->create();
 
