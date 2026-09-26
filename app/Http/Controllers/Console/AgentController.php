@@ -3,10 +3,14 @@
 namespace App\Http\Controllers\Console;
 
 use App\Http\Controllers\Controller;
+use App\Mcp\PluginRepo;
 use App\Models\Agent;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use ZipArchive;
 
 class AgentController extends Controller
 {
@@ -36,6 +40,7 @@ class AgentController extends Controller
 
         $agent = Agent::query()->create(['name' => $validated['name']]);
         $plaintext = $agent->rotateKey();
+        app(PluginRepo::class)->rebuildPackage($agent, $plaintext);
 
         return redirect()
             ->route('console.agents.show', $agent)
@@ -62,6 +67,7 @@ class AgentController extends Controller
         return view('console.agents.connect', [
             'agent' => $agent,
             'endpoint' => $endpoint,
+            'pluginUrl' => url('/plugins/melfg_…/melf_….git'),
             'snippets' => [
                 'claudeDesktop' => json_encode([
                     'mcpServers' => [
@@ -72,7 +78,10 @@ class AgentController extends Controller
                     ],
                 ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
                 'claudeCode' => 'claude mcp add --transport http melfina '.$endpoint,
-                'claudeCodeKey' => 'claude mcp add --transport http --header "Authorization: Bearer melf_…" melfina '.$endpoint,
+                'claudeCodeKey' => 'claude mcp add --transport http'
+                    .' --header "Authorization: Bearer melfg_…"'
+                    .' --header "X-Melfina-Agent-Key: melf_…"'
+                    .' melfina '.$endpoint,
                 'cursor' => json_encode([
                     'mcpServers' => [
                         'melfina' => ['url' => $endpoint],
@@ -91,7 +100,10 @@ class AgentController extends Controller
                 'minimax' => json_encode([
                     'melfina' => [
                         'url' => $endpoint,
-                        'headers' => ['Authorization' => 'Bearer melf_…'],
+                        'headers' => [
+                            'Authorization' => 'Bearer melfg_…',
+                            'X-Melfina-Agent-Key' => 'melf_…',
+                        ],
                         'enabled' => true,
                     ],
                 ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
@@ -129,9 +141,60 @@ class AgentController extends Controller
         $this->authorize('update', $agent);
 
         $plaintext = $agent->rotateKey();
+        $repos = app(PluginRepo::class);
+        $repos->rebuildPackage($agent, $plaintext);
+        $repos->dropRepo($agent);
 
         return redirect()
             ->route('console.agents.show', $agent)
             ->with('plaintext_key', $plaintext);
+    }
+
+    /**
+     * Download the agent's plugin package as a ZIP — for clients that take
+     * an upload rather than a cloneable repo URL. Contains live keys.
+     */
+    public function pluginZip(Agent $agent, PluginRepo $repos): BinaryFileResponse
+    {
+        $this->authorize('view', $agent);
+
+        $dir = $repos->packageDir($agent);
+        abort_unless(is_dir($dir), 404);
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'melfina-plugin-');
+        unlink($zipPath);
+        $zipPath .= '.zip';
+
+        $zip = new ZipArchive;
+        $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+
+        foreach (glob($dir.'/{,.}*', GLOB_BRACE) as $root) {
+            $this->zipTree($zip, $root, $dir);
+        }
+
+        $zip->close();
+
+        $slug = Str::slug($agent->name) ?: 'agent';
+
+        return response()->download($zipPath, 'melfina-'.$slug.'.zip')->deleteFileAfterSend();
+    }
+
+    private function zipTree(ZipArchive $zip, string $path, string $base): void
+    {
+        $name = basename($path);
+
+        if ($name === '.' || $name === '..') {
+            return;
+        }
+
+        if (is_dir($path)) {
+            foreach (glob($path.'/{,.}*', GLOB_BRACE) ?: [] as $child) {
+                $this->zipTree($zip, $child, $base);
+            }
+
+            return;
+        }
+
+        $zip->addFile($path, ltrim(substr($path, strlen($base)), '/'));
     }
 }

@@ -1,4 +1,17 @@
 <x-console-layout :title="'Dashboard'">
+    @if (session('plaintext_mcp_key'))
+        <div id="plaintext-mcp-key" class="mb-6 border border-amber bg-void p-4" style="border-radius: var(--radius-console)">
+            <div class="flex items-center justify-between">
+                <p class="font-mono text-xs tracking-[0.16em] text-amber">FLEET KEY — SHOWN ONCE</p>
+                <button type="button" onclick="document.getElementById('plaintext-mcp-key').remove()"
+                    class="border border-border px-2 py-1 font-mono text-xs text-steel hover:border-amber hover:text-cream"
+                    style="border-radius: var(--radius-console)">dismiss</button>
+            </div>
+            <p class="mt-2 select-all break-all font-mono text-sm text-cream">{{ session('plaintext_mcp_key') }}</p>
+            <p class="mt-2 font-mono text-xs text-steel">Copy it now. Only the hash is stored; we cannot show it again. Shared MCP configs send it as the Bearer credential.</p>
+        </div>
+    @endif
+
     <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
         <div class="flex items-center justify-between">
             <div>
@@ -33,6 +46,39 @@
                 <p class="mt-1 text-2xl font-semibold text-cream">{{ $stats['spaces'] }}</p>
             </div>
         </div>
+
+        <section class="mt-8">
+            <div class="flex items-center justify-between">
+                <p class="font-mono text-xs tracking-[0.16em] text-steel">MCP ACCESS</p>
+                <form method="POST" action="{{ route('console.mcp-key.store') }}"
+                    onsubmit="return confirm('Rotate the fleet key? Every shared MCP config using the old key stops working immediately.');">
+                    @csrf
+                    <button type="submit"
+                        class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                        style="border-radius: var(--radius-console)">{{ $owner->mcp_key_hash ? 'rotate fleet key' : 'generate fleet key' }}</button>
+                </form>
+            </div>
+            <p class="mt-3 text-sm text-steel">
+                The fleet key (<code>melfg_…</code>) is the shared credential you put in a shared MCP config:
+                it opens the <code>/mcp</code> endpoint but carries no persona. Each agent then proves who it
+                is with its own key, sent as <code>X-Melfina-Agent-Key</code> (or <code>?agent_key=</code>) —
+                that is what gives every agent or discussion its own brain on a shared server.
+            </p>
+            <dl class="mt-4 space-y-2 font-mono text-xs">
+                <div class="flex gap-4">
+                    <dt class="w-28 text-steel">fleet key</dt>
+                    <dd class="text-cream">
+                        @if ($owner->mcp_key_issued_at)
+                            issued {{ $owner->mcp_key_issued_at->diffForHumans(short: true) }}
+                        @elseif ($owner->mcp_key_hash)
+                            issued
+                        @else
+                            not generated
+                        @endif
+                    </dd>
+                </div>
+            </dl>
+        </section>
 
         <section class="mt-8">
             <p class="font-mono text-xs tracking-[0.16em] text-steel">AGENTS</p>

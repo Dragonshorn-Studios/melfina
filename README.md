@@ -80,7 +80,18 @@ One owner per install. After first boot, open [http://localhost:8000/register](h
 
 ## MCP auth
 
-`/mcp` accepts two credentials: the agent's static `melf_…` Bearer key, or OAuth 2.1 with Dynamic Client Registration (`POST /oauth/register`, rate-limited; discovery at `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`, PKCE S256 only). OAuth access tokens live ~2h and refresh tokens ~30d — so **Clients → revoke** kills access immediately, while an unrevoked client can keep refreshing for a month. Consent binds each token to one agent; rotating a key never touches OAuth clients (and vice versa).
+`/mcp` accepts three credential shapes:
+
+- **Fleet key + agent key** — for shared MCP configs. The install-wide fleet key (`melfg_…`, generate/rotate on the dashboard) goes in the shared config as `Authorization: Bearer melfg_…`; each agent adds its own `melf_…` key as `X-Melfina-Agent-Key` (or `?agent_key=`) to claim its persona. A fleet key alone resolves to no agent and fails closed.
+- **Agent key** — a dedicated config may send `Authorization: Bearer melf_…` directly.
+- **OAuth 2.1 with Dynamic Client Registration** — `POST /oauth/register` (rate-limited; discovery at `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`, PKCE S256 only). OAuth access tokens live ~2h and refresh tokens ~30d — so **Clients → revoke** kills access immediately, while an unrevoked client can keep refreshing for a month. Consent binds each token to one agent; rotating a key never touches OAuth clients (and vice versa).
+
+## Plugin installs
+
+For clients that install MCP servers from a plugin repo or package, each agent gets a ready-made one — see an agent's **Connect** page:
+
+- **Git URL** — `https://<host>/plugins/<melfg_fleet>/<melf_agent>.git` (or `plugins/<melf_agent>.git` without a fleet key) is a real cloneable repo (dumb HTTP) carrying `.minimax-plugin/plugin.json`, `plugin.json`, `.claude-plugin/plugin.json`, `mcp.json`, and a skill. The URL embeds the keys — treat it as a secret.
+- **ZIP** — `console/agents/{agent}/plugin.zip` downloads the same package for upload-only flows; it embeds the agent key captured at last create/rotate.
 
 ## Tokens
 
