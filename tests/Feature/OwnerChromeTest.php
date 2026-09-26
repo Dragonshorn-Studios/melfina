@@ -164,16 +164,28 @@ it('lets the owner read and curate an agent persona and memories', function () {
         ->and(collect($fresh->memories)->pluck('text'))
         ->toContain('owner works from Warsaw');
 
+    // A bare remember submit leaves the persona alone.
+    $this->actingAs($this->owner)
+        ->put(route('console.agents.persona.update', $this->agent), [
+            'remember' => 'persona untouched',
+        ])->assertRedirect();
+    expect($this->agent->fresh()->persona)->toBe('gentle and verbose');
+
     // Pruning by index re-packs the log.
     $this->actingAs($this->owner)
         ->delete(route('console.agents.memories.destroy', [$this->agent, 0]))
         ->assertRedirect(route('console.agents.persona.edit', $this->agent));
 
     expect(collect($this->agent->fresh()->memories)->pluck('text')->all())
-        ->toEqual(['prod host is melfina.dragonshorn.cloud', 'owner works from Warsaw']);
+        ->toEqual(['prod host is melfina.dragonshorn.cloud', 'owner works from Warsaw', 'persona untouched']);
 
     $this->actingAs($this->owner)
         ->delete(route('console.agents.memories.destroy', [$this->agent, 99]))
+        ->assertNotFound();
+
+    // A non-numeric index is a 404, not a 500 from route-model binding.
+    $this->actingAs($this->owner)
+        ->delete('/console/agents/'.$this->agent->id.'/memories/abc')
         ->assertNotFound();
 });
 

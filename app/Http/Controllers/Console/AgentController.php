@@ -192,8 +192,12 @@ class AgentController extends Controller
             'remember' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $agent->persona = $validated['persona'] ?? null;
-        $agent->save();
+        // Only touch persona when the field was actually submitted — a bare
+        // "append memory" request must not wipe it.
+        if ($request->has('persona')) {
+            $agent->persona = $validated['persona'];
+            $agent->save();
+        }
 
         if (filled($validated['remember'] ?? null)) {
             $agent->remember($validated['remember']);

@@ -21,6 +21,7 @@
             <div>
                 <label for="remember" class="block font-mono text-xs text-steel">append a memory</label>
                 <input id="remember" name="remember" type="text" maxlength="2000"
+                    value="{{ old('remember') }}"
                     placeholder="one line this imp should remember"
                     class="mt-1 w-full border border-border bg-void px-3 py-2 font-mono text-sm text-cream outline-none focus:border-amber" style="border-radius: var(--radius-console)">
                 @error('remember') <p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p> @enderror

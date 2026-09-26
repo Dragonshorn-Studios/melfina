@@ -45,7 +45,9 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::post('agents/{agent}/rotate', [AgentController::class, 'rotate'])->name('agents.rotate');
     Route::get('agents/{agent}/persona', [AgentController::class, 'editPersona'])->name('agents.persona.edit');
     Route::put('agents/{agent}/persona', [AgentController::class, 'updatePersona'])->name('agents.persona.update');
-    Route::delete('agents/{agent}/memories/{index}', [AgentController::class, 'destroyMemory'])->name('agents.memories.destroy');
+    Route::delete('agents/{agent}/memories/{index}', [AgentController::class, 'destroyMemory'])
+        ->whereNumber('index')
+        ->name('agents.memories.destroy');
     Route::get('agents/{agent}/connect', [AgentController::class, 'connect'])->name('agents.connect');
     Route::get('agents/{agent}/plugin.zip', [AgentController::class, 'pluginZip'])->name('agents.plugin');
     Route::resource('agents', AgentController::class)->except(['destroy']);
