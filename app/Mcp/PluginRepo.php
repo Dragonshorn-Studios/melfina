@@ -324,8 +324,16 @@ class PluginRepo
             ['-C', $work, 'update-server-info'],
         ];
 
+        // Fixed timestamps keep every rebuild byte-identical (same commit
+        // SHA, same pack names) — a clone spanning several requests sees
+        // one consistent repo even though each request rebuilds it.
+        $env = [
+            'GIT_AUTHOR_DATE' => '2026-01-01T00:00:00Z',
+            'GIT_COMMITTER_DATE' => '2026-01-01T00:00:00Z',
+        ];
+
         foreach ($steps as $args) {
-            $process = new Process(array_merge(['git'], $args));
+            $process = new Process(array_merge(['git'], $args), null, $env);
             $process->run();
 
             if (! $process->isSuccessful()) {
