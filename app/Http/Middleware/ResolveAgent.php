@@ -30,6 +30,30 @@ class ResolveAgent
 {
     public const AGENT_KEY_HEADER = 'X-Melfina-Agent-Key';
 
+    /**
+     * Methods a fleet-key connection may call without a persona — the
+     * endpoint's discovery surface only. Deliberately an allowlist of
+     * lifecycle + listing methods: content methods (resources/read,
+     * prompts/get, completion/complete) stay agent-scoped so a future
+     * primitive registered on the server fails closed instead of
+     * inheriting persona-less access. The transport drops notifications
+     * before dispatch, so the ones listed are belt-and-braces.
+     */
+    private const FLEET_DISCOVERY_METHODS = [
+        'initialize',
+        'ping',
+        'tools/list',
+        'resources/list',
+        'resources/templates/list',
+        'prompts/list',
+        'server/discover',
+        'subscriptions/listen',
+        'notifications/initialized',
+        'notifications/cancelled',
+        'notifications/progress',
+        'notifications/roots/list_changed',
+    ];
+
     public function handle(Request $request, Closure $next): Response
     {
         $token = $request->bearerToken();
@@ -82,9 +106,12 @@ class ResolveAgent
     }
 
     /**
-     * Fleet-mode request: the fleet key only opens the endpoint. The persona
+     * Fleet-mode request: the fleet key opens the endpoint. The persona
      * comes from what the agent knows about itself — its name or key —
-     * without one there is no agent to scope to, so the request fails closed.
+     * and agent-scoped calls need one. Discovery (initialize, tools/list,
+     * ping, notifications, the listen stream — see FLEET_DISCOVERY_METHODS)
+     * works persona-less, so a shared client can connect before any imp
+     * has named itself.
      */
     private function handleFleetRequest(Request $request, Closure $next, ?string $basicPersona = null): Response
     {
@@ -111,17 +138,21 @@ class ResolveAgent
 
         $agent = is_string($persona) ? Agent::forPersona($persona) : null;
 
-        // A fleet subscription stream needs no persona — it listens for
-        // every imp the connection hosts. Tool calls still fail closed.
-        if ($agent === null && $request->input('method') === 'subscriptions/listen') {
+        if ($agent !== null) {
+            $request->attributes->set('agent', $agent);
+
             return $next($request);
         }
 
-        if ($agent === null) {
+        // Discovery answers persona-less — the listen stream included,
+        // since it hears every imp's mail. Anything else needs a resolved
+        // agent, so unknown or future agent-scoped methods fail closed.
+        $method = $request->input('method');
+        $discovery = in_array($method, self::FLEET_DISCOVERY_METHODS, true);
+
+        if (! $discovery) {
             return $this->unauthorized('agent persona required');
         }
-
-        $request->attributes->set('agent', $agent);
 
         return $next($request);
     }

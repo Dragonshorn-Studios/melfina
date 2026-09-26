@@ -31,8 +31,9 @@
             <p class="mt-2 text-sm text-steel">
                 Without a fleet key, <code>{{ $pluginUrlDirect }}</code> works too — the package
                 then carries just the agent key. And for a multi-agent setup on one provider,
-                <code>{{ $pluginUrlFleet }}</code> is a single fleet-wide package: the agent fills
-                its own name into the MCP URL's Basic username to claim its persona.
+                <code>{{ $pluginUrlFleet }}</code> is a single fleet-wide package: the fleet key
+                opens the endpoint and each imp names itself with the <code>name</code> argument
+                on every tool call.
                 @if ($hasPackage)
                     For upload-only flows,
                     <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.plugin', $agent) }}">download the plugin ZIP</a>

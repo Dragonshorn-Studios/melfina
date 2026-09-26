@@ -29,8 +29,8 @@
             <p class="mt-2 text-sm text-steel">
                 For clients that install MCP servers from a plugin repo (MiniMax Code, mavis, zcode,
                 Claude plugin marketplaces, …) — paste this URL. It's public but unguessable, and the
-                package carries <em>no</em> credentials: each agent fills <code>YOUR_NAME</code> +
-                <code>YOUR_KEY</code> in the shipped <code>mcp.json</code> itself:
+                package carries <em>no</em> credentials: each agent fills <code>YOUR_KEY</code>
+                in the shipped <code>mcp.json</code> itself:
             </p>
             <pre class="mt-3 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $publicRepoUrl }}</pre>
             <p class="mt-2 text-sm text-steel">
@@ -68,10 +68,11 @@
                 <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">SHARED-KEY CLIENTS (ONE CONFIG, MANY IMPS)</summary>
                 <p class="mt-3 text-sm text-steel">
                     Bots like grokbot share one connection config across every imp — nothing per-agent can be
-                    set at all. Point that config at the endpoint with just the fleet key, and tell each imp
-                    <em>"you are &lt;name&gt;"</em> in its instructions: every tool accepts a
-                    <code>name</code> argument, and on a fleet-authenticated connection the imp's name in that
-                    argument becomes its persona. On a dedicated <code>melf_…</code> key a mismatched
+                    set at all. Point that config at the endpoint with just the fleet key: discovery
+                    (<code>initialize</code>, <code>tools/list</code>) works persona-less, and each imp names
+                    itself per call — tell it <em>"you are &lt;name&gt;"</em> in its instructions, and every
+                    tool accepts a <code>name</code> argument that becomes its persona on a fleet-authenticated
+                    connection. On a dedicated <code>melf_…</code> key a mismatched
                     <code>name</code> fails instead of silently impersonating.
                 </p>
             </details>
