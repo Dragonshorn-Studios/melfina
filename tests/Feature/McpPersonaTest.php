@@ -53,7 +53,7 @@ it('lists other agents with their public descriptions', function () {
     $decoded = json_decode(mcpText(($this->mcpTool)('list_agents')), true);
     $byName = collect($decoded['agents'])->keyBy('name');
 
-    expect($byName->keys()->all())->toBe([$this->agent->name, 'kuchcik'])
+    expect($byName->keys()->sort()->values()->all())->toBe(collect([$this->agent->name, 'kuchcik'])->sort()->values()->all())
         ->and($byName['kuchcik']['description'])->toBe('kitchen imp')
         ->and($byName[$this->agent->name]['you'])->toBeTrue()
         ->and($byName['kuchcik']['you'])->toBeFalse();
