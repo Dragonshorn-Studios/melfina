@@ -16,7 +16,7 @@
             </div>
         </div>
 
-        @if ($files->isEmpty())
+        @if ($files->total() === 0)
             <p class="mt-6 text-sm text-steel">No files in this space yet.</p>
         @else
             <table class="mt-6 w-full border-collapse font-mono text-xs">

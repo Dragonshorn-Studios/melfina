@@ -43,3 +43,10 @@ it('locks browsing to the owner', function () {
         ->get(route('console.shared.file', ['shared' => $this->space, 'path' => 'notes/plan.txt']))
         ->assertForbidden();
 });
+
+it('shows pagination, not the empty state, when the page is out of range', function () {
+    $this->actingAs($this->owner)
+        ->get(route('console.shared.show', $this->space).'?page=9')
+        ->assertOk()
+        ->assertDontSee('No files in this space yet.');
+});
