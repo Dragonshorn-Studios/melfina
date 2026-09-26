@@ -33,6 +33,8 @@ class AgentMessage extends Model
     /** @use HasFactory<AgentMessageFactory> */
     use HasFactory;
 
+    public const DEFAULT_MESSAGES_LABEL = 'AgentPost';
+
     public const MAX_SUBJECT_LENGTH = 300;
 
     public const MAX_BODY_BYTES = 65536;
@@ -93,5 +95,17 @@ class AgentMessage extends Model
     public function isAcknowledged(): bool
     {
         return $this->acknowledged_at !== null;
+    }
+
+    /**
+     * Display name of the owner console's messages screen — a proper-name
+     * slot (default AgentPost, an install may style it ImpPost). Trimmed,
+     * falls back to the default on empty; always rendered escaped.
+     */
+    public static function messagesLabel(): string
+    {
+        $label = trim((string) config('melfina.messages_label', self::DEFAULT_MESSAGES_LABEL));
+
+        return $label === '' ? self::DEFAULT_MESSAGES_LABEL : $label;
     }
 }

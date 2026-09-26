@@ -8,6 +8,7 @@ use App\Http\Controllers\Console\FileController;
 use App\Http\Controllers\Console\InstructionController;
 use App\Http\Controllers\Console\McpClientController;
 use App\Http\Controllers\Console\McpKeyController;
+use App\Http\Controllers\Console\MessageController;
 use App\Http\Controllers\Console\SharedSpaceController;
 use Illuminate\Support\Facades\Route;
 
@@ -58,6 +59,9 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
 
     Route::get('shared/{shared}/file', [SharedSpaceController::class, 'file'])->name('shared.file');
     Route::resource('shared', SharedSpaceController::class)->except(['destroy']);
+
+    Route::get('messages', [MessageController::class, 'index'])->name('messages.index');
+    Route::get('messages/{message}', [MessageController::class, 'show'])->name('messages.show');
 
     Route::get('clients', [McpClientController::class, 'index'])->name('clients.index');
     Route::delete('clients/{client}', [McpClientController::class, 'destroy'])->name('clients.destroy');

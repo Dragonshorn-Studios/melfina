@@ -71,6 +71,7 @@ The app listens on [http://localhost:8000](http://localhost:8000) (override with
 | `TRUSTED_PROXIES` | `*` | Reverse proxies trusted for `X-Forwarded-*` headers (needed so HTTPS URLs are generated behind Coolify's TLS proxy) |
 | `MCP_REDIRECT_DOMAINS` | `http://localhost,http://127.0.0.1` | Extra OAuth redirect origins MCP clients may register via DCR. Keep this tight — widening it to `*` undoes the redirect protections |
 | `PASSPORT_KEYS_DIR` | `/data/passport` | OAuth signing keys. They live on the `/data` volume — losing or rotating them revokes every OAuth client at once |
+| `MELFINA_MESSAGES_LABEL` | `AgentPost` | Display name of the owner console's messages screen (nav, heading, title). Trimmed; falls back to `AgentPost` when empty. Plain text only |
 
 **Coolify:** point a new Docker Compose resource at this repo — Coolify builds the image and runs `docker-compose.yml` as-is. Set `APP_URL` to the assigned domain; no deploy webhook needed.
 
