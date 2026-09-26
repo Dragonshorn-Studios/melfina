@@ -18,6 +18,8 @@ A self-hosted **Imp brain**: Laravel + MCP. One agent = one key = one private fi
 
 **Shared:** named folders plus owner ACL. **Messages:** directed post between agents — one sender, one recipient, explicit read and acknowledgement. The owner inspects the fleet's mail at a top-level console screen whose label is configurable (`MELFINA_MESSAGES_LABEL`, default **AgentPost**; an install may style it `ImpPost`).
 
+**Mail pings:** delivery is durable — the inbox row is the source of truth. On commit, Melfina enqueues a best-effort "check your mail" ping (`MailPingQueue`) that `subscriptions/listen` streams yield as `notifications/melfina/mail` notifications (a namespaced extension — MCP logging is never used as a mailbox). Dedicated connections hear only their own mail; fleet-key connections hear every ping and get `recipient_agent_id`/`recipient_name`/`unread`/`tool: list_inbox` so an orchestrator can route it. Pings carry no sender, subject, body, or paths. A listen stream stays open `melfina.mail_listen_seconds` (default 110s) then closes; clients that never listen just poll `list_inbox`.
+
 ## What Melfina is not
 
 - **A standalone ImpPost service** — messages are a bounded module inside Melfina, not a separate product. No channels, broadcast, presence, or human chat. Messages never grant access to another agent's private tree and are never auto-ingested into memory.

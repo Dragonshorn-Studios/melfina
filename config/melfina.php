@@ -17,4 +17,17 @@ return [
 
     'messages_label' => env('MELFINA_MESSAGES_LABEL', 'AgentPost'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Mail Listen Seconds
+    |--------------------------------------------------------------------------
+    |
+    | How long a `subscriptions/listen` SSE stream stays open for mail pings
+    | before closing and letting the client re-listen. Bound so a wedged
+    | client can't pin a PHP worker forever.
+    |
+    */
+
+    'mail_listen_seconds' => (int) env('MELFINA_MAIL_LISTEN_SECONDS', 110),
+
 ];

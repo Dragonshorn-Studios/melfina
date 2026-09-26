@@ -2,12 +2,14 @@
 
 namespace App\Services;
 
+use App\Events\AgentMessageDelivered;
 use App\Models\Agent;
 use App\Models\AgentMessage;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * Directed agent-to-agent messaging. This service is the authorization
@@ -72,7 +74,7 @@ class MessageService
 
         $this->assertWithinLimits($subject, $body, $attachments);
 
-        return DB::transaction(function () use ($sender, $recipient, $subject, $body, $attachments) {
+        $message = DB::transaction(function () use ($sender, $recipient, $subject, $body, $attachments) {
             /** @var AgentMessage $message */
             $message = AgentMessage::query()->create([
                 'sender_agent_id' => $sender->id,
@@ -87,6 +89,16 @@ class MessageService
 
             return $message->load('attachments');
         });
+
+        // The durable row committed — notification listeners are best-effort
+        // doorbells, so a failure there must never surface on the send path.
+        try {
+            AgentMessageDelivered::dispatch($message);
+        } catch (Throwable $e) {
+            report($e);
+        }
+
+        return $message;
     }
 
     /**

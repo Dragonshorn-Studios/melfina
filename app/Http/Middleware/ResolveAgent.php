@@ -88,6 +88,11 @@ class ResolveAgent
      */
     private function handleFleetRequest(Request $request, Closure $next, ?string $basicPersona = null): Response
     {
+        // Fleet-key streams are marked so subscriptions/listen can deliver
+        // pings for every persona — a fleet connection is never pinned to
+        // whichever agent name rode along on one request.
+        $request->attributes->set('fleet', true);
+
         $persona = $basicPersona ?? $request->header(self::AGENT_KEY_HEADER);
 
         if ($persona === null) {
@@ -105,6 +110,12 @@ class ResolveAgent
         $persona ??= $this->personaFromToolArguments($request);
 
         $agent = is_string($persona) ? Agent::forPersona($persona) : null;
+
+        // A fleet subscription stream needs no persona — it listens for
+        // every imp the connection hosts. Tool calls still fail closed.
+        if ($agent === null && $request->input('method') === 'subscriptions/listen') {
+            return $next($request);
+        }
 
         if ($agent === null) {
             return $this->unauthorized('agent persona required');
