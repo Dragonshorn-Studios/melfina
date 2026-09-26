@@ -34,9 +34,13 @@ class PluginRepoController extends Controller
         // Public fleet package: a credential-free repo at an unguessable
         // derived name, for importers that never retry with credentials.
         // Nothing in it is secret, so no Basic challenge is issued.
+        // A dumb-HTTP clone starts at info/refs/HEAD — only those rebuild
+        // the repo; the object fetches that follow serve the built dir.
+        $fresh = in_array($path, ['', 'info/refs', 'HEAD'], true);
+
         if ($repo === $repos->publicRepoName()) {
             try {
-                $dir = $repos->ensureGlobalPublic();
+                $dir = $repos->ensureGlobalPublic($fresh);
             } catch (\Throwable) {
                 abort(500);
             }
@@ -56,7 +60,7 @@ class PluginRepoController extends Controller
         // `~melfina.git` is a reserved path — no agent slug can produce it.
         if ($repo === '~melfina.git' && User::isMcpKey($password)) {
             try {
-                $dir = $repos->ensureGlobal($password);
+                $dir = $repos->ensureGlobal($password, $fresh);
             } catch (\Throwable) {
                 abort(500);
             }
@@ -71,7 +75,7 @@ class PluginRepoController extends Controller
         }
 
         try {
-            $dir = $repos->ensureBuilt($agent, $mode, $password);
+            $dir = $repos->ensureBuilt($agent, $mode, $password, $fresh);
         } catch (\Throwable) {
             abort(500);
         }
