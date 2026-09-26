@@ -4,6 +4,11 @@ use App\Models\Agent;
 use App\Models\User;
 use Illuminate\Support\Facades\File;
 
+function personaText(array $result): string
+{
+    return $result['content'][0]['text'] ?? '';
+}
+
 beforeEach(function () {
     File::deleteDirectory(storage_path('app/mcp-plugins'));
 
@@ -39,7 +44,7 @@ it('lets the agent maintain its persona, description, and memories', function ()
         ->and($fresh->memories)->toHaveCount(2)
         ->and($fresh->memories[0]['text'])->toBe('owner prefers terse replies');
 
-    $read = json_decode(mcpText(($this->mcpTool)('read_persona')), true);
+    $read = json_decode(personaText(($this->mcpTool)('read_persona')), true);
     expect($read['name'])->toBe($this->agent->name)
         ->and($read['persona'])->toBe('gruff, precise, never sleeps')
         ->and($read['memories'])->toHaveCount(2);
@@ -50,7 +55,7 @@ it('lists other agents with their public descriptions', function () {
     Agent::factory()->create(['name' => 'doczlap', 'status' => Agent::STATUS_DISABLED]);
     $this->agent->update(['description' => 'the ops imp']);
 
-    $decoded = json_decode(mcpText(($this->mcpTool)('list_agents')), true);
+    $decoded = json_decode(personaText(($this->mcpTool)('list_agents')), true);
     $byName = collect($decoded['agents'])->keyBy('name');
 
     expect($byName->keys()->sort()->values()->all())->toBe(collect([$this->agent->name, 'kuchcik'])->sort()->values()->all())
@@ -62,7 +67,7 @@ it('lists other agents with their public descriptions', function () {
 it('appends the shared operator persona to read_instructions', function () {
     $this->owner->update(['operator_persona' => 'The user is Antoni — address them as Antoni.']);
 
-    $decoded = json_decode(mcpText(($this->mcpTool)('read_instructions')), true);
+    $decoded = json_decode(personaText(($this->mcpTool)('read_instructions')), true);
     expect($decoded['operator'])->toBe('The user is Antoni — address them as Antoni.')
         ->and($decoded['persona_hint'])->toContain('update_persona');
 });

@@ -56,7 +56,8 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::put('files/{agent}', [FileController::class, 'update'])->name('files.update');
     Route::delete('files/{agent}', [FileController::class, 'destroy'])->name('files.destroy');
 
-    Route::resource('shared', SharedSpaceController::class)->except(['destroy', 'show']);
+    Route::get('shared/{shared}/file', [SharedSpaceController::class, 'file'])->name('shared.file');
+    Route::resource('shared', SharedSpaceController::class)->except(['destroy']);
 
     Route::get('clients', [McpClientController::class, 'index'])->name('clients.index');
     Route::delete('clients/{client}', [McpClientController::class, 'destroy'])->name('clients.destroy');
