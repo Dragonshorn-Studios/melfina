@@ -116,3 +116,14 @@ it('requires authentication for listen', function () {
     test()->postJson('/mcp', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'subscriptions/listen'])
         ->assertUnauthorized();
 });
+
+it('still fails closed when a persona-less fleet request is not a listen', function () {
+    $fleet = McpFleetKey::issue($this->owner, 'grokbot');
+
+    test()->postJson('/mcp', [
+        'jsonrpc' => '2.0',
+        'id' => 1,
+        'method' => 'tools/call',
+        'params' => ['name' => 'list_inbox', 'arguments' => []],
+    ], ['Authorization' => 'Bearer '.$fleet])->assertUnauthorized();
+});

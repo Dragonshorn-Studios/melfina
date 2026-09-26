@@ -40,6 +40,13 @@ class MailListen implements Method
     public const POLL_MICROSECONDS = 500_000;
 
     /**
+     * Emit a heartbeat frame every N polls (~10s) — flushing output is the
+     * only thing that refreshes connection_aborted(), so this is what lets
+     * a wedged client release the worker before the deadline.
+     */
+    public const HEARTBEAT_POLLS = 20;
+
+    /**
      * Notification method name for mail pings — a namespaced Melfina
      * extension, deliberately not `notifications/message` (logging).
      */
@@ -70,6 +77,7 @@ class MailListen implements Method
         $agent = $this->http->attributes->get('agent');
         $seen = [];
         $deadline = time() + (int) config('melfina.mail_listen_seconds', self::LISTEN_SECONDS);
+        $polls = 0;
 
         while (time() < $deadline && connection_aborted() === 0) {
             foreach (MailPingQueue::all() as $ping) {
@@ -84,6 +92,16 @@ class MailListen implements Method
                 $seen[$ping['id']] = true;
 
                 yield JsonRpcResponse::notification(self::NOTIFICATION, $this->params($ping, $fleet));
+            }
+
+            if (++$polls % self::HEARTBEAT_POLLS === 0) {
+                echo ': heartbeat'."\n\n";
+
+                if (ob_get_level() !== 0) {
+                    ob_flush();
+                }
+
+                flush();
             }
 
             usleep(self::POLL_MICROSECONDS);
