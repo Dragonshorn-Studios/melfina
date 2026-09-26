@@ -87,5 +87,8 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "suggest": {
+        "ext-zip": "Required to download plugin packages as ZIP archives (the git-clone install path works without it). The plugin endpoints also need a `git` binary (>= 2.28)."
+    }
 }

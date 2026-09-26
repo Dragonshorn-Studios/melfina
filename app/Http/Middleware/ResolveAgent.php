@@ -4,37 +4,86 @@ namespace App\Http\Middleware;
 
 use App\Models\Agent;
 use App\Models\McpTokenAgent;
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Resolves the calling agent from either auth path: a static Bearer key
- * (Agent::forKey) or an OAuth access token bound to an agent through the
- * consent grant (McpTokenAgent). Both fail closed with 401; the resolved
- * agent is stored on the request's attributes for MCP tools.
+ * Resolves the calling agent from three auth paths:
+ *
+ * - fleet key Bearer (`melfg_…`, User::isMcpKey) plus the agent's persona —
+ *   its name or `melf_…` key — in the `X-Melfina-Agent-Key` header or
+ *   `agent_key` query param, for shared MCP configs that hold no persona;
+ * - a per-agent Bearer key (Agent::forKey) for dedicated configs;
+ * - an OAuth access token bound to an agent through the consent grant
+ *   (McpTokenAgent).
+ *
+ * All paths fail closed with 401; the resolved agent is stored on the
+ * request's attributes for MCP tools.
  */
 class ResolveAgent
 {
+    public const AGENT_KEY_HEADER = 'X-Melfina-Agent-Key';
+
     public function handle(Request $request, Closure $next): Response
     {
         $token = $request->bearerToken();
+
+        if ($token !== null && User::isMcpKey($token)) {
+            return $this->handleFleetRequest($request, $next);
+        }
 
         $agent = $token !== null ? Agent::forKey($token) : null;
         $agent ??= $this->agentFromOAuthToken();
 
         if ($agent === null) {
-            return response()->json(
-                ['error' => 'Unauthorized'],
-                401,
-                ['WWW-Authenticate' => 'Bearer realm="melfina-mcp"'],
-            );
+            return $this->unauthorized();
         }
 
         $request->attributes->set('agent', $agent);
 
         return $next($request);
+    }
+
+    /**
+     * Fleet-mode request: the fleet key only opens the endpoint. The persona
+     * comes from what the agent knows about itself — its name or key —
+     * without one there is no agent to scope to, so the request fails closed.
+     */
+    private function handleFleetRequest(Request $request, Closure $next): Response
+    {
+        $persona = $request->header(self::AGENT_KEY_HEADER);
+
+        if ($persona === null) {
+            $candidate = $request->query('agent_key');
+
+            // Query strings land in access logs — accept only the non-secret
+            // name form there; keys belong in the header.
+            $persona = is_string($candidate) && ! str_starts_with($candidate, 'melf_')
+                ? $candidate
+                : null;
+        }
+
+        $agent = is_string($persona) ? Agent::forPersona($persona) : null;
+
+        if ($agent === null) {
+            return $this->unauthorized('agent persona required');
+        }
+
+        $request->attributes->set('agent', $agent);
+
+        return $next($request);
+    }
+
+    private function unauthorized(string $error = 'Unauthorized'): Response
+    {
+        return response()->json(
+            ['error' => $error],
+            401,
+            ['WWW-Authenticate' => 'Bearer realm="melfina-mcp"'],
+        );
     }
 
     private function agentFromOAuthToken(): ?Agent

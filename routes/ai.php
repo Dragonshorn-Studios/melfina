@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Mcp\PluginRepoController;
 use App\Http\Controllers\Mcp\RevokeOAuthTokenController;
 use App\Http\Middleware\ResolveAgent;
 use App\Mcp\Servers\MelfinaServer;
@@ -16,3 +17,14 @@ Route::post('oauth/register', OAuthRegisterController::class)->middleware('throt
 Route::post('oauth/revoke', RevokeOAuthTokenController::class)->name('oauth.revoke');
 
 Mcp::web('/mcp', MelfinaServer::class)->middleware(ResolveAgent::class);
+
+// Per-agent plugin repositories, cloneable over git's dumb HTTP protocol.
+// Credentials ride in HTTP Basic auth (userinfo in the clone URL — git
+// converts it to an Authorization header), never in the logged path; the
+// {repo} segment is decorative.
+Route::get('plugins/{repo}/{path?}', [PluginRepoController::class, 'show'])
+    ->middleware('throttle:60,1')
+    ->where([
+        'repo' => '[^/]+\.git',
+        'path' => '.*',
+    ]);

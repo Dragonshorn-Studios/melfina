@@ -83,4 +83,30 @@ class Agent extends Model
             ->where('status', self::STATUS_ACTIVE)
             ->first();
     }
+
+    /**
+     * Resolve an agent from a persona identifier sent alongside the fleet
+     * key: its `melf_…` key, or simply its name — a non-secret id the agent
+     * can know from its own instructions. Names match first, so an agent
+     * named `melf_helper` is still claimable; fails closed on no match or
+     * an ambiguous (non-unique) name.
+     */
+    public static function forPersona(string $id): ?self
+    {
+        $byName = static::query()
+            ->where('name', $id)
+            ->where('status', self::STATUS_ACTIVE)
+            ->limit(2)
+            ->get();
+
+        if ($byName->count() === 1) {
+            return $byName->first();
+        }
+
+        if ($byName->isEmpty() && str_starts_with($id, 'melf_')) {
+            return self::forKey($id);
+        }
+
+        return null;
+    }
 }

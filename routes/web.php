@@ -7,6 +7,7 @@ use App\Http\Controllers\Console\DashboardController;
 use App\Http\Controllers\Console\FileController;
 use App\Http\Controllers\Console\InstructionController;
 use App\Http\Controllers\Console\McpClientController;
+use App\Http\Controllers\Console\McpKeyController;
 use App\Http\Controllers\Console\SharedSpaceController;
 use Illuminate\Support\Facades\Route;
 
@@ -30,8 +31,11 @@ Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
 Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');
 
+    Route::post('mcp-key', [McpKeyController::class, 'store'])->name('mcp-key.store');
+
     Route::post('agents/{agent}/rotate', [AgentController::class, 'rotate'])->name('agents.rotate');
     Route::get('agents/{agent}/connect', [AgentController::class, 'connect'])->name('agents.connect');
+    Route::get('agents/{agent}/plugin.zip', [AgentController::class, 'pluginZip'])->name('agents.plugin');
     Route::resource('agents', AgentController::class)->except(['destroy']);
 
     Route::get('instructions', [InstructionController::class, 'index'])->name('instructions.index');
