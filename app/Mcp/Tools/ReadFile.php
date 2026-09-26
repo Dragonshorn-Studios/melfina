@@ -50,6 +50,7 @@ class ReadFile extends Tool
     {
         return [
             'path' => $schema->string()->description('Path of the file to read, e.g. "notes/todo.txt".')->required(),
+            ...$this->personaSchema($schema),
         ];
     }
 }

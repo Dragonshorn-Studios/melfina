@@ -68,6 +68,14 @@ class ResolveAgent
             return $this->unauthorized();
         }
 
+        // A `name` argument on a dedicated key must agree with it — a
+        // mismatched name is a misconfigured bot, not another agent.
+        $claimed = $this->personaFromToolArguments($request);
+
+        if ($claimed !== null && Agent::forPersona($claimed)?->id !== $agent->id) {
+            return $this->unauthorized('persona does not match the key');
+        }
+
         $request->attributes->set('agent', $agent);
 
         return $next($request);
@@ -92,6 +100,10 @@ class ResolveAgent
                 : null;
         }
 
+        // Last resort for shared clients that can't vary headers at all:
+        // the imp names itself inside the call — `params.arguments.name`.
+        $persona ??= $this->personaFromToolArguments($request);
+
         $agent = is_string($persona) ? Agent::forPersona($persona) : null;
 
         if ($agent === null) {
@@ -101,6 +113,22 @@ class ResolveAgent
         $request->attributes->set('agent', $agent);
 
         return $next($request);
+    }
+
+    /**
+     * The `name` tool argument is an alternate persona channel for shared
+     * fleet configs (grokbot-style: one credential, many imps that only
+     * know their own names). Only read on tools/call.
+     */
+    private function personaFromToolArguments(Request $request): ?string
+    {
+        if ($request->input('method') !== 'tools/call') {
+            return null;
+        }
+
+        $name = $request->input('params.arguments.name');
+
+        return is_string($name) && $name !== '' ? $name : null;
     }
 
     private function unauthorized(string $error = 'Unauthorized'): Response

@@ -3,6 +3,8 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Concerns\ResolvesAgent;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\JsonSchema\Types\Type;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -26,5 +28,15 @@ class ReadInstructions extends Tool
             'content' => $instruction?->content ?? '',
             'layers' => $instruction?->layersList() ?? [],
         ]));
+    }
+
+    /**
+     * Get the tool's input schema.
+     *
+     * @return array<string, Type>
+     */
+    public function schema(JsonSchema $schema): array
+    {
+        return $this->personaSchema($schema);
     }
 }

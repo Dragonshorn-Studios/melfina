@@ -60,6 +60,7 @@ class ReadShared extends Tool
         return [
             'space' => $schema->string()->description('Shared space name.')->required(),
             'path' => $schema->string()->description('Path of the file inside the space.')->required(),
+            ...$this->personaSchema($schema),
         ];
     }
 }

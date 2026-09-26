@@ -69,6 +69,7 @@ class WriteShared extends Tool
             'space' => $schema->string()->description('Shared space name.')->required(),
             'path' => $schema->string()->description('Path of the file inside the space.')->required(),
             'content' => $schema->string()->description('Full text content to store (replaces existing).')->required(),
+            ...$this->personaSchema($schema),
         ];
     }
 }
