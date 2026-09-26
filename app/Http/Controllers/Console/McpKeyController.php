@@ -50,7 +50,94 @@ class McpKeyController extends Controller
                     ],
                 ],
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+            // Env-provided origins (uneditable here — they come from
+            // MCP_REDIRECT_DOMAINS) vs. the owner's console-managed ones.
+            'envRedirectDomains' => config('mcp.redirect_domains', []),
+            'storedRedirectDomains' => $request->user()->mcp_redirect_domains ?? [],
         ]);
+    }
+
+    /**
+     * Allow a new OAuth redirect origin (scheme://host[:port]) for Dynamic
+     * Client Registration — the console equivalent of appending to
+     * MCP_REDIRECT_DOMAINS. Persisted on the owner row; merged into the
+     * allow-list by MergeMcpRedirectDomains on the oauth routes.
+     */
+    public function storeRedirectDomain(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'domain' => ['required', 'string', 'max:255', function (string $attribute, string $value, \Closure $fail): void {
+                if (self::normalizeRedirectOrigin($value) === null) {
+                    $fail('Must be an origin like https://app.example.com — http(s) scheme, host, optional port, no path.');
+                }
+            }],
+        ]);
+
+        $origin = self::normalizeRedirectOrigin($validated['domain']);
+        $user = $request->user();
+
+        $domains = $user->mcp_redirect_domains ?? [];
+        if (! in_array($origin, $domains, true)) {
+            $domains[] = $origin;
+            $user->mcp_redirect_domains = $domains;
+            $user->save();
+        }
+
+        return redirect()
+            ->route('console.mcp.connect')
+            ->with('status', "Redirect origin {$origin} allowed.");
+    }
+
+    /**
+     * Remove a console-managed redirect origin. Env-provided origins can't
+     * be removed here — they follow MCP_REDIRECT_DOMAINS.
+     */
+    public function destroyRedirectDomain(Request $request): RedirectResponse
+    {
+        $validated = $request->validate(['domain' => ['required', 'string', 'max:255']]);
+        $user = $request->user();
+
+        $user->mcp_redirect_domains = array_values(array_filter(
+            $user->mcp_redirect_domains ?? [],
+            fn (string $domain): bool => $domain !== $validated['domain'],
+        ));
+        $user->save();
+
+        return redirect()
+            ->route('console.mcp.connect')
+            ->with('status', "Redirect origin {$validated['domain']} removed.");
+    }
+
+    /**
+     * Normalize to a bare origin — scheme://host[:port] — or null when the
+     * input carries a path, query, fragment, userinfo, wildcard, or a
+     * non-http(s) scheme (custom-scheme callbacks live in
+     * mcp.custom_schemes, a separate allow-list).
+     */
+    private static function normalizeRedirectOrigin(string $input): ?string
+    {
+        // Trailing slashes collapse — 'https://x/' and 'https://x' are the
+        // same origin.
+        $input = rtrim(trim($input), '/');
+
+        if ($input === '' || str_contains($input, '*')) {
+            return null;
+        }
+
+        $parts = parse_url($input);
+        $scheme = is_array($parts) ? strtolower((string) ($parts['scheme'] ?? '')) : '';
+        $host = is_array($parts) ? (string) ($parts['host'] ?? '') : '';
+
+        if (! in_array($scheme, ['http', 'https'], true) || $host === '') {
+            return null;
+        }
+
+        if (isset($parts['path']) || isset($parts['query']) || isset($parts['fragment'])
+            || isset($parts['user']) || isset($parts['pass'])) {
+            return null;
+        }
+
+        return $scheme.'://'.strtolower($host).(isset($parts['port']) ? ':'.$parts['port'] : '');
     }
 
     /**

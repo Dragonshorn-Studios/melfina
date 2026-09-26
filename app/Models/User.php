@@ -17,8 +17,9 @@ use Laravel\Passport\HasApiTokens;
 /**
  * @property string|null $mcp_key_hash
  * @property Carbon|null $mcp_key_issued_at
+ * @property array<int, string>|null $mcp_redirect_domains
  */
-#[Fillable(['name', 'email', 'password', 'is_owner', 'mcp_key_hash', 'mcp_key_issued_at'])]
+#[Fillable(['name', 'email', 'password', 'is_owner', 'mcp_key_hash', 'mcp_key_issued_at', 'mcp_redirect_domains'])]
 #[Hidden(['password', 'remember_token', 'mcp_key_hash'])]
 class User extends Authenticatable implements OAuthenticatable
 {
@@ -44,6 +45,7 @@ class User extends Authenticatable implements OAuthenticatable
             'password' => 'hashed',
             'is_owner' => 'boolean',
             'mcp_key_issued_at' => 'datetime',
+            'mcp_redirect_domains' => 'array',
         ];
     }
 

@@ -214,3 +214,81 @@ it('unbinds tokens when the consent grant is removed via console revoke', functi
 
     mcpCall('tools/list', [], $accessToken)->assertUnauthorized();
 });
+
+it('lets the owner manage redirect origins from the console, no env edit', function () {
+    $owner = User::factory()->owner()->create();
+
+    // Before the console entry, the origin is refused by DCR.
+    registerClient(['https://grok.example.com/cb'])
+        ->assertStatus(400)
+        ->assertJson(['error' => 'invalid_redirect_uri']);
+
+    $this->actingAs($owner)
+        ->post(route('console.mcp.redirect-domains.store'), ['domain' => 'https://grok.example.com'])
+        ->assertRedirect(route('console.mcp.connect'));
+
+    expect($owner->fresh()->mcp_redirect_domains)->toBe(['https://grok.example.com']);
+
+    registerClient(['https://grok.example.com/cb'])->assertCreated();
+});
+
+it('normalizes and rejects malformed redirect origins', function () {
+    $owner = User::factory()->owner()->create();
+
+    // Case + trailing slash collapse to a bare origin; duplicate adds dedupe.
+    $this->actingAs($owner)
+        ->post(route('console.mcp.redirect-domains.store'), ['domain' => 'HTTPS://App.Example.com:8443/'])
+        ->assertRedirect(route('console.mcp.connect'));
+    $this->actingAs($owner)
+        ->post(route('console.mcp.redirect-domains.store'), ['domain' => 'https://app.example.com:8443'])
+        ->assertRedirect(route('console.mcp.connect'));
+
+    expect($owner->fresh()->mcp_redirect_domains)->toBe(['https://app.example.com:8443']);
+
+    foreach (['https://evil.example.com/callback', 'ftp://x', 'https://*', 'not-a-url', 'https://user:pw@h.com', ''] as $bad) {
+        $this->actingAs($owner)
+            ->post(route('console.mcp.redirect-domains.store'), ['domain' => $bad])
+            ->assertSessionHasErrors('domain');
+    }
+
+    expect($owner->fresh()->mcp_redirect_domains)->toBe(['https://app.example.com:8443']);
+});
+
+it('removes a stored origin and DCR refuses it again', function () {
+    $owner = User::factory()->owner()->create(['mcp_redirect_domains' => ['https://gone.example.com']]);
+
+    registerClient(['https://gone.example.com/cb'])->assertCreated();
+
+    $this->actingAs($owner)
+        ->delete(route('console.mcp.redirect-domains.destroy'), ['domain' => 'https://gone.example.com'])
+        ->assertRedirect(route('console.mcp.connect'));
+
+    expect($owner->fresh()->mcp_redirect_domains)->toBe([]);
+
+    registerClient(['https://gone.example.com/cb'])
+        ->assertStatus(400)
+        ->assertJson(['error' => 'invalid_redirect_uri']);
+});
+
+it('keeps env-provided origins working alongside stored ones', function () {
+    User::factory()->owner()->create(['mcp_redirect_domains' => ['https://chatgpt.com']]);
+
+    // Loopback (env default) still allowed…
+    registerClient(['http://localhost/cb'])->assertCreated();
+    // …plus the stored origin.
+    registerClient(['https://chatgpt.com/aidp/callback'])->assertCreated();
+});
+
+it('locks the redirect-origin forms to the owner', function () {
+    $owner = User::factory()->owner()->create();
+    $guest = User::factory()->create(['is_owner' => false]);
+
+    test()->post(route('console.mcp.redirect-domains.store'), ['domain' => 'https://x.example.com'])
+        ->assertRedirect();
+
+    $this->actingAs($guest)
+        ->post(route('console.mcp.redirect-domains.store'), ['domain' => 'https://x.example.com'])
+        ->assertForbidden();
+
+    expect($owner->fresh()->mcp_redirect_domains)->toBeNull();
+});

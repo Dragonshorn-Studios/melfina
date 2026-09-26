@@ -84,6 +84,48 @@
                 <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $headersConfig }}</pre>
             </details>
 
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)" open>
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">OAUTH REDIRECT ORIGINS</summary>
+                <p class="mt-3 text-sm text-steel">
+                    Dynamic client registration only accepts callback URLs on allowed origins —
+                    <code>scheme://host[:port]</code>, no path. Loopback is always allowed for local
+                    clients; add remote origins here instead of editing <code>MCP_REDIRECT_DOMAINS</code>
+                    and redeploying.
+                </p>
+                <ul class="mt-3 space-y-1 font-mono text-xs">
+                    @foreach ($envRedirectDomains as $domain)
+                        <li class="flex items-center justify-between gap-3 border border-border/50 bg-void/60 px-3 py-1.5 text-steel" style="border-radius: var(--radius-console)">
+                            <span>{{ $domain }}</span>
+                            <span class="text-[10px] tracking-[0.12em]">ENV</span>
+                        </li>
+                    @endforeach
+                    @foreach ($storedRedirectDomains as $domain)
+                        <li class="flex items-center justify-between gap-3 border border-amber/40 bg-void/60 px-3 py-1.5 text-cream" style="border-radius: var(--radius-console)">
+                            <span>{{ $domain }}</span>
+                            <form method="POST" action="{{ route('console.mcp.redirect-domains.destroy') }}"
+                                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Remove {{ $domain }}? Clients can no longer register callbacks on it.">
+                                @csrf
+                                @method('DELETE')
+                                <input type="hidden" name="domain" value="{{ $domain }}">
+                                <button type="submit" class="font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">REMOVE</button>
+                            </form>
+                        </li>
+                    @endforeach
+                </ul>
+                <form method="POST" action="{{ route('console.mcp.redirect-domains.store') }}" class="mt-3 flex gap-2">
+                    @csrf
+                    <input type="text" name="domain" placeholder="https://chatgpt.com" required
+                        class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream placeholder:text-steel/60"
+                        style="border-radius: var(--radius-console)">
+                    <button type="submit"
+                        class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                        style="border-radius: var(--radius-console)">allow origin</button>
+                </form>
+                @error('domain')
+                    <p class="mt-2 font-mono text-xs text-red-400">{{ $message }}</p>
+                @enderror
+            </details>
+
             <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
                 <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">OAUTH CLIENTS</summary>
                 <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
