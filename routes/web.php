@@ -90,6 +90,8 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::delete('knowledge/{knowledge}', [KnowledgeController::class, 'destroy'])->name('knowledge.destroy');
 
     Route::get('messages', [MessageController::class, 'index'])->name('messages.index');
+    Route::put('messages/webhook', [MessageController::class, 'updateWebhook'])->name('messages.webhook.update');
+    Route::post('messages/webhook/rotate', [MessageController::class, 'rotateWebhookSecret'])->name('messages.webhook.rotate');
     Route::get('messages/{message}', [MessageController::class, 'show'])->name('messages.show');
 
     Route::get('clients', [McpClientController::class, 'index'])->name('clients.index');

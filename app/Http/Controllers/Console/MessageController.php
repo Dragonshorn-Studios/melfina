@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Agent;
 use App\Models\AgentMessage;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -56,7 +57,64 @@ class MessageController extends Controller
                 'read' => $validated['read'] ?? null,
                 'ack' => $validated['ack'] ?? null,
             ],
+            'webhookUrl' => $request->user()->webhook_url,
+            'webhookSecretSet' => $request->user()->webhook_secret !== null,
         ]);
+    }
+
+    /**
+     * Set or clear the delivery webhook URL. Saving a URL auto-mints a
+     * signing secret when none exists — the plaintext flashes once so the
+     * owner can wire it into the receiver.
+     */
+    public function updateWebhook(Request $request): RedirectResponse
+    {
+        $this->authorize('viewAny', AgentMessage::class);
+
+        $validated = $request->validate([
+            'webhook_url' => ['nullable', 'url:http,https', 'max:2048'],
+        ]);
+
+        $user = $request->user();
+        $url = trim((string) ($validated['webhook_url'] ?? ''));
+
+        if ($url === '') {
+            $user->webhook_url = null;
+            $user->webhook_secret = null;
+            $user->save();
+
+            return redirect()
+                ->route('console.messages.index')
+                ->with('status', 'Delivery webhook cleared.');
+        }
+
+        $user->webhook_url = $url;
+        $user->save();
+
+        if ($user->webhook_secret === null) {
+            return redirect()
+                ->route('console.messages.index')
+                ->with('status', 'Delivery webhook saved — copy the signing secret into your receiver.')
+                ->with('plaintext_webhook_secret', $user->rotateWebhookSecret());
+        }
+
+        return redirect()
+            ->route('console.messages.index')
+            ->with('status', 'Delivery webhook saved.');
+    }
+
+    /**
+     * Roll the HMAC secret. The new plaintext flashes once; the old one
+     * stops verifying immediately, so receivers must be updated.
+     */
+    public function rotateWebhookSecret(Request $request): RedirectResponse
+    {
+        $this->authorize('viewAny', AgentMessage::class);
+
+        return redirect()
+            ->route('console.messages.index')
+            ->with('status', 'Webhook secret rotated — update your receiver.')
+            ->with('plaintext_webhook_secret', $request->user()->rotateWebhookSecret());
     }
 
     /**

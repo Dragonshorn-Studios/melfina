@@ -80,6 +80,16 @@ fi
 
 php artisan migrate --force --graceful
 
+# Delivery webhooks (and any future queued work) need a worker — the
+# serve process alone never drains the database queue. The loop restarts
+# it after --max-time expiry or a crash so deliveries can't silently stop.
+(
+    while true; do
+        php artisan queue:work --sleep=3 --tries=5 --max-time=3600 || true
+        sleep 3
+    done
+) &
+
 # FrankenPHP serves the app concurrently (php artisan serve is single-threaded,
 # so one slow request stalls everything — including the /up healthcheck).
 export PORT="${PORT:-8000}"

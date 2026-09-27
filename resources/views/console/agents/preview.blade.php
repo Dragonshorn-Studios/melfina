@@ -33,9 +33,15 @@
         </div>
 
         <div class="mt-6 border-t border-border pt-4">
-            <p class="font-mono text-xs tracking-[0.16em] text-steel">GENERATED SKILL — skills/melfina/SKILL.md</p>
+            <p class="font-mono text-xs tracking-[0.16em] text-steel">GENERATED SKILL — skills/melfina/SKILL.md (dedicated package)</p>
             <p class="mt-1 font-mono text-xs text-steel">The umbrella doc baked into this agent's plugin package.</p>
             <pre class="mt-2 whitespace-pre-wrap break-words border border-border/50 bg-void/60 px-3 py-2 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $umbrellaSkill }}</pre>
+        </div>
+
+        <div class="mt-6 border-t border-border pt-4">
+            <p class="font-mono text-xs tracking-[0.16em] text-steel">GENERATED SKILL — skills/melfina/SKILL.md (fleet package)</p>
+            <p class="mt-1 font-mono text-xs text-steel">The variant in the shared fleet package — persona-less; agents name themselves per call.</p>
+            <pre class="mt-2 whitespace-pre-wrap break-words border border-border/50 bg-void/60 px-3 py-2 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $fleetUmbrellaSkill }}</pre>
         </div>
 
         <div class="mt-6 border-t border-border pt-4">
