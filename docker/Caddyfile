@@ -1,0 +1,13 @@
+{
+	frankenphp
+	auto_https off
+}
+
+:{$PORT} {
+	root {$APP_ROOT:/app/public}
+	encode zstd br gzip
+
+	php_server {
+		try_files {path} index.php
+	}
+}
