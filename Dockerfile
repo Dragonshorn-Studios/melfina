@@ -1,4 +1,4 @@
-FROM php:8.4-cli-bookworm
+FROM dunglas/frankenphp:php8.4-bookworm
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -8,7 +8,8 @@ RUN apt-get update \
         libsqlite3-dev \
         xz-utils \
         curl \
-    && docker-php-ext-install pdo_sqlite zip bcmath \
+    && install-php-extensions pdo_sqlite zip bcmath opcache \
+    && mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
     && curl -fsSL https://nodejs.org/dist/v22.20.0/node-v22.20.0-linux-x64.tar.xz \
         | tar -xJ -C /usr/local --strip-components=1 \
     && curl -fsSL https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
