@@ -365,7 +365,10 @@ async function liveEntry(tool) {
   if (liveIndex === undefined) {
     const res = await request('GET', `${base}/api/tools`);
     const data = await res.json().catch(() => null);
-    liveIndex = (data && data.ok && data.tools) || [];
+    if (!data || !data.ok) {
+      fail((data && data.error) || `HTTP ${res.status}`, hintFor(res.status, tool));
+    }
+    liveIndex = data.tools;
   }
   return liveIndex.find((t) => t.name === tool);
 }
@@ -399,8 +402,13 @@ try {
       await listTools();
       break;
     case 'schema': {
-      const entry = rest[0] && toolEntry(rest[0]);
-      if (!entry) fail(`unknown tool "${rest[0] ?? ''}"`, 'run `node scripts/melfina-call.mjs list`');
+      // Offline for packaged tools; a key unlocks the live index for
+      // tools added to Melfina after this export.
+      let entry = rest[0] && toolEntry(rest[0]);
+      if (!entry && key) entry = await liveEntry(rest[0]);
+      if (!entry) {
+        fail(`unknown tool "${rest[0] ?? ''}"`, key ? 'run `node scripts/melfina-call.mjs list`' : 'not in this package — set $MELFINA_API_KEY to check the live surface');
+      }
       console.log(JSON.stringify(entry.inputSchema, null, 2));
       break;
     }

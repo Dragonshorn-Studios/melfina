@@ -75,7 +75,14 @@ class GitHubPublisher
             return;
         }
 
-        foreach ($tree->json('tree', []) as $node) {
+        // A truncated recursive tree can't prove the sweep is complete —
+        // refetch just the managed subtrees instead of treating a partial
+        // listing as authoritative.
+        $nodes = $tree->json('truncated')
+            ? $this->managedTreeNodes($http, $full, $branch)
+            : $tree->json('tree', []);
+
+        foreach ($nodes as $node) {
             $path = $node['path'] ?? '';
 
             if (($node['type'] ?? '') !== 'blob' || isset($files[$path]) || ! self::managed($path)) {
@@ -94,16 +101,55 @@ class GitHubPublisher
     }
 
     /**
+     * Managed subtrees fetched one at a time when the whole-repo
+     * recursive tree comes back truncated — the package's footprint is
+     * small enough that each of these fits under the limit.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function managedTreeNodes(PendingRequest $http, string $full, string $branch): array
+    {
+        $nodes = [];
+
+        foreach (['', 'skills', 'scripts', '.minimax-plugin', '.claude-plugin'] as $dir) {
+            $tree = $http->get("/repos/{$full}/git/trees/{$branch}".($dir === '' ? '' : ":{$dir}"), ['recursive' => $dir === '' ? '0' : '1']);
+
+            if ($tree->status() === 404) {
+                continue;
+            }
+
+            if ($tree->failed() || $tree->json('truncated')) {
+                throw new RuntimeException("Could not list {$dir} in the repo — stale files may remain; delete them manually.");
+            }
+
+            foreach ($tree->json('tree', []) as $node) {
+                // Shallow dir listings return paths relative to the dir —
+                // re-root them so `managed` sees repo-relative paths.
+                if ($dir !== '' && isset($node['path'])) {
+                    $node['path'] = $dir.'/'.$node['path'];
+                }
+                $nodes[] = $node;
+            }
+        }
+
+        return $nodes;
+    }
+
+    /**
      * Whether a repo path belongs to the generated package surface —
-     * the only files publish is allowed to delete.
+     * the only files publish is allowed to delete. Deliberately narrow:
+     * melfina-prefixed skills and Melfina's own file names, never a
+     * generic skills/ or scripts/ tree the owner may share.
      */
     private static function managed(string $path): bool
     {
-        return str_starts_with($path, 'skills/')
-            || str_starts_with($path, 'scripts/')
-            || str_starts_with($path, '.minimax-plugin/')
-            || str_starts_with($path, '.claude-plugin/')
-            || in_array($path, ['melfina-api.json', 'mcp.json', '.mcp.json', 'plugin.json', 'README.md', 'LICENSE'], true);
+        return str_starts_with($path, 'skills/melfina')
+            || in_array($path, [
+                'scripts/melfina-call.mjs',
+                'melfina-api.json',
+                '.minimax-plugin/plugin.json',
+                '.claude-plugin/plugin.json',
+            ], true);
     }
 
     /**

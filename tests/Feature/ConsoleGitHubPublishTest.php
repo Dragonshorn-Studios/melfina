@@ -85,6 +85,7 @@ it('deletes files a previous layout publish left behind', function () {
         'api.github.com/repos/octo/melfina-plugin/contents/*' => Http::response(['content' => []], 200),
         'api.github.com/repos/octo/melfina-plugin/git/trees/*' => Http::response(['tree' => [
             ['path' => 'skills/melfina-read-file/SKILL.md', 'type' => 'blob', 'sha' => 'stalesha'],
+            ['path' => 'skills/custom-helper/SKILL.md', 'type' => 'blob', 'sha' => 'ownskill'],
             ['path' => 'docs/human-notes.md', 'type' => 'blob', 'sha' => 'ownsha'],
         ]]),
     ]);
@@ -105,6 +106,9 @@ it('deletes files a previous layout publish left behind', function () {
         && $request->url() === 'https://api.github.com/repos/octo/melfina-plugin/contents/skills/melfina-read-file/SKILL.md'
         && $request['sha'] === 'stalesha');
     Http::assertNotSent(fn ($request) => str_contains($request->url(), 'docs/human-notes.md'));
+    // …and never touches skills the package doesn't own.
+    Http::assertNotSent(fn ($request) => $request->method() === 'DELETE'
+        && str_contains($request->url(), 'skills/custom-helper'));
 });
 
 it('creates the repo under the token login when it does not exist', function () {
