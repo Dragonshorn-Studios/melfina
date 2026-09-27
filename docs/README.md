@@ -20,6 +20,8 @@ A self-hosted **Imp brain**: Laravel + MCP. One agent = one key = one private fi
 
 **Mail pings:** delivery is durable — the inbox row is the source of truth. On commit, Melfina enqueues a best-effort "check your mail" ping (`MailPingQueue`) that `subscriptions/listen` streams yield as `notifications/melfina/mail` notifications (a namespaced extension — MCP logging is never used as a mailbox). Dedicated connections hear only their own mail; fleet-key connections hear every ping and get `recipient_agent_id`/`recipient_name`/`unread`/`tool: list_inbox` so an orchestrator can route it. Pings carry no sender, subject, body, or paths. A listen stream stays open `melfina.mail_listen_seconds` (default 110s) then closes; clients that never listen just poll `list_inbox`.
 
+**Delivery webhook:** hosts that can't listen can be woken over plain HTTP — the owner sets a webhook URL on the messages screen and Melfina POSTs an HMAC-signed minimal notice (message id, recipient, delivered_at, idempotency key) on every delivery, retried with backoff off the database queue. Payload and receiver verification notes: [delivery-webhooks.md](delivery-webhooks.md).
+
 **HTTP tool fallback:** MCP is the canonical path, but runtimes that can't run an MCP server can call the same tools over plain JSON: `GET /api/tools` lists the surface, `POST /api/tools/{tool}` invokes it with the tool's arguments object as the request body (the same shape as `tools/call` `params.arguments`) and gets `{ok, result}` / `{ok, error}` back. Auth is keys only — `melf_`/`melfs_`/`melfg_` over Bearer or Basic; OAuth tokens issued for `/mcp` are not accepted here. One `ToolCatalog` drives MCP, HTTP, and the generated skills, so the adapters can't drift. Scoped API keys (`melfs_…`) are least-privilege per-agent credentials for weaker/cloud agents — each carries an allowlist of scopes (`files:read`, `knowledge:read`, … — or the `all:read` / `all:write` presets covering whole classes) issued and revoked from the agent's console page. Every exported package ships a generated `skills/melfina-<tool>/SKILL.md` per tool plus a machine-readable `melfina-api.json`; each skill mandates MCP-first, forbids calling both paths for one operation, and reads its credential from `$MELFINA_API_KEY` — nothing secret is baked into artifacts.
 
 ## What Melfina is not
@@ -43,5 +45,6 @@ Owner auth, agent CRUD, VFS, MCP, Shared ACL, and that chrome are implemented �
 | [look.md](look.md) | Palette, type, mark, CSS rules |
 | [market.md](market.md) | Positioning, locked Liter copy, discovery |
 | [theme/](theme/README.md) | Token swatch for the locked palette |
+| [delivery-webhooks.md](delivery-webhooks.md) | Receiver contract for the signed delivery webhook |
 
 Product name **Imp** stays as-is. **ImpPost** is retired as a product boundary — it survives only as an optional label for the owner messages screen.
