@@ -7,6 +7,7 @@ use App\Mcp\PluginRepo;
 use App\Mcp\ToolCatalog;
 use App\Models\Agent;
 use App\Models\AgentApiKey;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -319,6 +320,8 @@ class AgentController extends Controller
             $zipPath = $repos->packageZip($agent);
         } catch (\RuntimeException $e) {
             abort(500, $e->getMessage());
+        } catch (LockTimeoutException) {
+            abort(500, 'Package build is busy — retry in a moment.');
         }
 
         $slug = Str::slug($agent->name) ?: 'agent';

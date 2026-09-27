@@ -247,11 +247,16 @@ class PluginRepo
     {
         $this->dropRepo($agent);
 
-        if ($plaintext !== null) {
-            $this->rebuildPackage($agent, $plaintext);
-        } else {
-            $this->dropPackage($agent);
-        }
+        // Same lock packageZip holds while refreshing + zipping, so a
+        // download can't read a mid-rewrite package tree.
+        Cache::lock('melfina-plugin-repo:'.$agent->id.':pkg', 30)
+            ->block(10, function () use ($agent, $plaintext): void {
+                if ($plaintext !== null) {
+                    $this->rebuildPackage($agent, $plaintext);
+                } else {
+                    $this->dropPackage($agent);
+                }
+            });
     }
 
     /**
