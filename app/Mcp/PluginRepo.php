@@ -260,13 +260,18 @@ class PluginRepo
     /**
      * Refresh the credential-free generated files (manifests, umbrella
      * skill, per-tool HTTP-fallback skills, melfina-api.json) inside a
-     * persisted package dir — mcp.json is the only file that needs the
-     * plaintext key, so a ZIP built from an old tree still ships the
-     * current generated surface without it.
+     * persisted package dir — the mcp.json manifests are the only files
+     * needing the plaintext key, so a ZIP built from an old tree still
+     * ships the current generated surface without it. The skills tree is
+     * rebuilt wholesale so tools removed from the catalog don't leave a
+     * stale SKILL.md behind.
      */
     public function refreshGeneratedFiles(Agent $agent): void
     {
         $dir = $this->packageDir($agent);
+
+        File::deleteDirectory($dir.'/skills');
+        File::delete($dir.'/melfina-api.json');
 
         foreach ($this->packageDocs($agent) as $path => $contents) {
             $full = $dir.'/'.$path;

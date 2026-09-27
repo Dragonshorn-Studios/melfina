@@ -73,11 +73,11 @@ class SkillDocs
 
 Melfina provides internal tools and memory. Before using a Melfina HTTP skill, check whether the Melfina MCP server is available. Prefer MCP whenever possible.
 
-If your runtime cannot run an MCP server, every tool above is also
+If your runtime cannot run an MCP server, every catalogued tool is also
 callable over plain JSON HTTP — see the generated skills under
-`skills/melfina-*/` and the machine-readable `melfina-api.json`. Each
-skill repeats the precedence rule and forbids calling both paths for the
-same operation.
+`skills/melfina-*/` (one per catalogued tool) and the machine-readable
+`melfina-api.json`. Each skill repeats the precedence rule and forbids
+calling both paths for the same operation.
 
 HTTP calls authenticate with a Bearer key injected by your runtime —
 `Authorization: Bearer \$MELFINA_API_KEY`. Credentials are never stored
@@ -104,7 +104,7 @@ MD;
             'auth' => [
                 'bearer' => 'Authorization: Bearer $MELFINA_API_KEY — melf_… (dedicated), melfs_… (scoped), or melfg_… (fleet)',
                 'basic' => 'https://<agent name>:$MELFINA_API_KEY@host/api/tools/{tool} — Basic username pins the persona on fleet keys',
-                'persona' => 'fleet keys name the agent per call via the `name` argument or an X-Melfina-Agent-Key header',
+                'persona' => 'fleet keys name the agent per call via the `name` argument, an X-Melfina-Agent-Key header, or the ?agent_key=<name> query param (names only)',
                 'scopes' => 'melfs_… keys carry a scope allowlist per tool; the `all:read` preset covers every `*:read` scope and `all:write` covers every scope',
                 'credentials' => 'injected by the target runtime ($MELFINA_API_KEY); never stored in generated files',
             ],
@@ -189,8 +189,9 @@ Key forms:
   without it; the `all:read` preset covers every read scope and
   `all:write` every scope).
 - `melfg_…` fleet key — also name your agent: `"name": "<your agent
-  name>"` in the body, or an `X-Melfina-Agent-Key: <your agent name>`
-  header. URL-only clients can pin it as the Basic username:
+  name>"` in the body, an `X-Melfina-Agent-Key: <your agent name>`
+  header, or `?agent_key=<your agent name>` in the query (names only).
+  URL-only clients can pin it as the Basic username:
   `https://<your name>:\$MELFINA_API_KEY@{$host}/api/tools/{$tool['name']}`.
 
 ## Request
@@ -215,7 +216,10 @@ Errors return `{"ok": false, "error": "…"}` with a non-2xx status:
   agent.
 - `403` — a scoped key (`melfs_…`) lacking the `{$scope}` scope.
 - `404` — no such tool.
-- `422` — invalid arguments; `fields` names the offenders.
+- `422` — invalid arguments; on schema violations `fields` names the
+  offenders.
+- `429` — too many requests (the endpoint's throttle — the response is
+  the framework's, not the `ok`/`error` envelope).
 - `400` — a tool-level error — the failure the MCP tool would return as
   `isError` (for example a not-found file or a rate limit), as the
   `error` string.

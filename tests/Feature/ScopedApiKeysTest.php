@@ -259,9 +259,12 @@ it('refreshes generated files into a stale package dir on zip download', functio
     $repos->rebuildPackage($this->agent, 'melf_testkey');
     $dir = $repos->packageDir($this->agent);
 
-    // A package built before the generated skills existed.
+    // A package built before the generated skills existed — plus a
+    // stale skill for a tool that has since left the catalog.
     unlink($dir.'/melfina-api.json');
     unlink($dir.'/skills/melfina-read-file/SKILL.md');
+    mkdir($dir.'/skills/melfina-removed-tool', 0755, true);
+    file_put_contents($dir.'/skills/melfina-removed-tool/SKILL.md', 'stale');
 
     $response = $this->actingAs($this->owner)
         ->get(route('console.agents.plugin', $this->agent))
@@ -280,7 +283,9 @@ it('refreshes generated files into a stale package dir on zip download', functio
     expect($archive->open($response->baseResponse->getFile()->getPathname()))->toBeTrue();
     $inZip = fn (string $name): bool => $archive->getFromName($name) !== false;
     expect($inZip('melfina-api.json'))->toBeTrue()
-        ->and($inZip('skills/melfina-read-file/SKILL.md'))->toBeTrue();
+        ->and($inZip('skills/melfina-read-file/SKILL.md'))->toBeTrue()
+        // the wholesale skills rebuild drops tools removed from the catalog
+        ->and($inZip('skills/melfina-removed-tool/SKILL.md'))->toBeFalse();
     $archive->close();
 });
 
