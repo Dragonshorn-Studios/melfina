@@ -323,7 +323,10 @@ it('ships the single-skill layout as umbrella + call script', function () {
     $manifest = json_decode($files['melfina-api.json'], true);
     expect(collect($manifest['tools'])->pluck('name')->all())
         ->toEqualCanonicalizing(collect($tools)->pluck('name')->all())
-        ->and($manifest['base'])->toBe(rtrim(config('app.url'), '/'));
+        ->and($manifest['base'])->toBe(rtrim(config('app.url'), '/'))
+        // no per-tool skill ships in this layout — point at the umbrella
+        ->and(collect($manifest['tools'])->pluck('skill')->unique()->all())
+        ->toBe(['skills/melfina/SKILL.md']);
 });
 
 it('serves the single-skill package at .single.git clone paths', function () {

@@ -35,7 +35,7 @@ class SkillDocs
      */
     public function files(string $baseUrl, PackageVariant $variant = PackageVariant::Multi): array
     {
-        $files = ['melfina-api.json' => $this->manifest($baseUrl)];
+        $files = ['melfina-api.json' => $this->manifest($baseUrl, $variant)];
 
         if ($variant === PackageVariant::Single) {
             $files['scripts/melfina-call.mjs'] = self::callScript();
@@ -125,9 +125,11 @@ MD;
      * Machine-readable manifest of the whole HTTP tool surface: the
      * endpoint pattern, the accepted credential forms, and every tool's
      * name, scope, skill path, and input schema. `base` is the plain
-     * origin the bundled call script derives its URLs from.
+     * origin the bundled call script derives its URLs from. In the
+     * `single` layout no per-tool skill exists — `skill` points at the
+     * umbrella so manifest consumers never chase a missing file.
      */
-    private function manifest(string $baseUrl): string
+    private function manifest(string $baseUrl, PackageVariant $variant = PackageVariant::Multi): string
     {
         $base = rtrim($baseUrl, '/');
 
@@ -155,7 +157,9 @@ MD;
                 'inputSchema' => $tool['inputSchema'],
                 'outputSchema' => $tool['outputSchema'],
                 'resultType' => $tool['json'] ? 'json' : 'text',
-                'skill' => 'skills/'.self::skillName($tool['name']).'/SKILL.md',
+                'skill' => $variant === PackageVariant::Single
+                    ? 'skills/melfina/SKILL.md'
+                    : 'skills/'.self::skillName($tool['name']).'/SKILL.md',
             ])->all(),
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
     }
@@ -305,8 +309,7 @@ function typeOk(value, type) {
 // Pre-flight the required/type fields declared in melfina-api.json so a
 // malformed call fails locally with a readable message instead of a 422.
 // Unknown arguments pass through — server-side validation owns the rest.
-function checkArgs(tool, callArgs) {
-  const entry = toolEntry(tool);
+function checkArgs(entry, tool, callArgs) {
   if (!entry) return;
   const schema = entry.inputSchema || {};
   const problems = (schema.required || [])
@@ -354,12 +357,29 @@ async function listTools() {
   }
 }
 
+// The packaged manifest is authoritative, but the server may have grown
+// tools since export — fall back to the live index before refusing, so
+// `list` never advertises a tool `call` then rejects.
+let liveIndex;
+async function liveEntry(tool) {
+  if (liveIndex === undefined) {
+    const res = await request('GET', `${base}/api/tools`);
+    const data = await res.json().catch(() => null);
+    liveIndex = (data && data.ok && data.tools) || [];
+  }
+  return liveIndex.find((t) => t.name === tool);
+}
+
 async function call(tool, text) {
-  if (!toolEntry(tool)) {
-    fail(`unknown tool "${tool}"`, 'run `node scripts/melfina-call.mjs list` — or re-export the package if it was added to Melfina recently');
+  let entry = toolEntry(tool);
+  if (!entry) {
+    entry = await liveEntry(tool);
+    if (!entry) {
+      fail(`unknown tool "${tool}"`, 'run `node scripts/melfina-call.mjs list`');
+    }
   }
   const callArgs = parseArgs(text ?? '{}');
-  checkArgs(tool, callArgs);
+  checkArgs(entry, tool, callArgs);
   const res = await request('POST', `${base}/api/tools/${tool}`, callArgs);
   const data = await res.json().catch(() => null);
   if (!data) fail(`HTTP ${res.status}`, 'response was not JSON — is the endpoint reachable and correct?');

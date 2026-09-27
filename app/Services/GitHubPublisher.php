@@ -44,7 +44,66 @@ class GitHubPublisher
             $this->putFile($http, $full, $path, $contents);
         }
 
+        $this->deleteStale($http, $full, $files);
+
         return "https://github.com/{$full}";
+    }
+
+    /**
+     * Remove generated files a previous publish left behind — switching
+     * package layouts must not leave dead skills/scripts registered.
+     * Only Melfina-owned paths are ever deleted: the skills/, scripts/,
+     * .minimax-plugin/, and .claude-plugin/ trees plus the known
+     * generated top-level files.
+     *
+     * @param  array<string, string>  $files  the paths just published
+     */
+    private function deleteStale(PendingRequest $http, string $full, array $files): void
+    {
+        // An empty or unreadable repo has nothing to clean — never block
+        // a publish on housekeeping.
+        $repo = $http->get("/repos/{$full}");
+        $branch = $repo->json('default_branch');
+
+        if ($repo->failed() || ! is_string($branch)) {
+            return;
+        }
+
+        $tree = $http->get("/repos/{$full}/git/trees/{$branch}", ['recursive' => '1']);
+
+        if ($tree->failed()) {
+            return;
+        }
+
+        foreach ($tree->json('tree', []) as $node) {
+            $path = $node['path'] ?? '';
+
+            if (($node['type'] ?? '') !== 'blob' || isset($files[$path]) || ! self::managed($path)) {
+                continue;
+            }
+
+            $response = $http->delete("/repos/{$full}/contents/{$path}", [
+                'message' => "Remove {$path}",
+                'sha' => $node['sha'],
+            ]);
+
+            if ($response->failed()) {
+                throw new RuntimeException("Failed removing stale {$path}: ".($response->json('message') ?? 'GitHub error'));
+            }
+        }
+    }
+
+    /**
+     * Whether a repo path belongs to the generated package surface —
+     * the only files publish is allowed to delete.
+     */
+    private static function managed(string $path): bool
+    {
+        return str_starts_with($path, 'skills/')
+            || str_starts_with($path, 'scripts/')
+            || str_starts_with($path, '.minimax-plugin/')
+            || str_starts_with($path, '.claude-plugin/')
+            || in_array($path, ['melfina-api.json', 'mcp.json', '.mcp.json', 'plugin.json', 'README.md', 'LICENSE'], true);
     }
 
     /**
