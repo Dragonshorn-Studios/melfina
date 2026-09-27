@@ -92,7 +92,7 @@
                     <input type="text" name="key_name" required maxlength="60" placeholder="cloud-minimax"
                         class="mt-1 block border border-border bg-void px-2 py-1 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">
                 </label>
-                <fieldset class="flex flex-wrap gap-x-3 gap-y-1 font-mono text-xs text-steel">
+                <fieldset class="flex w-full min-w-0 flex-wrap gap-x-3 gap-y-1 font-mono text-xs text-steel">
                     @foreach ($apiScopes as $scope)
                         <label class="flex items-center gap-1">
                             <input type="checkbox" name="scopes[]" value="{{ $scope }}" class="accent-amber">
