@@ -71,6 +71,9 @@
                             <div>
                                 <span class="text-cream">{{ $key->name }}</span>
                                 <span class="text-steel"> — {{ implode(', ', $key->scopes ?? []) }}</span>
+                                @if ($key->expires_at)
+                                    <span class="{{ $key->isLive() ? 'text-steel' : 'text-danger' }}"> · {{ $key->expires_at->isPast() ? 'expired' : 'expires' }} {{ $key->expires_at->diffForHumans() }}</span>
+                                @endif
                             </div>
                             <form method="POST" action="{{ route('console.agents.api-keys.destroy', [$agent, $key]) }}"
                                 onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Revoke this key? It stops working immediately.">

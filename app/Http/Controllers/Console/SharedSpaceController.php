@@ -5,12 +5,15 @@ namespace App\Http\Controllers\Console;
 use App\Http\Controllers\Controller;
 use App\Models\Agent;
 use App\Models\SharedAcl;
+use App\Models\SharedFile;
 use App\Models\SharedSpace;
+use App\Support\PathTree;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use InvalidArgumentException;
 
 class SharedSpaceController extends Controller
 {
@@ -44,20 +47,62 @@ class SharedSpaceController extends Controller
     }
 
     /**
-     * Browse the space's files — the operator can look inside anything
-     * agents share, no ACL needed (the console is owner-only).
+     * Browse the space's files one directory level at a time — dirs as
+     * links under a breadcrumb, files with size/open/delete. The owner
+     * can look inside anything agents share, no ACL needed.
      */
-    public function show(SharedSpace $shared): View
+    public function show(Request $request, SharedSpace $shared): View
     {
         $this->authorize('view', $shared);
 
+        $dir = PathTree::normalizeDir($request->string('dir')->toString());
+        $paths = $shared->files()->orderBy('path')->pluck('path');
+        $level = PathTree::level($paths, $dir);
+
+        // Files at exactly this level: bound prefix match + no '/' in
+        // the remainder — avoids binding one param per path.
+        $files = $shared->files()
+            ->when($dir !== '', fn ($query) => $query->whereRaw('substr(path, 1, ?) = ?', [strlen($dir), $dir]))
+            ->whereRaw('instr(substr(path, ?), ?) = 0', [strlen($dir) + 1, '/'])
+            ->orderBy('path')
+            ->select(['id', 'shared_space_id', 'path', 'updated_at'])
+            ->selectRaw('length(content) as byte_size')
+            ->paginate(50)
+            ->withQueryString();
+
         return view('console.shared.show', [
             'space' => $shared,
-            'files' => $shared->files()
-                ->orderBy('path')
-                ->select(['id', 'shared_space_id', 'path', 'updated_at'])
-                ->selectRaw('length(content) as byte_size')
-                ->paginate(50),
+            'dir' => $dir,
+            'dirs' => $level['dirs'],
+            'breadcrumbs' => PathTree::breadcrumbs($dir),
+            'files' => $files,
+            'fileCount' => $paths->count(),
+        ]);
+    }
+
+    /**
+     * Delete one file inside the space. The path is the row's normalized
+     * key, echoed back by the listing — same contract as agent file
+     * deletion.
+     */
+    public function destroyFile(Request $request, SharedSpace $shared): RedirectResponse
+    {
+        $this->authorize('update', $shared);
+
+        $validated = $request->validate([
+            'path' => ['required', 'string'],
+            'dir' => ['nullable', 'string'],
+        ]);
+
+        try {
+            SharedFile::deleteFor($shared, $validated['path']);
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['path' => $e->getMessage()]);
+        }
+
+        return redirect()->route('console.shared.show', [
+            'shared' => $shared,
+            'dir' => PathTree::normalizeDir($validated['dir'] ?? null),
         ]);
     }
 
@@ -77,6 +122,7 @@ class SharedSpaceController extends Controller
         return view('console.shared.file', [
             'space' => $shared,
             'file' => $file,
+            'dir' => PathTree::normalizeDir($request->string('dir')->toString()),
         ]);
     }
 

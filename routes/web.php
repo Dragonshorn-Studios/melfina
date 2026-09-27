@@ -4,8 +4,11 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredOwnerController;
 use App\Http\Controllers\Console\AgentController;
 use App\Http\Controllers\Console\DashboardController;
+use App\Http\Controllers\Console\EnrollKeyController;
+use App\Http\Controllers\Console\EnrollmentController;
 use App\Http\Controllers\Console\FileController;
 use App\Http\Controllers\Console\InstructionController;
+use App\Http\Controllers\Console\KnowledgeController;
 use App\Http\Controllers\Console\McpClientController;
 use App\Http\Controllers\Console\McpKeyController;
 use App\Http\Controllers\Console\MessageController;
@@ -33,6 +36,10 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::get('/', DashboardController::class)->name('dashboard');
 
     Route::post('mcp-key', [McpKeyController::class, 'store'])->name('mcp-key.store');
+    Route::post('enroll-keys', [EnrollKeyController::class, 'store'])->name('enroll-keys.store');
+    Route::delete('enroll-keys/{enrollKey}', [EnrollKeyController::class, 'destroy'])->name('enroll-keys.destroy');
+    Route::post('enrollments/{enrollment}/accept', [EnrollmentController::class, 'accept'])->name('enrollments.accept');
+    Route::post('enrollments/{enrollment}/revoke', [EnrollmentController::class, 'revoke'])->name('enrollments.revoke');
     Route::delete('mcp-keys/{fleetKey}', [McpKeyController::class, 'destroy'])->name('mcp-key.destroy');
     Route::get('mcp', [McpKeyController::class, 'connect'])->name('mcp.connect');
     Route::get('mcp/plugin.zip', [McpKeyController::class, 'pluginZip'])->name('mcp.plugin.zip');
@@ -51,6 +58,7 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::delete('agents/{agent}/memories/{index}', [AgentController::class, 'destroyMemory'])
         ->whereNumber('index')
         ->name('agents.memories.destroy');
+    Route::get('agents/{agent}/preview', [AgentController::class, 'preview'])->name('agents.preview');
     Route::get('agents/{agent}/connect', [AgentController::class, 'connect'])->name('agents.connect');
     Route::get('agents/{agent}/plugin.zip', [AgentController::class, 'pluginZip'])->name('agents.plugin');
     Route::resource('agents', AgentController::class)->except(['destroy']);
@@ -66,7 +74,15 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::delete('files/{agent}', [FileController::class, 'destroy'])->name('files.destroy');
 
     Route::get('shared/{shared}/file', [SharedSpaceController::class, 'file'])->name('shared.file');
+    Route::delete('shared/{shared}/file', [SharedSpaceController::class, 'destroyFile'])->name('shared.file.destroy');
     Route::resource('shared', SharedSpaceController::class)->except(['destroy']);
+
+    Route::get('knowledge', [KnowledgeController::class, 'index'])->name('knowledge.index');
+    Route::get('knowledge/create', [KnowledgeController::class, 'create'])->name('knowledge.create');
+    Route::post('knowledge', [KnowledgeController::class, 'store'])->name('knowledge.store');
+    Route::get('knowledge/{knowledge}/edit', [KnowledgeController::class, 'edit'])->name('knowledge.edit');
+    Route::put('knowledge/{knowledge}', [KnowledgeController::class, 'update'])->name('knowledge.update');
+    Route::delete('knowledge/{knowledge}', [KnowledgeController::class, 'destroy'])->name('knowledge.destroy');
 
     Route::get('messages', [MessageController::class, 'index'])->name('messages.index');
     Route::get('messages/{message}', [MessageController::class, 'show'])->name('messages.show');

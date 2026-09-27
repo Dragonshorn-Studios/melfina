@@ -74,6 +74,9 @@
                         <a href="{{ route('console.shared.index') }}"
                             class="border px-3 py-1.5 font-mono text-xs {{ request()->routeIs('console.shared.*') ? 'border-amber bg-void text-amber' : 'border-transparent text-steel hover:border-border hover:text-cream' }}"
                             style="border-radius: var(--radius-console)">shared</a>
+                        <a href="{{ route('console.knowledge.index') }}"
+                            class="border px-3 py-1.5 font-mono text-xs {{ request()->routeIs('console.knowledge.*') ? 'border-amber bg-void text-amber' : 'border-transparent text-steel hover:border-border hover:text-cream' }}"
+                            style="border-radius: var(--radius-console)">knowledge</a>
                         <a href="{{ route('console.messages.index') }}"
                             class="border px-3 py-1.5 font-mono text-xs {{ request()->routeIs('console.messages.*') ? 'border-amber bg-void text-amber' : 'border-transparent text-steel hover:border-border hover:text-cream' }}"
                             style="border-radius: var(--radius-console)">{{ \App\Models\AgentMessage::messagesLabel() }}</a>
@@ -102,6 +105,7 @@
                             ['label' => 'Files', 'route' => route('console.files.show', $agent), 'active' => request()->routeIs('console.files.*')],
                             ['label' => 'Instructions', 'route' => route('console.agents.instructions.edit', $agent), 'active' => request()->routeIs('console.agents.instructions.*')],
                             ['label' => 'Persona', 'route' => route('console.agents.persona.edit', $agent), 'active' => request()->routeIs('console.agents.persona.*')],
+                            ['label' => 'Preview', 'route' => route('console.agents.preview', $agent), 'active' => request()->routeIs('console.agents.preview')],
                             ['label' => 'Key', 'route' => route('console.agents.show', $agent), 'active' => request()->routeIs('console.agents.show') || request()->routeIs('console.agents.edit')],
                             ['label' => 'Connect', 'route' => route('console.agents.connect', $agent), 'active' => request()->routeIs('console.agents.connect')],
                         ];

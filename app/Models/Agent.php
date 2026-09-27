@@ -53,6 +53,17 @@ class Agent extends Model
         return $this->hasMany(AgentApiKey::class);
     }
 
+    /**
+     * Self-enrollment reports bound to this agent — each accepted one
+     * mints short-lived scoped keys on demand.
+     *
+     * @return HasMany<AgentEnrollment, $this>
+     */
+    public function enrollments(): HasMany
+    {
+        return $this->hasMany(AgentEnrollment::class);
+    }
+
     public function isActive(): bool
     {
         return $this->status === self::STATUS_ACTIVE;

@@ -18,19 +18,25 @@ use Illuminate\Support\Str;
  *
  * @property int $id
  * @property int $agent_id
+ * @property int|null $enrollment_id
  * @property string $name
  * @property string $key_hash
  * @property list<string> $scopes
+ * @property Carbon|null $expires_at
  * @property Carbon|null $revoked_at
  */
-#[Fillable(['agent_id', 'name', 'key_hash', 'scopes', 'revoked_at'])]
+#[Fillable(['agent_id', 'enrollment_id', 'name', 'key_hash', 'scopes', 'expires_at', 'revoked_at'])]
 class AgentApiKey extends Model
 {
     public const PREFIX = 'melfs_';
 
+    /** Lifetime of a key minted through an accepted enrollment. */
+    public const MINTED_TTL_SECONDS = 86400;
+
     protected function casts(): array
     {
         return [
+            'expires_at' => 'datetime',
             'revoked_at' => 'datetime',
             'scopes' => 'array',
         ];
@@ -46,7 +52,8 @@ class AgentApiKey extends Model
 
     public function isLive(): bool
     {
-        return $this->revoked_at === null;
+        return $this->revoked_at === null
+            && ($this->expires_at === null || $this->expires_at->isFuture());
     }
 
     public function revoke(): void
@@ -102,6 +109,40 @@ class AgentApiKey extends Model
     }
 
     /**
+     * Issue a short-lived scoped key from an accepted enrollment. Each
+     * mint is a new row — the plaintext is never stored, so a polling
+     * agent gets a fresh key every accepted response.
+     *
+     * @param  list<string>  $scopes
+     */
+    public static function issueMinted(
+        Agent $agent,
+        string $name,
+        array $scopes,
+        AgentEnrollment $enrollment,
+        int $ttlSeconds = self::MINTED_TTL_SECONDS,
+    ): string {
+        $scopes = array_values(array_intersect($scopes, app(ToolCatalog::class)->scopeChoices()));
+
+        if ($scopes === []) {
+            throw new \InvalidArgumentException('A minted key needs at least one known scope.');
+        }
+
+        $plaintext = self::PREFIX.Str::random(48);
+
+        static::query()->create([
+            'agent_id' => $agent->id,
+            'enrollment_id' => $enrollment->id,
+            'name' => $name,
+            'key_hash' => Agent::hashKey($plaintext),
+            'scopes' => $scopes,
+            'expires_at' => now()->addSeconds($ttlSeconds),
+        ]);
+
+        return $plaintext;
+    }
+
+    /**
      * Resolve a live scoped key from its plaintext. Fails closed on a
      * wrong prefix, unknown hash, revoked key, or a disabled agent.
      */
@@ -114,6 +155,7 @@ class AgentApiKey extends Model
         $key = static::query()
             ->where('key_hash', Agent::hashKey($plaintext))
             ->whereNull('revoked_at')
+            ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))
             ->first();
 
         if ($key === null || ! $key->agent?->isActive()) {

@@ -6,7 +6,7 @@
                 <h1 class="mt-2 break-all font-mono text-xl font-semibold tracking-tight text-cream">{{ $file->path }}</h1>
                 <p class="mt-2 text-sm text-steel">updated {{ $file->updated_at->toDateTimeString() }}</p>
             </div>
-            <a href="{{ route('console.shared.show', $space) }}"
+            <a href="{{ route('console.shared.show', ['shared' => $space, 'dir' => $dir]) }}"
                 class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-steel hover:border-amber hover:text-cream"
                 style="border-radius: var(--radius-console)">back</a>
         </div>

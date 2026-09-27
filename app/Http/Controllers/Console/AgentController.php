@@ -4,9 +4,14 @@ namespace App\Http\Controllers\Console;
 
 use App\Http\Controllers\Controller;
 use App\Mcp\PluginRepo;
+use App\Mcp\Servers\MelfinaServer;
 use App\Mcp\ToolCatalog;
+use App\Mcp\Tools\ReadInstructions;
+use App\Mcp\Tools\ReadPersona;
 use App\Models\Agent;
 use App\Models\AgentApiKey;
+use App\Models\AgentEnrollment;
+use App\Rules\UnreservedAgentName;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,6 +20,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Laravel\Mcp\Server\Attributes\Instructions;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class AgentController extends Controller
@@ -25,6 +31,12 @@ class AgentController extends Controller
 
         return view('console.agents.index', [
             'agents' => Agent::query()->orderBy('name')->get(),
+            'enrollments' => AgentEnrollment::query()
+                ->with('agent')
+                ->orderByRaw("case status when 'pending' then 0 else 1 end")
+                ->latest()
+                ->get(),
+            'apiScopes' => app(ToolCatalog::class)->scopeChoices(),
         ]);
     }
 
@@ -40,7 +52,7 @@ class AgentController extends Controller
         $this->authorize('create', Agent::class);
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('agents', 'name'), $this->reservedNameRule()],
+            'name' => ['required', 'string', 'max:255', Rule::unique('agents', 'name'), new UnreservedAgentName],
         ]);
 
         $agent = Agent::query()->create(['name' => $validated['name']]);
@@ -177,6 +189,31 @@ class AgentController extends Controller
         ]);
     }
 
+    /**
+     * Read-only preview of everything the agent receives: the exact
+     * read_instructions / read_persona payloads, the MCP server's
+     * instructions blurb, the generated umbrella skill, and the tool
+     * surface — so the owner verifies the composed result without
+     * calling the tools.
+     */
+    public function preview(Agent $agent, ToolCatalog $catalog, PluginRepo $repos): View
+    {
+        $this->authorize('view', $agent);
+
+        $serverInstructions = collect(
+            (new \ReflectionClass(MelfinaServer::class))->getAttributes(Instructions::class)
+        )->first()?->newInstance()->value;
+
+        return view('console.agents.preview', [
+            'agent' => $agent,
+            'serverInstructions' => $serverInstructions,
+            'instructionsPayload' => ReadInstructions::payload($agent),
+            'personaPayload' => ReadPersona::payload($agent),
+            'umbrellaSkill' => $repos->umbrellaSkill($agent),
+            'tools' => $catalog->all(),
+        ]);
+    }
+
     public function edit(Agent $agent): View
     {
         $this->authorize('update', $agent);
@@ -189,7 +226,7 @@ class AgentController extends Controller
         $this->authorize('update', $agent);
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('agents', 'name')->ignore($agent->id), $this->reservedNameRule()],
+            'name' => ['required', 'string', 'max:255', Rule::unique('agents', 'name')->ignore($agent->id), new UnreservedAgentName],
             'description' => ['nullable', 'string', 'max:500'],
             'status' => ['required', 'string', 'in:'.Agent::STATUS_ACTIVE.','.Agent::STATUS_DISABLED],
         ]);
@@ -327,19 +364,5 @@ class AgentController extends Controller
         $slug = Str::slug($agent->name) ?: 'agent';
 
         return response()->download($zipPath, 'melfina-'.$slug.'.zip')->deleteFileAfterSend();
-    }
-
-    /**
-     * Reject names whose plugin-repo slug would collide with a reserved
-     * repo path — the public fleet package's derived name shadows any
-     * per-agent clone URL that maps to it.
-     */
-    private function reservedNameRule(): \Closure
-    {
-        return function (string $attribute, mixed $value, \Closure $fail): void {
-            if (Str::slug((string) $value).'.git' === app(PluginRepo::class)->publicRepoName()) {
-                $fail('This name is reserved by the fleet plugin repo.');
-            }
-        };
     }
 }
