@@ -100,6 +100,13 @@ class ToolCallController extends Controller
             return $this->fail($e->getMessage(), 401);
         } catch (AuthorizationException $e) {
             return $this->fail($e->getMessage(), 403);
+        } catch (\Throwable $e) {
+            // Anything else is a tool bug, not a caller error — mirror
+            // MCP's ToolInvoker, which folds every Throwable into an
+            // isError result rather than leaking a stack to the wire.
+            report($e);
+
+            return $this->fail('An internal server error occurred.', 500);
         } finally {
             $container->forgetInstance('mcp.request');
         }

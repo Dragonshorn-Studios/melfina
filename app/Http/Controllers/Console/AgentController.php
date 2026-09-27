@@ -313,10 +313,10 @@ class AgentController extends Controller
         abort_unless(is_dir($dir), 404);
 
         try {
-            // Overlay the credential-free generated files so a package
-            // built before a catalog change doesn't ship stale skills.
-            $repos->refreshGeneratedFiles($agent);
-            $zipPath = $repos->zipDirectory($dir);
+            // packageZip refreshes the credential-free generated files
+            // under a lock so a package built before a catalog change
+            // doesn't ship stale skills.
+            $zipPath = $repos->packageZip($agent);
         } catch (\RuntimeException $e) {
             abort(500, $e->getMessage());
         }

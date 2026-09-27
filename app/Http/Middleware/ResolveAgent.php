@@ -127,7 +127,7 @@ class ResolveAgent
 
             // Query strings land in access logs — accept only the non-secret
             // name form there; keys belong in the header.
-            $persona = is_string($candidate) && ! str_starts_with($candidate, 'melf_')
+            $persona = is_string($candidate) && ! preg_match('/^melf[gs]?_/', $candidate)
                 ? $candidate
                 : null;
         }

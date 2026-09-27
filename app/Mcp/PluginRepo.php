@@ -169,6 +169,23 @@ class PluginRepo
     }
 
     /**
+     * Zip an agent's persisted package dir for download, refreshing the
+     * credential-free generated files first — serialized per agent so a
+     * concurrent download or key rotation can't read a mid-refresh tree.
+     */
+    public function packageZip(Agent $agent): string
+    {
+        $dir = $this->packageDir($agent);
+
+        return Cache::lock('melfina-plugin-repo:'.$agent->id.':pkg', 30)
+            ->block(10, function () use ($agent, $dir): string {
+                $this->refreshGeneratedFiles($agent);
+
+                return $this->zipDirectory($dir);
+            });
+    }
+
+    /**
      * Zip a package directory into a 0600 temp file and return its path —
      * the caller streams it via response()->download()->deleteFileAfterSend().
      * tempnam's file is already 0600; OVERWRITE truncates rather than
@@ -270,8 +287,13 @@ class PluginRepo
     {
         $dir = $this->packageDir($agent);
 
-        File::deleteDirectory($dir.'/skills');
-        File::delete($dir.'/melfina-api.json');
+        if (is_dir($dir.'/skills')) {
+            throw_unless(File::deleteDirectory($dir.'/skills'), RuntimeException::class, 'Cannot clear the package skills tree');
+        }
+
+        if (is_file($dir.'/melfina-api.json')) {
+            throw_unless(File::delete($dir.'/melfina-api.json'), RuntimeException::class, 'Cannot clear the package manifest');
+        }
 
         foreach ($this->packageDocs($agent) as $path => $contents) {
             $full = $dir.'/'.$path;
