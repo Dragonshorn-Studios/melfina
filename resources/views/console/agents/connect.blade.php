@@ -135,6 +135,26 @@
                     <li>No OAuth support? Send <code>Authorization: Bearer melfg_…</code> (fleet key) plus <code>X-Melfina-Agent-Key</code> with this agent's name or key on every request. A dedicated config may send <code>Bearer melf_…</code> alone instead.</li>
                 </ol>
             </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">NO MCP? HTTP TOOL FALLBACK</summary>
+                <p class="mt-3 text-sm text-steel">
+                    Runtimes that can't run an MCP server call the same tools over plain JSON —
+                    <code>GET {{ $apiToolsIndex }}</code> lists the surface;
+                    <code>POST {{ $apiToolsIndex }}/&lt;tool&gt;</code> invokes it with the tool's
+                    arguments object as the body (the same shape as MCP <code>tools/call</code>).
+                    MCP stays the canonical path — prefer it whenever the client supports it, and
+                    never call both for the same operation.
+                </p>
+                <p class="mt-2 text-sm text-steel">
+                    Auth is the same Bearer/Basic credential surface as above, plus scoped
+                    <code>melfs_…</code> keys for least-privilege cloud agents — issue them on the
+                    <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.show', $agent) }}">agent page</a>.
+                    Every plugin package also ships a generated <code>skills/melfina-&lt;tool&gt;/SKILL.md</code>
+                    per tool and a machine-readable <code>melfina-api.json</code>, so skill-only runtimes
+                    can drive the HTTP surface directly.
+                </p>
+            </details>
         </div>
     </main>
 </x-console-layout>

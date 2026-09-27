@@ -32,6 +32,11 @@ use Symfony\Component\Process\Process;
  */
 class PluginRepo
 {
+    public function __construct(
+        private readonly ToolCatalog $catalog,
+        private readonly SkillDocs $skills,
+    ) {}
+
     /**
      * Ensure a fresh repo exists for these credentials and return its path.
      * `$mode` is 'fleet' or 'direct'; `$credential` is the plaintext secret
@@ -146,7 +151,7 @@ class PluginRepo
         foreach ($this->publicPackageFiles() as $path => $contents) {
             $full = $dir.'/'.$path;
             File::ensureDirectoryExists(dirname($full));
-            file_put_contents($full, $contents);
+            throw_unless(file_put_contents($full, $contents) !== false, RuntimeException::class, "Cannot write package file {$path}");
         }
 
         return $dir;
@@ -161,6 +166,23 @@ class PluginRepo
     {
         return Cache::lock('melfina-plugin-repo:public-pkg', 30)
             ->block(10, fn () => $this->zipDirectory($this->rebuildPublicPackage()));
+    }
+
+    /**
+     * Zip an agent's persisted package dir for download, refreshing the
+     * credential-free generated files first — serialized per agent so a
+     * concurrent download or key rotation can't read a mid-refresh tree.
+     */
+    public function packageZip(Agent $agent): string
+    {
+        $dir = $this->packageDir($agent);
+
+        return Cache::lock('melfina-plugin-repo:'.$agent->id.':pkg', 30)
+            ->block(10, function () use ($agent, $dir): string {
+                $this->refreshGeneratedFiles($agent);
+
+                return $this->zipDirectory($dir);
+            });
     }
 
     /**
@@ -182,7 +204,7 @@ class PluginRepo
         // (.minimax-plugin/, .claude-plugin/, .mcp.json) — and needs no
         // GLOB_BRACE, which musl/Alpine PHP builds lack.
         foreach (File::allFiles($dir, hidden: true) as $file) {
-            $zip->addFile($file->getPathname(), $file->getRelativePathname());
+            throw_unless($zip->addFile($file->getPathname(), $file->getRelativePathname()), RuntimeException::class, 'Cannot add '.$file->getRelativePathname().' to the package zip');
         }
 
         throw_unless($zip->close(), RuntimeException::class);
@@ -225,11 +247,16 @@ class PluginRepo
     {
         $this->dropRepo($agent);
 
-        if ($plaintext !== null) {
-            $this->rebuildPackage($agent, $plaintext);
-        } else {
-            $this->dropPackage($agent);
-        }
+        // Same lock packageZip holds while refreshing + zipping, so a
+        // download can't read a mid-rewrite package tree.
+        Cache::lock('melfina-plugin-repo:'.$agent->id.':pkg', 30)
+            ->block(10, function () use ($agent, $plaintext): void {
+                if ($plaintext !== null) {
+                    $this->rebuildPackage($agent, $plaintext);
+                } else {
+                    $this->dropPackage($agent);
+                }
+            });
     }
 
     /**
@@ -245,11 +272,39 @@ class PluginRepo
         foreach ($this->packageFiles($agent, 'direct', $agentKey) as $path => $contents) {
             $full = $dir.'/'.$path;
             File::ensureDirectoryExists(dirname($full));
-            file_put_contents($full, $contents);
+            throw_unless(file_put_contents($full, $contents) !== false, RuntimeException::class, "Cannot write package file {$path}");
         }
 
         // These trees embed live credentials — keep them owner-only.
         chmod($dir, 0700);
+    }
+
+    /**
+     * Refresh the credential-free generated files (manifests, umbrella
+     * skill, per-tool HTTP-fallback skills, melfina-api.json) inside a
+     * persisted package dir — the mcp.json manifests are the only files
+     * needing the plaintext key, so a ZIP built from an old tree still
+     * ships the current generated surface without it. The skills tree is
+     * rebuilt wholesale so tools removed from the catalog don't leave a
+     * stale SKILL.md behind.
+     */
+    public function refreshGeneratedFiles(Agent $agent): void
+    {
+        $dir = $this->packageDir($agent);
+
+        if (is_dir($dir.'/skills')) {
+            throw_unless(File::deleteDirectory($dir.'/skills'), RuntimeException::class, 'Cannot clear the package skills tree');
+        }
+
+        if (is_file($dir.'/melfina-api.json')) {
+            throw_unless(File::delete($dir.'/melfina-api.json'), RuntimeException::class, 'Cannot clear the package manifest');
+        }
+
+        foreach ($this->packageDocs($agent) as $path => $contents) {
+            $full = $dir.'/'.$path;
+            File::ensureDirectoryExists(dirname($full));
+            throw_unless(file_put_contents($full, $contents) !== false, RuntimeException::class, "Cannot write package file {$path}");
+        }
     }
 
     /**
@@ -301,7 +356,28 @@ class PluginRepo
      */
     private function endpoint(): string
     {
-        return rtrim((string) config('app.url'), '/').'/mcp';
+        return $this->baseUrl().'/mcp';
+    }
+
+    /**
+     * The install's public origin — base for the /api/tools endpoints the
+     * generated HTTP fallback skills document. Pinned to config for the
+     * same reason as endpoint().
+     */
+    private function baseUrl(): string
+    {
+        return rtrim((string) config('app.url'), '/');
+    }
+
+    /**
+     * The generated HTTP-fallback skill files (one SKILL.md per tool under
+     * skills/, plus melfina-api.json) shared by every package variant.
+     *
+     * @return array<string, string>
+     */
+    private function skillFiles(): array
+    {
+        return $this->skills->files($this->baseUrl());
     }
 
     /**
@@ -327,7 +403,7 @@ class PluginRepo
         foreach ($files as $path => $contents) {
             $full = $work.'/'.$path;
             File::ensureDirectoryExists(dirname($full));
-            file_put_contents($full, $contents);
+            throw_unless(file_put_contents($full, $contents) !== false, RuntimeException::class, "Cannot write package file {$path}");
         }
 
         $steps = [
@@ -384,8 +460,6 @@ class PluginRepo
     private function packageFiles(Agent $agent, string $mode, string $credential): array
     {
         $endpoint = $this->endpoint();
-        $slug = Str::slug($agent->name) ?: 'agent';
-        $name = 'melfina-'.$slug;
 
         $headers = $mode === 'fleet'
             ? [
@@ -403,7 +477,28 @@ class PluginRepo
                     'headers' => $headers,
                 ],
             ],
-        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n";
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
+
+        return [
+            'mcp.json' => $mcp,
+            '.mcp.json' => $mcp,
+            ...$this->packageDocs($agent),
+        ];
+    }
+
+    /**
+     * The credential-free half of an agent's package: manifests, docs,
+     * and generated skills — everything except mcp.json, which carries
+     * the key. Regenerable without the plaintext (used by
+     * refreshGeneratedFiles to keep pre-existing ZIP packages current).
+     *
+     * @return array<string, string>
+     */
+    private function packageDocs(Agent $agent): array
+    {
+        $endpoint = $this->endpoint();
+        $slug = Str::slug($agent->name) ?: 'agent';
+        $name = 'melfina-'.$slug;
 
         $description = "Melfina brain for {$agent->name} — private files, instructions, and shared spaces.";
 
@@ -416,9 +511,9 @@ class PluginRepo
             'author' => 'Melfina',
             'category' => 'Productivity',
             'mcpServers' => ['mcp.json'],
-            'skills' => ['skills/melfina/SKILL.md'],
+            'skills' => ['skills/melfina/SKILL.md', ...$this->skills->skillPaths()],
             'apps' => [],
-        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n";
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
 
         $agentPlugins = json_encode([
             '$schema' => 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
@@ -427,14 +522,14 @@ class PluginRepo
             'description' => $description,
             'author' => ['name' => 'Melfina'],
             'repository' => url('/'),
-        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n";
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
 
         $claude = json_encode([
             'name' => $name,
             'version' => '1.0.0',
             'description' => $description,
             'author' => ['name' => 'Melfina'],
-        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n";
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
 
         $skill = <<<MD
 ---
@@ -466,14 +561,13 @@ MD;
         $license = "Proprietary. Generated by a private Melfina install for the named agent only.\n";
 
         return [
-            'mcp.json' => $mcp,
-            '.mcp.json' => $mcp,
             '.minimax-plugin/plugin.json' => $minimax,
             'plugin.json' => $agentPlugins,
             '.claude-plugin/plugin.json' => $claude,
-            'skills/melfina/SKILL.md' => $skill."\n",
+            'skills/melfina/SKILL.md' => $skill.$this->skills->appendix(credentialEmbedded: true)."\n",
             'README.md' => $readme."\n",
             'LICENSE' => $license,
+            ...$this->skillFiles(),
         ];
     }
 
@@ -502,7 +596,7 @@ MD;
                     ],
                 ],
             ],
-        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n";
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
 
         $skill = <<<'MD'
 ---
@@ -549,9 +643,9 @@ MD;
         return array_merge($this->fleetManifestFiles(), [
             'mcp.json' => $mcp,
             '.mcp.json' => $mcp,
-            'skills/melfina/SKILL.md' => $skill."\n",
+            'skills/melfina/SKILL.md' => $skill.$this->skills->appendix(credentialEmbedded: true)."\n",
             'README.md' => $readme."\n",
-        ]);
+        ], $this->skillFiles());
     }
 
     /**
@@ -577,7 +671,7 @@ MD;
                     ],
                 ],
             ],
-        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n";
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
 
         $skill = <<<'MD'
 ---
@@ -629,9 +723,9 @@ MD;
         return array_merge($this->fleetManifestFiles(), [
             'mcp.json' => $mcp,
             '.mcp.json' => $mcp,
-            'skills/melfina/SKILL.md' => $skill."\n",
+            'skills/melfina/SKILL.md' => $skill.$this->skills->appendix()."\n",
             'README.md' => $readme."\n",
-        ]);
+        ], $this->skillFiles());
     }
 
     /**
@@ -655,9 +749,9 @@ MD;
                 'author' => 'Melfina',
                 'category' => 'Productivity',
                 'mcpServers' => ['mcp.json'],
-                'skills' => ['skills/melfina/SKILL.md'],
+                'skills' => ['skills/melfina/SKILL.md', ...$this->skills->skillPaths()],
                 'apps' => [],
-            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n",
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n",
             'plugin.json' => json_encode([
                 '$schema' => 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
                 'name' => 'melfina',
@@ -665,13 +759,13 @@ MD;
                 'description' => $description,
                 'author' => ['name' => 'Melfina'],
                 'repository' => url('/'),
-            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n",
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n",
             '.claude-plugin/plugin.json' => json_encode([
                 'name' => 'melfina',
                 'version' => '1.0.0',
                 'description' => $description,
                 'author' => ['name' => 'Melfina'],
-            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n",
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n",
             'LICENSE' => "Proprietary. Generated by a private Melfina install for its agents only.\n",
         ];
     }

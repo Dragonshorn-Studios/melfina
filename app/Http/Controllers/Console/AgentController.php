@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Console;
 
 use App\Http\Controllers\Controller;
 use App\Mcp\PluginRepo;
+use App\Mcp\ToolCatalog;
 use App\Models\Agent;
+use App\Models\AgentApiKey;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -56,11 +59,47 @@ class AgentController extends Controller
             ->with('plaintext_key', $plaintext);
     }
 
-    public function show(Agent $agent): View
+    public function show(Agent $agent, ToolCatalog $catalog): View
     {
         $this->authorize('view', $agent);
 
-        return view('console.agents.show', ['agent' => $agent]);
+        return view('console.agents.show', [
+            'agent' => $agent,
+            'apiKeys' => $agent->apiKeys()->whereNull('revoked_at')->latest()->get(),
+            'apiScopes' => $catalog->scopeChoices(),
+        ]);
+    }
+
+    /**
+     * Issue a scoped API key (`melfs_…`) for HTTP-fallback tool calls —
+     * least-privilege credentials for weaker/cloud agents that can't run
+     * MCP. The plaintext flashes once; only the hash is stored.
+     */
+    public function storeApiKey(Request $request, Agent $agent, ToolCatalog $catalog): RedirectResponse
+    {
+        $this->authorize('update', $agent);
+
+        $validated = $request->validate([
+            'key_name' => ['required', 'string', 'max:60'],
+            'scopes' => ['required', 'array', 'min:1'],
+            'scopes.*' => ['string', Rule::in($catalog->scopeChoices())],
+        ]);
+
+        $plaintext = AgentApiKey::issue($agent, $validated['key_name'], $validated['scopes']);
+
+        return redirect()
+            ->route('console.agents.show', $agent)
+            ->with('plaintext_key', $plaintext);
+    }
+
+    public function destroyApiKey(Agent $agent, AgentApiKey $agentApiKey): RedirectResponse
+    {
+        $this->authorize('update', $agent);
+        abort_unless($agentApiKey->agent_id === $agent->id, 404);
+
+        $agentApiKey->revoke();
+
+        return redirect()->route('console.agents.show', $agent);
     }
 
     /**
@@ -82,6 +121,7 @@ class AgentController extends Controller
         return view('console.agents.connect', [
             'agent' => $agent,
             'endpoint' => $endpoint,
+            'apiToolsIndex' => url('/api/tools'),
             // '${1}' braces keep a digit-leading persona ('7of9') from being
             // consumed as part of the capture-group reference.
             'pluginUrl' => preg_replace('#^(https?://)#', '${1}'.$personaUser.':melfg_…@', $repoPath),
@@ -274,9 +314,14 @@ class AgentController extends Controller
         abort_unless(is_dir($dir), 404);
 
         try {
-            $zipPath = $repos->zipDirectory($dir);
+            // packageZip refreshes the credential-free generated files
+            // under a lock so a package built before a catalog change
+            // doesn't ship stale skills.
+            $zipPath = $repos->packageZip($agent);
         } catch (\RuntimeException $e) {
             abort(500, $e->getMessage());
+        } catch (LockTimeoutException) {
+            abort(500, 'Package build is busy — retry in a moment.');
         }
 
         $slug = Str::slug($agent->name) ?: 'agent';

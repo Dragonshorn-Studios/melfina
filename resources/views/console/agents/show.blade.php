@@ -2,7 +2,7 @@
     @if (session('plaintext_key'))
         <div id="plaintext-key" class="mb-6 border border-amber bg-void p-4" style="border-radius: var(--radius-console)">
             <div class="flex items-center justify-between">
-                <p class="font-mono text-xs tracking-[0.16em] text-amber">AGENT KEY — SHOWN ONCE</p>
+                <p class="font-mono text-xs tracking-[0.16em] text-amber">{{ str_starts_with(session('plaintext_key'), 'melfs_') ? 'SCOPED API KEY — SHOWN ONCE' : 'AGENT KEY — SHOWN ONCE' }}</p>
                 <button type="button" onclick="document.getElementById('plaintext-key').remove()"
                     class="border border-border px-2 py-1 font-mono text-xs text-steel hover:border-amber hover:text-cream"
                     style="border-radius: var(--radius-console)">dismiss</button>
@@ -58,6 +58,66 @@
             @if (! $agent->persona && ! $agent->memories)
                 <p class="mt-2 font-mono text-xs text-steel">nothing yet — the imp writes these itself via update_persona.</p>
             @endif
+        </div>
+
+        <div class="mt-6 border-t border-border pt-4">
+            <p class="font-mono text-xs tracking-[0.16em] text-steel">SCOPED API KEYS</p>
+            <p class="mt-1 font-mono text-xs text-steel">Least-privilege <span class="text-cream">melfs_…</span> keys for agents calling the HTTP tool fallback (POST /api/tools/…). A key can only call tools inside its scopes.</p>
+
+            @if ($apiKeys->isNotEmpty())
+                <ul class="mt-3 space-y-1 font-mono text-xs">
+                    @foreach ($apiKeys as $key)
+                        <li class="flex items-center justify-between gap-3 border border-border/50 bg-void/60 px-3 py-1.5" style="border-radius: var(--radius-console)">
+                            <div>
+                                <span class="text-cream">{{ $key->name }}</span>
+                                <span class="text-steel"> — {{ implode(', ', $key->scopes ?? []) }}</span>
+                            </div>
+                            <form method="POST" action="{{ route('console.agents.api-keys.destroy', [$agent, $key]) }}"
+                                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Revoke this key? It stops working immediately.">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="text-steel underline decoration-border underline-offset-4 hover:text-danger">revoke</button>
+                            </form>
+                        </li>
+                    @endforeach
+                </ul>
+            @else
+                <p class="mt-2 font-mono text-xs text-steel">none issued.</p>
+            @endif
+
+            <form method="POST" action="{{ route('console.agents.api-keys.store', $agent) }}" class="mt-3 flex flex-wrap items-end gap-3">
+                @csrf
+                <label class="font-mono text-xs text-steel">
+                    name
+                    <input type="text" name="key_name" required maxlength="60" placeholder="cloud-minimax"
+                        class="mt-1 block border border-border bg-void px-2 py-1 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">
+                </label>
+                <fieldset class="flex w-full min-w-0 flex-wrap gap-x-3 gap-y-1 font-mono text-xs text-steel">
+                    @foreach ($apiScopes as $scope)
+                        <label class="flex items-center gap-1">
+                            <input type="checkbox" name="scopes[]" value="{{ $scope }}" class="accent-amber">
+                            {{ $scope }}
+                            @if ($scope === 'all:read')
+                                <span class="opacity-60">(every read scope)</span>
+                            @elseif ($scope === 'all:write')
+                                <span class="opacity-60">(all read + write)</span>
+                            @endif
+                        </label>
+                    @endforeach
+                </fieldset>
+                <button type="submit"
+                    class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                    style="border-radius: var(--radius-console)">issue key</button>
+            </form>
+            @error('key_name')
+                <p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p>
+            @enderror
+            @error('scopes')
+                <p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p>
+            @enderror
+            @foreach ($errors->get('scopes.*') as $scopeErrors)
+                <p class="mt-1 font-mono text-xs text-danger">{{ $scopeErrors[0] }}</p>
+            @endforeach
         </div>
 
         <div class="mt-8 flex items-center gap-3">
