@@ -167,6 +167,18 @@ it('refuses a malformed base64 hatch', function () {
     ], ['Authorization' => 'Bearer melf_testkey'])->assertStatus(400)->assertJson(['ok' => false]);
 });
 
+it('reports real byte counts for binaries in the console listing', function () {
+    VfsFile::writeBinaryFor($this->agent, 'img.png', $this->png, 'image/png');
+    VfsFile::writeFor($this->agent, 'note.txt', 'hello');
+
+    $response = $this->actingAs($this->owner)->get('/console/files/'.$this->agent->id);
+    $response->assertOk();
+
+    $sizes = collect($response->viewData('meta'));
+    expect($sizes->get('img.png')->byte_size)->toBe(strlen($this->png));
+    expect($sizes->get('note.txt')->byte_size)->toBe(5);
+});
+
 it('lets the owner upload, view, and stream binaries in the console', function () {
     $this->actingAs($this->owner)
         ->post(route('console.files.upload', $this->agent), [

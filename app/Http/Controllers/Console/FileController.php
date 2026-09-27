@@ -44,7 +44,8 @@ class FileController extends Controller
             ->where('agent_id', $agent->id)
             ->whereIn('path', $level['files'])
             ->select(['path', 'mime'])
-            ->selectRaw('length(coalesce(content_blob, content)) as byte_size')
+            // SQLite's length() counts TEXT characters until NUL; force blob semantics for binary rows.
+            ->selectRaw('length(cast(coalesce(content_blob, content) as blob)) as byte_size')
             ->get()
             ->keyBy('path');
 

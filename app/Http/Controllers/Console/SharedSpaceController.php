@@ -70,7 +70,8 @@ class SharedSpaceController extends Controller
             ->whereRaw('instr(substr(path, ?), ?) = 0', [strlen($dir) + 1, '/'])
             ->orderBy('path')
             ->select(['id', 'shared_space_id', 'path', 'mime', 'updated_at'])
-            ->selectRaw('length(coalesce(content_blob, content)) as byte_size')
+            // SQLite's length() counts TEXT characters until NUL; force blob semantics for binary rows.
+            ->selectRaw('length(cast(coalesce(content_blob, content) as blob)) as byte_size')
             ->paginate(50)
             ->withQueryString();
 
