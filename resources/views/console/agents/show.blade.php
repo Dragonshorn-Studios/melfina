@@ -1,25 +1,18 @@
 <x-console-layout :title="$agent->name" :agent="$agent">
     @if (session('plaintext_key'))
-        <div id="plaintext-key" class="mb-6 border border-amber bg-void p-4" style="border-radius: var(--radius-console)">
-            <div class="flex items-center justify-between">
-                <p class="font-mono text-xs tracking-[0.16em] text-amber">{{ str_starts_with(session('plaintext_key'), 'melfs_') ? 'SCOPED API KEY — SHOWN ONCE' : 'AGENT KEY — SHOWN ONCE' }}</p>
-                <button type="button" onclick="document.getElementById('plaintext-key').remove()"
-                    class="border border-border px-2 py-1 font-mono text-xs text-steel hover:border-amber hover:text-cream"
-                    style="border-radius: var(--radius-console)">dismiss</button>
-            </div>
-            <p class="mt-2 select-all break-all font-mono text-sm text-cream">{{ session('plaintext_key') }}</p>
-            <p class="mt-2 font-mono text-xs text-steel">Copy it now. Only the hash is stored; we cannot show it again.</p>
-        </div>
+        <x-key-banner id="plaintext-key"
+            :label="str_starts_with(session('plaintext_key'), 'melfs_') ? 'SCOPED API KEY — SHOWN ONCE' : 'AGENT KEY — SHOWN ONCE'"
+            :value="session('plaintext_key')">
+            <x-slot:hint>Copy it now. Only the hash is stored; we cannot show it again.</x-slot:hint>
+        </x-key-banner>
     @endif
 
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">AGENT</p>
-                <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">{{ $agent->name }}</h1>
-            </div>
-            <span class="font-mono text-xs {{ $agent->isActive() ? 'text-amber' : 'text-danger' }}">{{ $agent->status }}</span>
-        </div>
+    <x-console-panel>
+        <x-page-header eyebrow="ABOUT" title="{{ $agent->name }}">
+            <x-slot:actions>
+<span class="font-mono text-xs {{ $agent->isActive() ? 'text-amber' : 'text-danger' }}">{{ $agent->status }}</span>
+            </x-slot:actions>
+        </x-page-header>
 
         <dl class="mt-6 space-y-2 font-mono text-xs">
             <div class="flex gap-4">
@@ -40,24 +33,15 @@
             <div class="flex items-center justify-between">
                 <p class="font-mono text-xs tracking-[0.16em] text-steel">PERSONA &amp; MEMORY</p>
                 <a href="{{ route('console.agents.persona.edit', $agent) }}"
-                    class="font-mono text-xs text-amber underline decoration-border underline-offset-4">edit →</a>
+                    class="font-mono text-xs text-amber underline decoration-border underline-offset-4">persona tab →</a>
             </div>
-            @if ($agent->persona)
-                <pre class="mt-2 whitespace-pre-wrap break-words border border-border/50 bg-void/60 px-3 py-2 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $agent->persona }}</pre>
-            @endif
-            @if ($agent->memories)
-                <ul class="mt-3 space-y-1 font-mono text-xs">
-                    @foreach ($agent->memories as $memory)
-                        <li class="border border-border/50 bg-void/60 px-3 py-1.5" style="border-radius: var(--radius-console)">
-                            <span class="text-steel">{{ $memory['at'] ?? '' }}</span>
-                            <span class="text-cream">{{ $memory['text'] ?? '' }}</span>
-                        </li>
-                    @endforeach
-                </ul>
-            @endif
-            @if (! $agent->persona && ! $agent->memories)
-                <p class="mt-2 font-mono text-xs text-steel">nothing yet — the imp writes these itself via update_persona.</p>
-            @endif
+            <p class="mt-2 font-mono text-xs text-steel">
+                @if ($agent->persona)
+                    {{ Str::limit($agent->persona, 120) }}
+                @else
+                    nothing yet — the imp writes these itself via update_persona.
+                @endif
+            </p>
         </div>
 
         <div class="mt-6 border-t border-border pt-4">
@@ -75,12 +59,9 @@
                                     <span class="{{ $key->isLive() ? 'text-steel' : 'text-danger' }}"> · {{ $key->expires_at->isPast() ? 'expired' : 'expires' }} {{ $key->expires_at->diffForHumans() }}</span>
                                 @endif
                             </div>
-                            <form method="POST" action="{{ route('console.agents.api-keys.destroy', [$agent, $key]) }}"
-                                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Revoke this key? It stops working immediately.">
-                                @csrf
-                                @method('DELETE')
+                            <x-confirm-form action="{{ route('console.agents.api-keys.destroy', [$agent, $key]) }}" method="DELETE" confirm="Revoke this key? It stops working immediately.">
                                 <button type="submit" class="text-steel underline decoration-border underline-offset-4 hover:text-danger">revoke</button>
-                            </form>
+                            </x-confirm-form>
                         </li>
                     @endforeach
                 </ul>
@@ -127,17 +108,11 @@
             <a href="{{ route('console.agents.edit', $agent) }}"
                 class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
                 style="border-radius: var(--radius-console)">rename / status</a>
-            <a href="{{ route('console.agents.instructions.edit', $agent) }}"
-                class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
-                style="border-radius: var(--radius-console)">instructions</a>
-            <form method="POST" action="{{ route('console.agents.rotate', $agent) }}"
-                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Rotate key? The old key stops working immediately.">
-                @csrf
-                <button type="submit"
+            <x-confirm-form action="{{ route('console.agents.rotate', $agent) }}" confirm="Rotate key? The old key stops working immediately."><button type="submit"
                     class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"
                     style="border-radius: var(--radius-console)">rotate key</button>
-            </form>
+            </x-confirm-form>
             <a href="{{ route('console.agents.index') }}" class="font-mono text-xs text-steel underline decoration-border underline-offset-4">back</a>
         </div>
-    </main>
+    </x-console-panel>
 </x-console-layout>

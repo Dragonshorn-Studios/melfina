@@ -1,15 +1,13 @@
 <x-console-layout :title="'Shared'">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">SHARED</p>
-                <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">Shared folders</h1>
-                <p class="mt-2 text-sm text-steel">You set who can read and write across agents.</p>
-            </div>
-            <a href="{{ route('console.shared.create') }}"
+    <x-console-panel>
+        <x-page-header eyebrow="SHARED" title="Shared folders">
+            <x-slot:subtitle>You set who can read and write across agents.</x-slot:subtitle>
+            <x-slot:actions>
+<a href="{{ route('console.shared.create') }}"
                 class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"
                 style="border-radius: var(--radius-console)">new space</a>
-        </div>
+            </x-slot:actions>
+        </x-page-header>
 
         @if ($spaces->isEmpty())
             <p class="mt-6 text-sm text-steel">No shared spaces yet.</p>
@@ -38,5 +36,5 @@
                 </tbody>
             </table>
         @endif
-    </main>
+    </x-console-panel>
 </x-console-layout>

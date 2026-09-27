@@ -1,15 +1,13 @@
 <x-console-layout :title="$label.' — message #'.$message->id">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">{{ strtoupper($label) }}</p>
-                <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">{{ $message->subject ?? 'Message #'.$message->id }}</h1>
-                <p class="mt-2 text-sm text-steel">{{ $message->sender_name }} → {{ $message->recipient_name }} · {{ $message->created_at->toDateTimeString() }}</p>
-            </div>
-            <a href="{{ route('console.messages.index') }}"
+    <x-console-panel>
+        <x-page-header eyebrow="{{ strtoupper($label) }}" title="{{ $message->subject ?? 'Message #'.$message->id }}">
+            <x-slot:subtitle>{{ $message->sender_name }} → {{ $message->recipient_name }} · {{ $message->created_at->toDateTimeString() }}</x-slot:subtitle>
+            <x-slot:actions>
+<a href="{{ route('console.messages.index') }}"
                 class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-steel hover:border-amber hover:text-cream"
                 style="border-radius: var(--radius-console)">back</a>
-        </div>
+            </x-slot:actions>
+        </x-page-header>
 
         <dl class="mt-6 flex flex-wrap gap-x-8 gap-y-2 font-mono text-xs">
             <div>
@@ -37,5 +35,5 @@
                 </details>
             @endforeach
         @endif
-    </main>
+    </x-console-panel>
 </x-console-layout>

@@ -30,7 +30,11 @@ class AgentController extends Controller
         $this->authorize('viewAny', Agent::class);
 
         return view('console.agents.index', [
-            'agents' => Agent::query()->orderBy('name')->get(),
+            'agents' => Agent::query()
+                ->withCount('files')
+                ->withMax('files', 'updated_at')
+                ->orderBy('name')
+                ->get(),
             'enrollments' => AgentEnrollment::query()
                 ->with('agent')
                 ->orderByRaw("case status when 'pending' then 0 else 1 end")
@@ -146,46 +150,6 @@ class AgentController extends Controller
             // as Basic userinfo: https://{name}:{fleet}@host/mcp.
             'endpointPersonaUrl' => preg_replace('#^(https?://)#', '${1}'.$personaUser.':melfg_…@', $endpoint),
             'hasPackage' => is_dir(app(PluginRepo::class)->packageDir($agent)),
-            'snippets' => [
-                'claudeDesktop' => json_encode([
-                    'mcpServers' => [
-                        'melfina' => [
-                            'command' => 'npx',
-                            'args' => ['-y', 'mcp-remote', $endpoint],
-                        ],
-                    ],
-                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-                'claudeCode' => 'claude mcp add --transport http melfina '.$endpoint,
-                'claudeCodeKey' => 'claude mcp add --transport http'
-                    .' --header "Authorization: Bearer melfg_…"'
-                    .' --header '.escapeshellarg('X-Melfina-Agent-Key: '.$agent->name)
-                    .' melfina '.$endpoint,
-                'cursor' => json_encode([
-                    'mcpServers' => [
-                        'melfina' => ['url' => $endpoint],
-                    ],
-                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-                'openCode' => json_encode([
-                    '$schema' => 'https://opencode.ai/config.json',
-                    'mcp' => [
-                        'melfina' => [
-                            'type' => 'remote',
-                            'url' => $endpoint,
-                            'enabled' => true,
-                        ],
-                    ],
-                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-                'minimax' => json_encode([
-                    'melfina' => [
-                        'url' => $endpoint,
-                        'headers' => [
-                            'Authorization' => 'Bearer melfg_…',
-                            'X-Melfina-Agent-Key' => $agent->name,
-                        ],
-                        'enabled' => true,
-                    ],
-                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-            ],
         ]);
     }
 

@@ -1,12 +1,10 @@
 <x-console-layout :title="'MCP Clients'">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <div>
-            <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">MCP CLIENTS</p>
-            <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">OAuth clients registered via DCR</h1>
-            <p class="mt-1 font-mono text-xs text-steel">
+    <x-console-panel>
+        <x-page-header eyebrow="MCP CLIENTS" title="OAuth clients registered via DCR">
+            <x-slot:subtitle>
                 Clients register themselves at <span class="text-cream">/oauth/register</span>, then the owner grants them one agent on the consent screen.
-            </p>
-        </div>
+            </x-slot:subtitle>
+        </x-page-header>
 
         @if ($clients->isEmpty())
             <p class="mt-6 text-sm text-steel">No OAuth clients registered yet.</p>
@@ -34,17 +32,14 @@
                             <td class="py-2 pr-4 text-steel">{{ $row['token_count'] }}</td>
                             <td class="py-2 pr-4 text-steel">{{ $row['client']->created_at?->toDateString() }}</td>
                             <td class="py-2 text-right">
-                                <form method="POST" action="{{ route('console.clients.destroy', $row['client']) }}"
-                                    onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Revoke {{ $row['client']->name }}? Its tokens stop working immediately.">
-                                    @csrf
-                                    @method('DELETE')
+                                <x-confirm-form action="{{ route('console.clients.destroy', $row['client']) }}" method="DELETE" confirm="Revoke {{ $row['client']->name }}? Its tokens stop working immediately.">
                                     <button type="submit" class="text-danger underline decoration-border underline-offset-4">revoke</button>
-                                </form>
+                                </x-confirm-form>
                             </td>
                         </tr>
                     @endforeach
                 </tbody>
             </table>
         @endif
-    </main>
+    </x-console-panel>
 </x-console-layout>

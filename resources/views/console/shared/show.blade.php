@@ -1,12 +1,9 @@
 <x-console-layout :title="'Shared — '.$space->name">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">SHARED SPACE</p>
-                <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">{{ $space->name }}</h1>
-                <p class="mt-2 text-sm text-steel">Everything agents have put in this folder — {{ $fileCount }} {{ Str::plural('file', $fileCount) }} total.</p>
-            </div>
-            <div class="flex gap-2">
+    <x-console-panel>
+        <x-page-header eyebrow="SHARED SPACE" title="{{ $space->name }}">
+            <x-slot:subtitle>Everything agents have put in this folder — {{ $fileCount }} {{ Str::plural('file', $fileCount) }} total.</x-slot:subtitle>
+            <x-slot:actions>
+<div class="flex gap-2">
                 <a href="{{ route('console.shared.edit', $space) }}"
                     class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
                     style="border-radius: var(--radius-console)">acl</a>
@@ -14,7 +11,8 @@
                     class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-steel hover:border-amber hover:text-cream"
                     style="border-radius: var(--radius-console)">back</a>
             </div>
-        </div>
+            </x-slot:actions>
+        </x-page-header>
 
         @include('console.partials.dirtree', [
             'crumbs' => collect($breadcrumbs)->map(fn ($c) => [
@@ -58,14 +56,11 @@
                             <td class="py-2 text-right">
                                 <a href="{{ route('console.shared.file', ['shared' => $space, 'path' => $file->path, 'dir' => $dir]) }}"
                                     class="text-amber underline decoration-border underline-offset-4">open</a>
-                                <form method="POST" action="{{ route('console.shared.file.destroy', $space) }}" class="inline"
-                                    onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Delete '{{ $file->path }}'? Any agent reading it next sees a miss.">
-                                    @csrf
-                                    @method('DELETE')
+                                <x-confirm-form action="{{ route('console.shared.file.destroy', $space) }}" method="DELETE" class="inline" confirm="Delete '{{ $file->path }}'? Any agent reading it next sees a miss.">
                                     <input type="hidden" name="path" value="{{ $file->path }}">
                                     <input type="hidden" name="dir" value="{{ $dir }}">
                                     <button type="submit" class="ml-3 text-steel underline decoration-border underline-offset-4 hover:text-danger">delete</button>
-                                </form>
+                                </x-confirm-form>
                             </td>
                         </tr>
                     @endforeach
@@ -78,5 +73,5 @@
         @error('path')
             <p class="mt-2 font-mono text-xs text-danger">{{ $message }}</p>
         @enderror
-    </main>
+    </x-console-panel>
 </x-console-layout>

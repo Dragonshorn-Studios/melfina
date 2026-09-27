@@ -1,14 +1,12 @@
 <x-console-layout :title="'Knowledge'">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">KNOWLEDGE</p>
-                <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">Canonical entries, one shared base</h1>
-            </div>
-            <a href="{{ route('console.knowledge.create') }}"
+    <x-console-panel>
+        <x-page-header eyebrow="KNOWLEDGE" title="Canonical entries, one shared base">
+            <x-slot:actions>
+<a href="{{ route('console.knowledge.create') }}"
                 class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"
                 style="border-radius: var(--radius-console)">new entry</a>
-        </div>
+            </x-slot:actions>
+        </x-page-header>
 
         <form method="GET" action="{{ route('console.knowledge.index') }}" class="mt-4 flex gap-2">
             <input type="text" name="q" value="{{ $q }}" placeholder="search names, aliases, summaries…" maxlength="200"
@@ -63,5 +61,5 @@
                 </tbody>
             </table>
         @endif
-    </main>
+    </x-console-panel>
 </x-console-layout>

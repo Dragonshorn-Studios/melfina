@@ -1,12 +1,9 @@
 <x-console-layout :title="'Preview — '.$agent->name" :agent="$agent">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">PREVIEW</p>
-                <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">{{ $agent->name }}</h1>
-                <p class="mt-2 text-sm text-steel">Exactly what the agent receives — read-only.</p>
-            </div>
-            <div class="flex gap-2">
+    <x-console-panel>
+        <x-page-header eyebrow="PREVIEW" title="{{ $agent->name }}">
+            <x-slot:subtitle>Exactly what the agent receives — read-only.</x-slot:subtitle>
+            <x-slot:actions>
+<div class="flex gap-2">
                 <a href="{{ route('console.agents.instructions.edit', $agent) }}"
                     class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
                     style="border-radius: var(--radius-console)">edit instructions</a>
@@ -14,7 +11,8 @@
                     class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
                     style="border-radius: var(--radius-console)">edit persona</a>
             </div>
-        </div>
+            </x-slot:actions>
+        </x-page-header>
 
         <div class="mt-6 border-t border-border pt-4">
             <p class="font-mono text-xs tracking-[0.16em] text-steel">MCP SERVER INSTRUCTIONS</p>
@@ -61,5 +59,5 @@
                 </tbody>
             </table>
         </div>
-    </main>
+    </x-console-panel>
 </x-console-layout>

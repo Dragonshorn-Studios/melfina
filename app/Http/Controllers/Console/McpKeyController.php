@@ -66,7 +66,47 @@ class McpKeyController extends Controller
             // GitHub publish settings — the token itself is never rendered.
             'hasGitHubToken' => $request->user()->github_token !== null,
             'githubRepo' => $request->user()->github_repo,
-            'operatorPersona' => $request->user()->operator_persona,
+            // Generic per-client snippets — NAME is the persona placeholder.
+            'snippets' => [
+                'claudeDesktop' => json_encode([
+                    'mcpServers' => [
+                        'melfina' => [
+                            'command' => 'npx',
+                            'args' => ['-y', 'mcp-remote', $endpoint],
+                        ],
+                    ],
+                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+                'claudeCode' => 'claude mcp add --transport http melfina '.$endpoint,
+                'claudeCodeKey' => 'claude mcp add --transport http'
+                    .' --header "Authorization: Bearer melfg_…"'
+                    .' --header '.escapeshellarg('X-Melfina-Agent-Key: NAME')
+                    .' melfina '.$endpoint,
+                'cursor' => json_encode([
+                    'mcpServers' => [
+                        'melfina' => ['url' => $endpoint],
+                    ],
+                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+                'openCode' => json_encode([
+                    '$schema' => 'https://opencode.ai/config.json',
+                    'mcp' => [
+                        'melfina' => [
+                            'type' => 'remote',
+                            'url' => $endpoint,
+                            'enabled' => true,
+                        ],
+                    ],
+                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+                'minimax' => json_encode([
+                    'melfina' => [
+                        'url' => $endpoint,
+                        'headers' => [
+                            'Authorization' => 'Bearer melfg_…',
+                            'X-Melfina-Agent-Key' => 'NAME',
+                        ],
+                        'enabled' => true,
+                    ],
+                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+            ],
         ]);
     }
 
@@ -85,7 +125,7 @@ class McpKeyController extends Controller
         $user->save();
 
         return redirect()
-            ->route('console.mcp.connect')
+            ->route('console.dashboard')
             ->with('status', 'Operator persona saved.');
     }
 

@@ -17,21 +17,13 @@ class DashboardController extends Controller
             'owner' => $request->user(),
             'fleetKeys' => $request->user()->mcpFleetKeys()->latest()->get(),
             'enrollKeys' => $request->user()->agentEnrollKeys()->latest()->get(),
+            'operatorPersona' => $request->user()->operator_persona,
             'stats' => [
                 'agents' => Agent::count(),
                 'active' => Agent::where('status', Agent::STATUS_ACTIVE)->count(),
                 'files' => VfsFile::count(),
                 'spaces' => SharedSpace::count(),
             ],
-            'agents' => Agent::query()
-                ->withCount('files')
-                ->withMax('files', 'updated_at')
-                ->orderBy('name')
-                ->get(),
-            'spaces' => SharedSpace::query()
-                ->withCount(['files', 'aclEntries'])
-                ->orderBy('name')
-                ->get(),
         ]);
     }
 }

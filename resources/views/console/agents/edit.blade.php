@@ -1,7 +1,7 @@
 <x-console-layout :title="'Edit '.$agent->name" :agent="$agent">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">EDIT AGENT</p>
-        <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">{{ $agent->name }}</h1>
+    <x-console-panel>
+        <x-page-header eyebrow="EDIT AGENT" title="{{ $agent->name }}">
+        </x-page-header>
 
         <form method="POST" action="{{ route('console.agents.update', $agent) }}" class="mt-6 space-y-4">
             @csrf
@@ -34,5 +34,5 @@
             </button>
             <a href="{{ route('console.agents.show', $agent) }}" class="ml-3 font-mono text-xs text-steel underline decoration-border underline-offset-4">cancel</a>
         </form>
-    </main>
+    </x-console-panel>
 </x-console-layout>

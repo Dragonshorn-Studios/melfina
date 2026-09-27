@@ -1,7 +1,7 @@
 <x-console-layout :title="'Persona — '.$agent->name" :agent="$agent">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">PERSONA &amp; MEMORY</p>
-        <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">{{ $agent->name }}</h1>
+    <x-console-panel>
+        <x-page-header eyebrow="PERSONA &amp; MEMORY" title="{{ $agent->name }}">
+        </x-page-header>
         <p class="mt-3 text-sm text-steel">
             The persona is the agent's self-authored "who I am" text; the memory log is its append-only
             journal. Both are what <code>read_persona</code> returns and <code>update_persona</code>
@@ -43,13 +43,10 @@
                                 <span class="text-steel">{{ $memory['at'] ?? '' }}</span>
                                 <span class="break-words text-cream">{{ $memory['text'] ?? '' }}</span>
                             </span>
-                            <form method="POST" action="{{ route('console.agents.memories.destroy', [$agent, $index]) }}"
-                                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Delete this memory?">
-                                @csrf
-                                @method('DELETE')
+                            <x-confirm-form action="{{ route('console.agents.memories.destroy', [$agent, $index]) }}" method="DELETE" confirm="Delete this memory?">
                                 <input type="hidden" name="expect" value="{{ md5(json_encode($memory)) }}">
                                 <button type="submit" class="shrink-0 font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">REMOVE</button>
-                            </form>
+                            </x-confirm-form>
                         </li>
                     @endforeach
                 </ul>
@@ -57,5 +54,5 @@
                 <p class="mt-3 font-mono text-xs text-steel">no memories yet — the imp appends them itself via update_persona.</p>
             @endif
         </div>
-    </main>
+    </x-console-panel>
 </x-console-layout>

@@ -1,7 +1,7 @@
 <x-console-layout title="Connect MCP" :agent="null">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">MCP</p>
-        <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">Connect the whole fleet</h1>
+    <x-console-panel>
+        <x-page-header eyebrow="MCP" title="Connect the whole fleet">
+        </x-page-header>
         <p class="mt-3 text-sm text-steel">
             One MCP install covers every agent on this Melfina. The <strong class="text-cream">fleet key</strong>
             (<code>melfg_…</code>, managed on the
@@ -86,6 +86,111 @@
                 <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $headersConfig }}</pre>
             </details>
 
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">CLAUDE DESKTOP</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>Edit Claude Desktop's config (macOS: <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>; Windows: <code>%APPDATA%\Claude\claude_desktop_config.json</code>).</li>
+                    <li>Add a <code>melfina</code> entry that runs <code>npx mcp-remote</code> (Node 18+) against the endpoint — it bridges OAuth automatically.</li>
+                    <li>Restart Claude Desktop and complete the browser consent when prompted.</li>
+                </ol>
+                <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $snippets['claudeDesktop'] }}</pre>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">CLAUDE CODE</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>Add the server with HTTP transport:</li>
+                </ol>
+                <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $snippets['claudeCode'] }}</pre>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel" start="2">
+                    <li>If <code>claude mcp list</code> shows "Needs authentication", run <code>/mcp</code> in a session and choose Authenticate.</li>
+                    <li>Or skip OAuth and send the fleet key + the agent's name directly:</li>
+                </ol>
+                <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $snippets['claudeCodeKey'] }}</pre>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">CURSOR</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>For OAuth, add <code>https://www.cursor.com</code> to the allowed redirect origins below — Cursor registers a fixed callback there.</li>
+                    <li>Edit <code>~/.cursor/mcp.json</code> (or Settings → Tools &amp; Integrations → MCP → Add Custom MCP):</li>
+                </ol>
+                <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $snippets['cursor'] }}</pre>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel" start="3">
+                    <li>Save and refresh the server; complete the browser consent when Cursor prompts.</li>
+                </ol>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">CHATGPT</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>Enable developer mode in ChatGPT (Settings → Connectors → Advanced).</li>
+                    <li>Create a connector, paste the endpoint URL, and complete the OAuth consent in the browser.</li>
+                    <li>If the flow redirects to a <code>chatgpt.com</code> callback that fails, allow that origin below (<code>chatgpt-desktop://</code> is already allowed).</li>
+                </ol>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">OPENCODE</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>Edit <code>~/.config/opencode/opencode.json</code> or a project <code>opencode.json</code> — OAuth stays on by default for remote servers.</li>
+                </ol>
+                <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $snippets['openCode'] }}</pre>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel" start="2">
+                    <li>Restart OpenCode and complete the browser consent when challenged.</li>
+                </ol>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">GROK</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>Open grok.com → Connectors → New Connector → Custom.</li>
+                    <li>Paste the endpoint URL and authenticate. The instance must be reachable on public HTTPS — Grok cannot call a LAN address.</li>
+                    <li>If Grok's redirect lands on a <code>grok.com</code> origin, allow it below first.</li>
+                </ol>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">MINIMAX (MAVIS)</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>MiniMax does not run the OAuth flow — send the fleet key as Bearer plus the agent's name in <code>X-Melfina-Agent-Key</code>. Or install the plugin package from the URL above.</li>
+                    <li>Edit <code>~/.mavis/mcp/mcp.json</code> and add a <code>melfina</code> entry (the file format varies between MiniMax versions — check <code>mavis mcp list</code> after saving):</li>
+                </ol>
+                <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $snippets['minimax'] }}</pre>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel" start="3">
+                    <li>Replace <code>NAME</code> and <code>melfg_…</code>, then restart the agent.</li>
+                </ol>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">ANY OTHER CLIENT</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>Transport: Streamable HTTP at the endpoint URL above.</li>
+                    <li>Auth: OAuth 2.1 with DCR — clients auto-register via <code>POST /oauth/register</code>; discovery is at <code>/.well-known/oauth-protected-resource</code> and <code>/.well-known/oauth-authorization-server</code>. PKCE S256 only.</li>
+                    <li>No OAuth support? Send <code>Authorization: Bearer melfg_…</code> (fleet key) plus <code>X-Melfina-Agent-Key</code> with the agent's name or key on every request. A dedicated config may send <code>Bearer melf_…</code> alone instead.</li>
+                </ol>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">NO MCP? HTTP TOOL FALLBACK</summary>
+                <p class="mt-3 text-sm text-steel">
+                    Runtimes that can't run an MCP server call the same tools over plain JSON —
+                    <code>GET {{ url('/api/tools') }}</code> lists the surface;
+                    <code>POST {{ url('/api/tools') }}/&lt;tool&gt;</code> invokes it with the tool's
+                    arguments object as the body (the same shape as MCP <code>tools/call</code>).
+                    MCP stays the canonical path — prefer it whenever the client supports it, and
+                    never call both for the same operation.
+                </p>
+                <p class="mt-2 text-sm text-steel">
+                    Auth is the same Bearer/Basic credential surface as above, plus scoped
+                    <code>melfs_…</code> keys for least-privilege cloud agents — issue them on each
+                    agent's About tab.
+                    Every plugin package also ships a generated <code>skills/melfina-&lt;tool&gt;/SKILL.md</code>
+                    per tool and a machine-readable <code>melfina-api.json</code>, so skill-only runtimes
+                    can drive the HTTP surface directly.
+                </p>
+            </details>
+
             <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)" open>
                 <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">PUBLISH TO GITHUB</summary>
                 <p class="mt-3 text-sm text-steel">
@@ -110,13 +215,10 @@
                         style="border-radius: var(--radius-console)">save</button>
                 </form>
                 @if ($hasGitHubToken && $githubRepo)
-                    <form method="POST" action="{{ route('console.mcp.github.publish') }}" class="mt-2"
-                        onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Publish the fleet package to github.com/{{ $githubRepo }}? The repo is created public if it doesn't exist.">
-                        @csrf
-                        <button type="submit"
+                    <x-confirm-form action="{{ route('console.mcp.github.publish') }}" class="mt-2" confirm="Publish the fleet package to github.com/{{ $githubRepo }}? The repo is created public if it doesn't exist."><button type="submit"
                             class="border border-amber/50 bg-void px-3 py-1.5 font-mono text-xs text-amber hover:border-amber"
                             style="border-radius: var(--radius-console)">publish to github.com/{{ $githubRepo }}</button>
-                    </form>
+                    </x-confirm-form>
                 @endif
                 @error('github_repo')
                     <p class="mt-2 font-mono text-xs text-red-400">{{ $message }}</p>
@@ -147,13 +249,10 @@
                     @foreach ($storedRedirectDomains as $domain)
                         <li class="flex items-center justify-between gap-3 border border-amber/40 bg-void/60 px-3 py-1.5 text-cream" style="border-radius: var(--radius-console)">
                             <span>{{ $domain }}</span>
-                            <form method="POST" action="{{ route('console.mcp.redirect-domains.destroy') }}"
-                                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Remove {{ $domain }}? Clients can no longer register callbacks on it.">
-                                @csrf
-                                @method('DELETE')
+                            <x-confirm-form action="{{ route('console.mcp.redirect-domains.destroy') }}" method="DELETE" confirm="Remove {{ $domain }}? Clients can no longer register callbacks on it.">
                                 <input type="hidden" name="domain" value="{{ $domain }}">
                                 <button type="submit" class="font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">REMOVE</button>
-                            </form>
+                            </x-confirm-form>
                         </li>
                     @endforeach
                 </ul>
@@ -172,26 +271,6 @@
             </details>
 
             <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
-                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">OPERATOR PERSONA</summary>
-                <p class="mt-3 text-sm text-steel">
-                    Who you are, appended to every agent's <code>read_instructions</code> — how the
-                    fleet should address its human. Leave empty to send nothing.
-                </p>
-                <form method="POST" action="{{ route('console.mcp.operator-persona.store') }}" class="mt-3">
-                    @csrf
-                    @method('PUT')
-                    <textarea name="operator_persona" rows="4"
-                        placeholder="The user is Antoni — address them as Antoni; they run Dragonshorn and prefer terse replies."
-                        class="w-full border border-border bg-void/60 px-3 py-2 font-mono text-xs text-cream placeholder:text-steel/60"
-                        style="border-radius: var(--radius-console)">{{ old('operator_persona', $operatorPersona) }}</textarea>
-                    @error('operator_persona') <p class="mt-1 font-mono text-xs text-red-400">{{ $message }}</p> @enderror
-                    <button type="submit"
-                        class="mt-2 border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
-                        style="border-radius: var(--radius-console)">save persona</button>
-                </form>
-            </details>
-
-            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
                 <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">OAUTH CLIENTS</summary>
                 <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
                     <li>OAuth clients don't need the fleet key: point them at the endpoint, they auto-register via <code>POST /oauth/register</code>, and the token is bound to one agent — chosen on the consent screen, which needs a one-time owner click <em>per bot</em>.</li>
@@ -200,5 +279,5 @@
                 </ol>
             </details>
         </div>
-    </main>
+    </x-console-panel>
 </x-console-layout>

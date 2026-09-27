@@ -16,7 +16,7 @@ it('renders the sidebar with agents and section links', function () {
         ->get(route('console.agents.index'))
         ->assertOk()
         ->assertSee($this->agent->name)
-        ->assertSee(route('console.files.show', $this->agent))
+        ->assertSee(route('console.agents.show', $this->agent))
         ->assertSee(route('console.shared.index'))
         ->assertSee(route('console.clients.index'))
         ->assertSee(route('console.agents.create'));
@@ -43,19 +43,30 @@ it('renders the per-agent tab strip on agent pages', function () {
         ->assertSee(route('console.agents.connect', $this->agent));
 });
 
-it('renders the connect guides for an agent', function () {
+it('renders the per-agent connection URLs on its connect tab', function () {
     $this->actingAs($this->owner)
         ->get(route('console.agents.connect', $this->agent))
         ->assertOk()
         ->assertSee(url('/mcp'))
-        ->assertSee('claude mcp add --transport http melfina', false)
-        ->assertSee('mcp-remote')
-        ->assertSee('MCP_REDIRECT_DOMAINS')
-        ->assertSee('~/.mavis/mcp/mcp.json')
-        ->assertSee('Bearer melf_…', false);
+        ->assertSee('X-Melfina-Agent-Key: '.$this->agent->name, false)
+        ->assertSee(route('console.mcp.connect'))
+        ->assertSee(route('console.dashboard'))
+        ->assertSee('melfg_…', false);
 });
 
-it('shows fleet stats and agent rows on the dashboard', function () {
+it('renders the per-client install guides on the fleet mcp page', function () {
+    $this->actingAs($this->owner)
+        ->get(route('console.mcp.connect'))
+        ->assertOk()
+        ->assertSee(url('/mcp'))
+        ->assertSee('claude mcp add --transport http melfina', false)
+        ->assertSee('mcp-remote')
+        ->assertSee('~/.mavis/mcp/mcp.json')
+        ->assertSee('Bearer melf_…', false)
+        ->assertSee('X-Melfina-Agent-Key', false);
+});
+
+it('shows fleet stats and section links on the dashboard', function () {
     VfsFile::writeFor($this->agent, 'a.txt', '1');
     $this->agent->rotateKey();
     $space = SharedSpace::factory()->create();
@@ -66,10 +77,16 @@ it('shows fleet stats and agent rows on the dashboard', function () {
         ->assertOk()
         ->assertSee('Fleet at a glance')
         ->assertSee($this->agent->name)
-        ->assertSee($space->name)
-        ->assertSee(route('console.files.show', $this->agent))
-        ->assertSee(route('console.shared.edit', $space))
-        ->assertSee(route('console.agents.create'))
+        ->assertSee(route('console.agents.show', $this->agent))
+        ->assertSee(route('console.agents.index'))
+        ->assertSee(route('console.shared.index'))
+        ->assertSee(route('console.agents.create'));
+
+    // The roster table — with file counts, key state, last write — lives on the index.
+    $this->actingAs($this->owner)
+        ->get(route('console.agents.index'))
+        ->assertOk()
+        ->assertSee($this->agent->name)
         ->assertSee('issued', false);
 });
 
@@ -151,12 +168,12 @@ it('lets the owner read and curate an agent persona and memories', function () {
         ->assertSee('owner prefers terse replies')
         ->assertSee('prod host is melfina.dragonshorn.cloud');
 
-    // The show page links to the editor and shows the log too.
+    // The About page links to the persona tab and shows an excerpt.
     $this->actingAs($this->owner)
         ->get(route('console.agents.show', $this->agent))
         ->assertOk()
         ->assertSee(route('console.agents.persona.edit', $this->agent))
-        ->assertSee('owner prefers terse replies');
+        ->assertSee('gruff and precise');
 
     // Persona rewrite + owner-appended memory in one submit.
     $this->actingAs($this->owner)
