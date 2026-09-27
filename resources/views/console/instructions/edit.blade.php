@@ -1,7 +1,7 @@
 <x-console-layout :title="'Instructions — '.$agent->name" :agent="$agent">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">INSTRUCTIONS — {{ strtoupper($agent->name) }}</p>
-        <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">Shape the brain</h1>
+    <x-console-panel>
+        <x-page-header eyebrow="INSTRUCTIONS — {{ strtoupper($agent->name) }}" title="Shape the brain">
+        </x-page-header>
         <p class="mt-2 text-sm text-steel">
             Owner text plus optional sub-layers. Agents read these later via MCP — they can never edit them.
         </p>
@@ -43,7 +43,7 @@
             </button>
             <a href="{{ route('console.agents.show', $agent) }}" class="ml-3 font-mono text-xs text-steel underline decoration-border underline-offset-4">back to agent</a>
         </form>
-    </main>
+    </x-console-panel>
 
     <script>
         document.getElementById('add-layer').addEventListener('click', function () {

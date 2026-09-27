@@ -1,7 +1,7 @@
 <x-console-layout title="Connect MCP" :agent="null">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">MCP</p>
-        <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">Connect the whole fleet</h1>
+    <x-console-panel>
+        <x-page-header eyebrow="MCP" title="Connect the whole fleet">
+        </x-page-header>
         <p class="mt-3 text-sm text-steel">
             One MCP install covers every agent on this Melfina. The <strong class="text-cream">fleet key</strong>
             (<code>melfg_…</code>, managed on the
@@ -215,13 +215,10 @@
                         style="border-radius: var(--radius-console)">save</button>
                 </form>
                 @if ($hasGitHubToken && $githubRepo)
-                    <form method="POST" action="{{ route('console.mcp.github.publish') }}" class="mt-2"
-                        onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Publish the fleet package to github.com/{{ $githubRepo }}? The repo is created public if it doesn't exist.">
-                        @csrf
-                        <button type="submit"
+                    <x-confirm-form action="{{ route('console.mcp.github.publish') }}" class="mt-2" confirm="Publish the fleet package to github.com/{{ $githubRepo }}? The repo is created public if it doesn't exist."><button type="submit"
                             class="border border-amber/50 bg-void px-3 py-1.5 font-mono text-xs text-amber hover:border-amber"
                             style="border-radius: var(--radius-console)">publish to github.com/{{ $githubRepo }}</button>
-                    </form>
+                    </x-confirm-form>
                 @endif
                 @error('github_repo')
                     <p class="mt-2 font-mono text-xs text-red-400">{{ $message }}</p>
@@ -252,13 +249,10 @@
                     @foreach ($storedRedirectDomains as $domain)
                         <li class="flex items-center justify-between gap-3 border border-amber/40 bg-void/60 px-3 py-1.5 text-cream" style="border-radius: var(--radius-console)">
                             <span>{{ $domain }}</span>
-                            <form method="POST" action="{{ route('console.mcp.redirect-domains.destroy') }}"
-                                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Remove {{ $domain }}? Clients can no longer register callbacks on it.">
-                                @csrf
-                                @method('DELETE')
+                            <x-confirm-form action="{{ route('console.mcp.redirect-domains.destroy') }}" method="DELETE" confirm="Remove {{ $domain }}? Clients can no longer register callbacks on it.">
                                 <input type="hidden" name="domain" value="{{ $domain }}">
                                 <button type="submit" class="font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">REMOVE</button>
-                            </form>
+                            </x-confirm-form>
                         </li>
                     @endforeach
                 </ul>
@@ -285,5 +279,5 @@
                 </ol>
             </details>
         </div>
-    </main>
+    </x-console-panel>
 </x-console-layout>

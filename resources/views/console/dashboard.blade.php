@@ -1,40 +1,20 @@
 <x-console-layout :title="'Dashboard'">
     @if (session('plaintext_mcp_key'))
-        <div id="plaintext-mcp-key" class="mb-6 border border-amber bg-void p-4" style="border-radius: var(--radius-console)">
-            <div class="flex items-center justify-between">
-                <p class="font-mono text-xs tracking-[0.16em] text-amber">FLEET KEY — SHOWN ONCE</p>
-                <button type="button" onclick="document.getElementById('plaintext-mcp-key').remove()"
-                    class="border border-border px-2 py-1 font-mono text-xs text-steel hover:border-amber hover:text-cream"
-                    style="border-radius: var(--radius-console)">dismiss</button>
-            </div>
-            <p class="mt-2 select-all break-all font-mono text-sm text-cream">{{ session('plaintext_mcp_key') }}</p>
-            <p class="mt-2 font-mono text-xs text-steel">Copy it now. Only the hash is stored; we cannot show it again. Shared MCP configs send it as the Bearer credential.</p>
-        </div>
+        <x-key-banner id="plaintext-mcp-key" label="FLEET KEY — SHOWN ONCE" :value="session('plaintext_mcp_key')">
+            <x-slot:hint>Copy it now. Only the hash is stored; we cannot show it again. Shared MCP configs send it as the Bearer credential.</x-slot:hint>
+        </x-key-banner>
     @endif
 
     @if (session('plaintext_enroll_key'))
-        <div id="plaintext-enroll-key" class="mb-6 border border-amber bg-void p-4" style="border-radius: var(--radius-console)">
-            <div class="flex items-center justify-between">
-                <p class="font-mono text-xs tracking-[0.16em] text-amber">ENROLL KEY — SHOWN ONCE</p>
-                <button type="button" onclick="document.getElementById('plaintext-enroll-key').remove()"
-                    class="border border-border px-2 py-1 font-mono text-xs text-steel hover:border-amber hover:text-cream"
-                    style="border-radius: var(--radius-console)">dismiss</button>
-            </div>
-            <p class="mt-2 select-all break-all font-mono text-sm text-cream">{{ session('plaintext_enroll_key') }}</p>
-            <p class="mt-2 font-mono text-xs text-steel">Copy it now. Only the hash is stored; we cannot show it again. Agents send it as <code>secret</code> to POST /api/enroll.</p>
-        </div>
+        <x-key-banner id="plaintext-enroll-key" label="ENROLL KEY — SHOWN ONCE" :value="session('plaintext_enroll_key')">
+            <x-slot:hint>Copy it now. Only the hash is stored; we cannot show it again. Agents send it as <code>secret</code> to POST /api/enroll.</x-slot:hint>
+        </x-key-banner>
     @endif
 
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">DASHBOARD</p>
-                <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">Fleet at a glance</h1>
-                @if (session('status'))
-                    <p class="mt-2 font-mono text-xs text-amber">{{ session('status') }}</p>
-                @endif
-            </div>
-            <div class="flex gap-2">
+    <x-console-panel>
+        <x-page-header eyebrow="DASHBOARD" title="Fleet at a glance">
+            <x-slot:actions>
+<div class="flex gap-2">
                 <a href="{{ route('console.agents.create') }}"
                     class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"
                     style="border-radius: var(--radius-console)">new agent</a>
@@ -42,7 +22,11 @@
                     class="border border-border px-3 py-1.5 font-mono text-xs text-steel hover:border-amber hover:text-cream"
                     style="border-radius: var(--radius-console)">new space</a>
             </div>
-        </div>
+            </x-slot:actions>
+        </x-page-header>
+        @if (session('status'))
+            <p class="mt-2 font-mono text-xs text-amber">{{ session('status') }}</p>
+        @endif
 
         <div class="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <div class="border border-border/60 bg-void/40 px-4 py-3" style="border-radius: var(--radius-console)">
@@ -67,16 +51,13 @@
             <div class="flex items-center justify-between">
                 <p class="font-mono text-xs tracking-[0.16em] text-steel">MCP ACCESS</p>
             </div>
-            <form method="POST" action="{{ route('console.mcp-key.store') }}" class="mt-3 flex gap-2"
-                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Issue a fleet key under this name? An existing live key with the same name is revoked.">
-                @csrf
-                <input type="text" name="name" placeholder="key name (e.g. grokbot)" maxlength="64"
+            <x-confirm-form action="{{ route('console.mcp-key.store') }}" class="mt-3 flex gap-2" confirm="Issue a fleet key under this name? An existing live key with the same name is revoked."><input type="text" name="name" placeholder="key name (e.g. grokbot)" maxlength="64"
                     class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream placeholder:text-steel/60"
                     style="border-radius: var(--radius-console)">
                 <button type="submit"
                     class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
                     style="border-radius: var(--radius-console)">issue key</button>
-            </form>
+            </x-confirm-form>
             @error('name')
                 <p class="mt-2 font-mono text-xs text-red-400">{{ $message }}</p>
             @enderror
@@ -111,12 +92,9 @@
                             <span class="flex items-center gap-3">
                                 <span class="text-steel">{{ $key->isLive() ? 'issued '.$key->created_at->diffForHumans(short: true) : 'revoked '.$key->revoked_at->diffForHumans(short: true) }}</span>
                                 @if ($key->isLive())
-                                    <form method="POST" action="{{ route('console.mcp-key.destroy', $key) }}"
-                                        onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Revoke fleet key '{{ $key->name }}'? Shared configs using it stop working immediately.">
-                                        @csrf
-                                        @method('DELETE')
+                                    <x-confirm-form action="{{ route('console.mcp-key.destroy', $key) }}" method="DELETE" confirm="Revoke fleet key '{{ $key->name }}'? Shared configs using it stop working immediately.">
                                         <button type="submit" class="font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">REVOKE</button>
-                                    </form>
+                                    </x-confirm-form>
                                 @endif
                             </span>
                         </li>
@@ -127,16 +105,13 @@
 
         <section class="mt-8">
             <p class="font-mono text-xs tracking-[0.16em] text-steel">ENROLLMENT KEYS</p>
-            <form method="POST" action="{{ route('console.enroll-keys.store') }}" class="mt-3 flex gap-2"
-                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Issue an enroll key under this name? An existing live key with the same name is revoked.">
-                @csrf
-                <input type="text" name="enroll_name" placeholder="key name (e.g. minimax)" maxlength="64"
+            <x-confirm-form action="{{ route('console.enroll-keys.store') }}" class="mt-3 flex gap-2" confirm="Issue an enroll key under this name? An existing live key with the same name is revoked."><input type="text" name="enroll_name" placeholder="key name (e.g. minimax)" maxlength="64"
                     class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream placeholder:text-steel/60"
                     style="border-radius: var(--radius-console)">
                 <button type="submit"
                     class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
                     style="border-radius: var(--radius-console)">issue key</button>
-            </form>
+            </x-confirm-form>
             @error('enroll_name')
                 <p class="mt-2 font-mono text-xs text-red-400">{{ $message }}</p>
             @enderror
@@ -155,12 +130,9 @@
                             <span class="flex items-center gap-3">
                                 <span class="text-steel">{{ $key->isLive() ? 'issued '.$key->created_at->diffForHumans(short: true) : 'revoked '.$key->revoked_at->diffForHumans(short: true) }}</span>
                                 @if ($key->isLive())
-                                    <form method="POST" action="{{ route('console.enroll-keys.destroy', $key) }}"
-                                        onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Revoke enroll key '{{ $key->name }}'? Runtimes using it can no longer report in or mint.">
-                                        @csrf
-                                        @method('DELETE')
+                                    <x-confirm-form action="{{ route('console.enroll-keys.destroy', $key) }}" method="DELETE" confirm="Revoke enroll key '{{ $key->name }}'? Runtimes using it can no longer report in or mint.">
                                         <button type="submit" class="font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">REVOKE</button>
-                                    </form>
+                                    </x-confirm-form>
                                 @endif
                             </span>
                         </li>
@@ -193,5 +165,5 @@
             <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.index') }}">agent roster →</a>
             <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.shared.index') }}">shared spaces →</a>
         </section>
-    </main>
+    </x-console-panel>
 </x-console-layout>

@@ -1,10 +1,10 @@
 <x-console-layout :title="$entry ? $entry->name : 'New knowledge entry'">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">KNOWLEDGE</p>
-        <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">{{ $entry ? $entry->name : 'New entry' }}</h1>
-        @if ($entry)
-            <p class="mt-1 font-mono text-xs text-steel">v{{ $entry->version }} · last write by {{ $entry->updated_by }} {{ $entry->updated_at->diffForHumans(short: true) }}</p>
-        @endif
+    <x-console-panel>
+        <x-page-header eyebrow="KNOWLEDGE" title="{{ $entry ? $entry->name : 'New entry' }}">
+            @if ($entry)
+                <x-slot:subtitle>v{{ $entry->version }} · last write by {{ $entry->updated_by }} {{ $entry->updated_at->diffForHumans(short: true) }}</x-slot:subtitle>
+            @endif
+        </x-page-header>
 
         @if (session('status'))
             <p class="mt-3 font-mono text-xs text-amber">{{ session('status') }}</p>
@@ -101,12 +101,9 @@
             <div class="mt-8 border-t border-border pt-4">
                 <div class="flex items-center justify-between">
                     <p class="font-mono text-xs tracking-[0.16em] text-steel">VERSION HISTORY</p>
-                    <form method="POST" action="{{ route('console.knowledge.destroy', $entry) }}"
-                        onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Delete '{{ $entry->name }}'? Its whole version history goes with it.">
-                        @csrf
-                        @method('DELETE')
+                    <x-confirm-form action="{{ route('console.knowledge.destroy', $entry) }}" method="DELETE" confirm="Delete '{{ $entry->name }}'? Its whole version history goes with it.">
                         <button type="submit" class="font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">DELETE ENTRY</button>
-                    </form>
+                    </x-confirm-form>
                 </div>
                 @if ($versions->isEmpty())
                     <p class="mt-2 font-mono text-xs text-steel">no recorded versions.</p>
@@ -126,5 +123,5 @@
                 @endif
             </div>
         @endif
-    </main>
+    </x-console-panel>
 </x-console-layout>

@@ -1,8 +1,8 @@
 <x-console-layout :title="'ACL '.$space->name">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">SHARED SPACE</p>
-        <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">{{ $space->name }}</h1>
-        <p class="mt-2 text-sm text-steel">write implies read. Agents without a grant can't see this space at all.</p>
+    <x-console-panel>
+        <x-page-header eyebrow="SHARED SPACE" title="{{ $space->name }}">
+            <x-slot:subtitle>write implies read. Agents without a grant can't see this space at all.</x-slot:subtitle>
+        </x-page-header>
 
         <form method="POST" action="{{ route('console.shared.update', $space) }}" class="mt-6 space-y-5">
             @csrf
@@ -52,5 +52,5 @@
             </button>
             <a href="{{ route('console.shared.index') }}" class="ml-3 font-mono text-xs text-steel underline decoration-border underline-offset-4">back</a>
         </form>
-    </main>
+    </x-console-panel>
 </x-console-layout>

@@ -1,7 +1,7 @@
 <x-console-layout :title="($path === '' ? 'New file' : $path).' — '.$agent->name" :agent="$agent">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">{{ $path === '' ? 'NEW FILE' : 'EDIT FILE' }} — {{ strtoupper($agent->name) }}</p>
-        <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">{{ $path === '' ? 'Write into the tree' : $path }}</h1>
+    <x-console-panel>
+        <x-page-header eyebrow="{{ $path === '' ? 'NEW FILE' : 'EDIT FILE' }} — {{ strtoupper($agent->name) }}" title="{{ $path === '' ? 'Write into the tree' : $path }}">
+        </x-page-header>
 
         <form method="POST" action="{{ route('console.files.update', $agent) }}" class="mt-6 space-y-4">
             @csrf
@@ -29,17 +29,14 @@
         </form>
 
         @if ($path !== '')
-            <form method="POST" action="{{ route('console.files.destroy', $agent) }}" class="mt-8 border-t border-border pt-6"
-                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Delete {{ $path }}?">
-                @csrf
-                @method('DELETE')
+            <x-confirm-form action="{{ route('console.files.destroy', $agent) }}" method="DELETE" class="mt-8 border-t border-border pt-6" confirm="Delete {{ $path }}?">
                 <input type="hidden" name="path" value="{{ $path }}">
                 <input type="hidden" name="dir" value="{{ $dir }}">
                 <button type="submit"
                     class="border border-danger px-3 py-1.5 font-mono text-xs text-danger hover:bg-danger hover:text-void" style="border-radius: var(--radius-console)">
                     delete file
                 </button>
-            </form>
+            </x-confirm-form>
         @endif
-    </main>
+    </x-console-panel>
 </x-console-layout>

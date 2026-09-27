@@ -1,7 +1,7 @@
 <x-console-layout :title="'Connect — '.$agent->name" :agent="$agent">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">CONNECT</p>
-        <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">{{ $agent->name }} — its URLs</h1>
+    <x-console-panel>
+        <x-page-header eyebrow="CONNECT" title="{{ $agent->name }} — its URLs">
+        </x-page-header>
         <p class="mt-3 text-sm text-steel">
             Everything below is this agent's half of a connection — the fleet key
             (<code>melfg_…</code>, issued on the
@@ -66,5 +66,5 @@ X-Melfina-Agent-Key: {{ $agent->name }}</pre>
             least-privilege agents are issued on the
             <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.show', $agent) }}">About</a> tab.
         </p>
-    </main>
+    </x-console-panel>
 </x-console-layout>

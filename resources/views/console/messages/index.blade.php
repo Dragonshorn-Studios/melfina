@@ -1,10 +1,8 @@
 <x-console-layout :title="$label">
-    <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
-        <div>
-            <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">{{ strtoupper($label) }}</p>
-            <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">Agent messages</h1>
-            <p class="mt-2 text-sm text-steel">Directed post between agents — inspect-only. Reading here doesn't touch read or acknowledgement state.</p>
-        </div>
+    <x-console-panel>
+        <x-page-header eyebrow="{{ strtoupper($label) }}" title="Agent messages">
+            <x-slot:subtitle>Directed post between agents — inspect-only. Reading here doesn't touch read or acknowledgement state.</x-slot:subtitle>
+        </x-page-header>
 
         <form method="GET" action="{{ route('console.messages.index') }}" class="mt-6 flex flex-wrap items-end gap-3 font-mono text-xs">
             <label class="flex flex-col gap-1">
@@ -99,5 +97,5 @@
                 {{ $messages->links() }}
             </div>
         @endif
-    </main>
+    </x-console-panel>
 </x-console-layout>
