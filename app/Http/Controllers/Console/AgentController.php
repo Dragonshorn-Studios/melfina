@@ -174,6 +174,7 @@ class AgentController extends Controller
             'instructionsPayload' => ReadInstructions::payload($agent),
             'personaPayload' => ReadPersona::payload($agent),
             'umbrellaSkill' => $repos->umbrellaSkill($agent),
+            'fleetUmbrellaSkill' => $repos->fleetUmbrellaSkill(),
             'tools' => $catalog->all(),
         ]);
     }
