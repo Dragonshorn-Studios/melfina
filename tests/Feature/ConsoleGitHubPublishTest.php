@@ -58,8 +58,9 @@ it('refuses to publish without saved credentials', function () {
 it('pushes every package file to the chosen repo', function () {
     Http::fake([
         'api.github.com/user' => Http::response(['login' => 'octo']),
-        'api.github.com/repos/octo/melfina-plugin' => Http::response(['id' => 1]),
+        'api.github.com/repos/octo/melfina-plugin' => Http::response(['id' => 1, 'default_branch' => 'main']),
         'api.github.com/repos/octo/melfina-plugin/contents/*' => Http::response(['content' => []], 200),
+        'api.github.com/repos/octo/melfina-plugin/git/trees/*' => Http::response(['tree' => []]),
     ]);
 
     $owner = User::factory()->owner()->create([
@@ -74,7 +75,40 @@ it('pushes every package file to the chosen repo', function () {
 
     // Every package file gets a contents PUT.
     $fileCount = count(app(PluginRepo::class)->publicPackageFiles());
-    Http::assertSentCount(2 + $fileCount * 2); // /user + repo GET + per-file GET sha + PUT
+    Http::assertSentCount(4 + $fileCount * 2); // /user + repo GET ×2 (publish + stale sweep) + per-file GET sha + PUT + tree GET
+});
+
+it('deletes files a previous layout publish left behind', function () {
+    Http::fake([
+        'api.github.com/user' => Http::response(['login' => 'octo']),
+        'api.github.com/repos/octo/melfina-plugin' => Http::response(['id' => 1, 'default_branch' => 'main']),
+        'api.github.com/repos/octo/melfina-plugin/contents/*' => Http::response(['content' => []], 200),
+        'api.github.com/repos/octo/melfina-plugin/git/trees/*' => Http::response(['tree' => [
+            ['path' => 'skills/melfina-read-file/SKILL.md', 'type' => 'blob', 'sha' => 'stalesha'],
+            ['path' => 'skills/custom-helper/SKILL.md', 'type' => 'blob', 'sha' => 'ownskill'],
+            ['path' => 'docs/human-notes.md', 'type' => 'blob', 'sha' => 'ownsha'],
+        ]]),
+    ]);
+
+    $owner = User::factory()->owner()->create([
+        'github_token' => 'ghp_ok',
+        'github_repo' => 'octo/melfina-plugin',
+    ]);
+
+    // Publishing the single layout must sweep the per-tool skill the
+    // previous multi-layout publish wrote, but never touch content the
+    // package doesn't own.
+    $this->actingAs($owner)
+        ->post(route('console.mcp.github.publish'), ['variant' => 'single'])
+        ->assertSessionHas('status', 'Published to https://github.com/octo/melfina-plugin');
+
+    Http::assertSent(fn ($request) => $request->method() === 'DELETE'
+        && $request->url() === 'https://api.github.com/repos/octo/melfina-plugin/contents/skills/melfina-read-file/SKILL.md'
+        && $request['sha'] === 'stalesha');
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'docs/human-notes.md'));
+    // …and never touches skills the package doesn't own.
+    Http::assertNotSent(fn ($request) => $request->method() === 'DELETE'
+        && str_contains($request->url(), 'skills/custom-helper'));
 });
 
 it('creates the repo under the token login when it does not exist', function () {

@@ -1,5 +1,6 @@
 <?php
 
+use App\Mcp\PackageVariant;
 use App\Mcp\PluginRepo;
 use App\Mcp\ToolCatalog;
 use App\Models\Agent;
@@ -254,7 +255,7 @@ it('ships the same skills inside the credentialed clone repos', function () {
         ->and(is_file($dir.'/melfina-api.json'))->toBeTrue();
 });
 
-it('refreshes generated files into a stale package dir on zip download', function () {
+it('builds the generated half of the zip fresh regardless of dir staleness', function () {
     $repos = app(PluginRepo::class);
     $repos->rebuildPackage($this->agent, 'melf_testkey');
     $dir = $repos->packageDir($this->agent);
@@ -270,23 +271,82 @@ it('refreshes generated files into a stale package dir on zip download', functio
         ->get(route('console.agents.plugin', $this->agent))
         ->assertOk();
 
-    // The overlay runs at zip time — mcp.json (the credential-bearing
-    // file) is untouched.
-    expect(is_file($dir.'/melfina-api.json'))->toBeTrue()
-        ->and(is_file($dir.'/skills/melfina-read-file/SKILL.md'))->toBeTrue()
+    // The dir is only a credential store now — the zip regenerates the
+    // docs half, so stale/missing generated files stay stale on disk…
+    expect(is_file($dir.'/melfina-api.json'))->toBeFalse()
         ->and(file_get_contents($dir.'/mcp.json'))->toContain('melf_testkey');
 
-    // …and the refreshed files are inside the downloaded archive, not
-    // just rewritten on disk — a BinaryFileResponse never sends in tests,
-    // so deleteFileAfterSend hasn't fired and the zip is inspectable.
+    // …while the archive carries the current surface. A BinaryFileResponse
+    // never sends in tests, so deleteFileAfterSend hasn't fired and the
+    // zip is inspectable.
     $archive = new ZipArchive;
     expect($archive->open($response->baseResponse->getFile()->getPathname()))->toBeTrue();
     $inZip = fn (string $name): bool => $archive->getFromName($name) !== false;
     expect($inZip('melfina-api.json'))->toBeTrue()
         ->and($inZip('skills/melfina-read-file/SKILL.md'))->toBeTrue()
-        // the wholesale skills rebuild drops tools removed from the catalog
-        ->and($inZip('skills/melfina-removed-tool/SKILL.md'))->toBeFalse();
+        // removed tools don't ship — the generated half isn't copied from disk
+        ->and($inZip('skills/melfina-removed-tool/SKILL.md'))->toBeFalse()
+        // …and the credential file comes straight from the persisted dir
+        ->and($archive->getFromName('mcp.json'))->toContain('melf_testkey');
     $archive->close();
+});
+
+it('ships the single-skill layout as umbrella + call script', function () {
+    $files = app(PluginRepo::class)->publicPackageFiles(PackageVariant::Single);
+    $tools = app(ToolCatalog::class)->all();
+
+    // One skill, one script, one manifest — no per-tool SKILL.md files.
+    expect($files)->toHaveKeys(['skills/melfina/SKILL.md', 'scripts/melfina-call.mjs', 'melfina-api.json'])
+        ->and(collect($files)->keys()->filter(fn ($p) => str_starts_with($p, 'skills/'))->values()->all())
+        ->toEqualCanonicalizing(['skills/melfina/SKILL.md']);
+
+    // The umbrella points at the script instead of per-tool skills.
+    expect($files['skills/melfina/SKILL.md'])
+        ->toContain('Prefer MCP whenever possible')
+        ->toContain('node scripts/melfina-call.mjs call')
+        ->toContain('$MELFINA_API_KEY');
+
+    // The script reads the manifest and key from env — never a baked
+    // credential (key *forms* like `melf_…` in docs are fine; the
+    // regex targets a real value: prefix + identifier chars).
+    expect($files['scripts/melfina-call.mjs'])
+        ->toContain('MELFINA_API_KEY')
+        ->toContain('melfina-api.json')
+        ->not->toMatch('/melf[gs]?_[A-Za-z0-9]/');
+
+    // The MiniMax manifest registers only the umbrella.
+    $minimax = json_decode($files['.minimax-plugin/plugin.json'], true);
+    expect($minimax['skills'])->toBe(['skills/melfina/SKILL.md']);
+
+    // …and the manifest still covers the whole tool surface so the
+    // script can validate args offline.
+    $manifest = json_decode($files['melfina-api.json'], true);
+    expect(collect($manifest['tools'])->pluck('name')->all())
+        ->toEqualCanonicalizing(collect($tools)->pluck('name')->all())
+        ->and($manifest['base'])->toBe(rtrim(config('app.url'), '/'))
+        // no per-tool skill ships in this layout — point at the umbrella
+        ->and(collect($manifest['tools'])->pluck('skill')->unique()->all())
+        ->toBe(['skills/melfina/SKILL.md']);
+});
+
+it('serves the single-skill package at .single.git clone paths', function () {
+    $repos = app(PluginRepo::class);
+
+    $dir = $repos->ensureBuilt($this->agent, 'direct', 'melf_testkey', variant: PackageVariant::Single);
+    $show = fn (string $f) => tap(new Process(['git', '--git-dir='.$dir, 'show', 'HEAD:'.$f]), fn ($p) => $p->run())->getOutput();
+
+    expect($dir)->toEndWith('.direct.single.git')
+        ->and($show('scripts/melfina-call.mjs'))->toContain('MELFINA_API_KEY')
+        ->and($show('mcp.json'))->toContain('melf_testkey')
+        // a per-tool skill 404s in the single layout — umbrella only
+        ->and($show('skills/melfina-read-file/SKILL.md'))->toBe('')
+        ->and($show('skills/melfina/SKILL.md'))->toContain('melfina-call.mjs');
+
+    // Over HTTP: the .single.git name picks the layout per clone.
+    $this->withBasicAuth('grokbot', 'melf_testkey')
+        ->get('/plugins/grokbot.single.git/info/refs')
+        ->assertOk();
+    expect(is_dir($repos->repoDir($this->agent, 'direct', PackageVariant::Single)))->toBeTrue();
 });
 
 it('ships the generated skills in the fleet package too', function () {
@@ -301,6 +361,13 @@ it('ships the generated skills in the fleet package too', function () {
 
 it('never bakes credentials into generated skill artifacts', function () {
     $files = app(PluginRepo::class)->publicPackageFiles();
+
+    foreach (app(PluginRepo::class)->publicPackageFiles(PackageVariant::Single) as $path => $contents) {
+        if ($path === 'scripts/melfina-call.mjs' || $path === 'melfina-api.json' || $path === 'skills/melfina/SKILL.md') {
+            expect($contents)
+                ->not->toMatch('/melf[gs]?_[A-Za-z0-9]/');
+        }
+    }
 
     foreach ($files as $path => $contents) {
         if (str_starts_with($path, 'skills/') || $path === 'melfina-api.json') {

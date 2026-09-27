@@ -85,7 +85,7 @@ php artisan migrate --force --graceful
 # it after --max-time expiry or a crash so deliveries can't silently stop.
 (
     while true; do
-        php artisan queue:work --queue=default --sleep=3 --tries=5 --max-time=3600 || true
+        php artisan queue:work --sleep=3 --tries=5 --max-time=3600 || true
         sleep 3
     done
 ) &

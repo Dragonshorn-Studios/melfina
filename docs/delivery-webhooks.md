@@ -14,6 +14,7 @@ POST <webhook URL>
 Content-Type: application/json
 X-Melfina-Event: message.delivered
 X-Melfina-Delivery: delivery-<message id>
+X-Melfina-Timestamp: <unix seconds>
 X-Melfina-Signature: sha256=<hex hmac>
 ```
 
@@ -31,17 +32,21 @@ Body — minimal by design (no sender, subject, body, or paths):
 
 ## Verifying the signature
 
-`X-Melfina-Signature` is `sha256=` followed by the hex HMAC-SHA256 of the
-**raw request body**, keyed with the webhook secret the console showed
-once at setup (`melfwh_…`). Verify with a constant-time compare:
+`X-Melfina-Signature` is `sha256=` followed by the hex HMAC-SHA256 of
+**`"<X-Melfina-Timestamp>.<raw request body>"`** — the timestamp header
+and body joined by a dot — keyed with the webhook secret the console
+showed once at setup (`melfwh_…`). Verify with a constant-time compare:
 
 ```php
-$expected = 'sha256=' . hash_hmac('sha256', $rawBody, $secret);
+$expected = 'sha256=' . hash_hmac('sha256',
+    $request->header('X-Melfina-Timestamp') . '.' . $rawBody, $secret);
 hash_equals($expected, $request->header('X-Melfina-Signature'));
 ```
 
 Reject anything that doesn't match — an unsigned or badly-signed POST is
-not from Melfina.
+not from Melfina. Then check `X-Melfina-Timestamp` is inside your
+freshness window (e.g. ±5 min) — a captured notice replayed later still
+verifies, and the timestamp is what bounds that.
 
 ## Deduping
 
@@ -61,7 +66,9 @@ treated as permanent — Melfina logs them and does not retry.
 The payload deliberately carries no message content. To read the mail,
 the host's agent calls `list_inbox` / `read_message` over MCP (or the
 `POST /api/tools/{tool}` HTTP fallback) with its own `melf_…`/`melfg_…`
-key — `recipient_name` in the payload is the persona to poll as.
+key — `recipient_name` in the payload is the recipient's *current* name
+at send time (resolved live so a rename between dispatch and delivery
+doesn't strand the wake), the persona to poll as.
 
 ## Running the sender
 

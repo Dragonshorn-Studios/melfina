@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Console;
 
 use App\Http\Controllers\Controller;
+use App\Mcp\PackageVariant;
 use App\Mcp\PluginRepo;
 use App\Mcp\Servers\MelfinaServer;
 use App\Mcp\ToolCatalog;
@@ -133,6 +134,7 @@ class AgentController extends Controller
         // in request-path logs. Username is the persona, password the key.
         $personaUser = rawurlencode($agent->name);
         $repoPath = url('/plugins/'.(Str::slug($agent->name) ?: 'agent').'.git');
+        $repoPathSingle = url('/plugins/'.(Str::slug($agent->name) ?: 'agent').'.single.git');
 
         return view('console.agents.connect', [
             'agent' => $agent,
@@ -142,6 +144,8 @@ class AgentController extends Controller
             // consumed as part of the capture-group reference.
             'pluginUrl' => preg_replace('#^(https?://)#', '${1}'.$personaUser.':melfg_…@', $repoPath),
             'pluginUrlDirect' => preg_replace('#^(https?://)#', '${1}'.$personaUser.':melf_…@', $repoPath),
+            // The `.single.git` repo serves the umbrella+script layout.
+            'pluginUrlSingle' => preg_replace('#^(https?://)#', '${1}'.$personaUser.':melfg_…@', $repoPathSingle),
             // One clone URL for the whole install — persona-free, gated by
             // the fleet key; each agent writes its own name into the
             // package's MCP URL.
@@ -308,18 +312,21 @@ class AgentController extends Controller
      * Download the agent's plugin package as a ZIP — for clients that take
      * an upload rather than a cloneable repo URL. Contains live keys.
      */
-    public function pluginZip(Agent $agent, PluginRepo $repos): BinaryFileResponse
+    public function pluginZip(Request $request, Agent $agent, PluginRepo $repos): BinaryFileResponse
     {
         $this->authorize('view', $agent);
 
         $dir = $repos->packageDir($agent);
         abort_unless(is_dir($dir), 404);
 
+        $variant = PackageVariant::fromRequest($request->query('variant'));
+
         try {
-            // packageZip refreshes the credential-free generated files
-            // under a lock so a package built before a catalog change
-            // doesn't ship stale skills.
-            $zipPath = $repos->packageZip($agent);
+            // packageZip reads the credential files from the persisted
+            // package and rebuilds the generated half fresh under a lock,
+            // so a package built before a catalog change doesn't ship
+            // stale skills — and either layout comes out of the same dir.
+            $zipPath = $repos->packageZip($agent, $variant);
         } catch (\RuntimeException $e) {
             abort(500, $e->getMessage());
         } catch (LockTimeoutException) {
@@ -327,7 +334,8 @@ class AgentController extends Controller
         }
 
         $slug = Str::slug($agent->name) ?: 'agent';
+        $suffix = $variant === PackageVariant::Multi ? '' : '-'.$variant->value;
 
-        return response()->download($zipPath, 'melfina-'.$slug.'.zip')->deleteFileAfterSend();
+        return response()->download($zipPath, 'melfina-'.$slug.$suffix.'.zip')->deleteFileAfterSend();
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Mcp;
 
 use App\Http\Controllers\Controller;
+use App\Mcp\PackageVariant;
 use App\Mcp\PluginRepo;
 use App\Models\Agent;
 use App\Models\User;
@@ -25,7 +26,10 @@ use Symfony\Component\HttpFoundation\Response;
  * except `~melfina.git`, which serves the fleet-wide package gated only by
  * the fleet key. The `~` prefix can never collide with a per-agent URL:
  * those are built from `Str::slug($agent->name)`, and slugs never contain
- * `~`. Missing credentials get a Basic challenge, dead ones a flat 404.
+ * `~`. Any repo name ending `.single.git` selects the single-skill
+ * package layout (umbrella skill + call script); plain `.git` is the
+ * multi-skill default. Missing credentials get a Basic challenge, dead
+ * ones a flat 404.
  */
 class PluginRepoController extends Controller
 {
@@ -37,10 +41,11 @@ class PluginRepoController extends Controller
         // A dumb-HTTP clone starts at info/refs/HEAD — only those rebuild
         // the repo; the object fetches that follow serve the built dir.
         $fresh = in_array($path, ['', 'info/refs', 'HEAD'], true);
+        $variant = PackageVariant::fromRepoName($repo);
 
-        if ($repo === $repos->publicRepoName()) {
+        if (in_array($repo, [$repos->publicRepoName(), $repos->publicRepoName(PackageVariant::Single)], true)) {
             try {
-                $dir = $repos->ensureGlobalPublic($fresh);
+                $dir = $repos->ensureGlobalPublic($fresh, $variant);
             } catch (\Throwable) {
                 abort(500);
             }
@@ -58,9 +63,9 @@ class PluginRepoController extends Controller
         // The fleet-wide package: one repo for the whole install, keyed
         // only by the fleet credential — each agent fills in its own name.
         // `~melfina.git` is a reserved path — no agent slug can produce it.
-        if ($repo === '~melfina.git' && User::isMcpKey($password)) {
+        if (in_array($repo, ['~melfina.git', '~melfina.single.git'], true) && User::isMcpKey($password)) {
             try {
-                $dir = $repos->ensureGlobal($password, $fresh);
+                $dir = $repos->ensureGlobal($password, $fresh, $variant);
             } catch (\Throwable) {
                 abort(500);
             }
@@ -75,7 +80,7 @@ class PluginRepoController extends Controller
         }
 
         try {
-            $dir = $repos->ensureBuilt($agent, $mode, $password, $fresh);
+            $dir = $repos->ensureBuilt($agent, $mode, $password, $fresh, $variant);
         } catch (\Throwable) {
             abort(500);
         }

@@ -44,17 +44,17 @@ class PluginRepo
      * (info/refs, HEAD) — those rebuild; object fetches serve the existing
      * dir so a clone spanning many requests sees one consistent repo.
      */
-    public function ensureBuilt(Agent $agent, string $mode, string $credential, bool $fresh = true): string
+    public function ensureBuilt(Agent $agent, string $mode, string $credential, bool $fresh = true, PackageVariant $variant = PackageVariant::Multi): string
     {
-        $dir = $this->repoDir($agent, $mode);
+        $dir = $this->repoDir($agent, $mode, $variant);
 
         if (! $fresh && is_file($dir.'/info/refs')) {
             return $dir;
         }
 
-        return Cache::lock('melfina-plugin-repo:'.$agent->id.':'.$mode, 30)
-            ->block(10, function () use ($agent, $mode, $credential, $dir) {
-                $this->build($dir, $this->packageFiles($agent, $mode, $credential));
+        return Cache::lock('melfina-plugin-repo:'.$agent->id.':'.$mode.':'.$variant->value, 30)
+            ->block(10, function () use ($agent, $mode, $credential, $dir, $variant) {
+                $this->build($dir, $this->packageFiles($agent, $mode, $credential, $variant));
 
                 return $dir;
             });
@@ -66,25 +66,25 @@ class PluginRepo
      * tool call via the `name` argument (or an X-Melfina-Agent-Key header
      * when the client can set one).
      */
-    public function ensureGlobal(string $fleetKey, bool $fresh = true): string
+    public function ensureGlobal(string $fleetKey, bool $fresh = true, PackageVariant $variant = PackageVariant::Multi): string
     {
-        $dir = $this->globalDir();
+        $dir = $this->globalDir($variant);
 
         if (! $fresh && is_file($dir.'/info/refs')) {
             return $dir;
         }
 
-        return Cache::lock('melfina-plugin-repo:global', 30)
-            ->block(10, function () use ($dir, $fleetKey) {
-                $this->build($dir, $this->globalPackageFiles($fleetKey));
+        return Cache::lock('melfina-plugin-repo:global:'.$variant->value, 30)
+            ->block(10, function () use ($dir, $fleetKey, $variant) {
+                $this->build($dir, $this->globalPackageFiles($fleetKey, $variant));
 
                 return $dir;
             });
     }
 
-    public function globalDir(): string
+    public function globalDir(PackageVariant $variant = PackageVariant::Multi): string
     {
-        return storage_path('app/mcp-plugins/fleet.git');
+        return storage_path('app/mcp-plugins/fleet'.$variant->repoMarker().'.git');
     }
 
     /**
@@ -94,9 +94,10 @@ class PluginRepo
      * without a Basic challenge for importers that never retry with
      * credentials. Nothing inside the package is secret.
      */
-    public function publicRepoName(): string
+    public function publicRepoName(PackageVariant $variant = PackageVariant::Multi): string
     {
-        return 'g-'.substr(hash('sha256', 'melfina-public-repo|'.config('app.key')), 0, 32).'.git';
+        return 'g-'.substr(hash('sha256', 'melfina-public-repo|'.config('app.key')), 0, 32)
+            .$variant->repoMarker().'.git';
     }
 
     /**
@@ -104,9 +105,9 @@ class PluginRepo
      * `*.git*` on credential rotation) leaves it alone — the public
      * package contains no credentials, so rotation doesn't stale it.
      */
-    public function publicDir(): string
+    public function publicDir(PackageVariant $variant = PackageVariant::Multi): string
     {
-        return storage_path('app/mcp-plugins/public-repo');
+        return storage_path('app/mcp-plugins/public-repo'.$variant->repoMarker());
     }
 
     /**
@@ -114,103 +115,58 @@ class PluginRepo
      * value in mcp.json is a placeholder the installer fills in) and
      * return its repo path.
      */
-    public function ensureGlobalPublic(bool $fresh = true): string
+    public function ensureGlobalPublic(bool $fresh = true, PackageVariant $variant = PackageVariant::Multi): string
     {
-        $dir = $this->publicDir();
+        $dir = $this->publicDir($variant);
 
         if (! $fresh && is_file($dir.'/info/refs')) {
             return $dir;
         }
 
-        return Cache::lock('melfina-plugin-repo:global-public', 30)
-            ->block(10, function () use ($dir) {
-                $this->build($dir, $this->publicPackageFiles());
+        return Cache::lock('melfina-plugin-repo:global-public:'.$variant->value, 30)
+            ->block(10, function () use ($dir, $variant) {
+                $this->build($dir, $this->publicPackageFiles($variant));
 
                 return $dir;
             });
     }
 
     /**
-     * Flat directory of the credential-free fleet package for ZIP
-     * downloads (same layout as per-agent packages).
+     * Zip the credential-free fleet package for the requested layout.
+     * Nothing inside is a credential, so the archive is built straight
+     * from the generated file set — no on-disk staging dir to go stale.
      */
-    public function publicPackageDir(): string
-    {
-        return storage_path('app/mcp-plugins/public-pkg');
-    }
-
-    /**
-     * Regenerate the flat public package directory. Safe to rebuild on
-     * every download — nothing inside is a credential.
-     */
-    public function rebuildPublicPackage(): string
-    {
-        $dir = $this->publicPackageDir();
-        File::deleteDirectory($dir);
-
-        foreach ($this->publicPackageFiles() as $path => $contents) {
-            $full = $dir.'/'.$path;
-            File::ensureDirectoryExists(dirname($full));
-            throw_unless(file_put_contents($full, $contents) !== false, RuntimeException::class, "Cannot write package file {$path}");
-        }
-
-        return $dir;
-    }
-
-    /**
-     * Rebuild the public package and zip it under a lock — the zip reads
-     * the shared directory at close() time, so concurrent downloads must
-     * not see a mid-rebuild tree.
-     */
-    public function publicPackageZip(): string
+    public function publicPackageZip(PackageVariant $variant = PackageVariant::Multi): string
     {
         return Cache::lock('melfina-plugin-repo:public-pkg', 30)
-            ->block(10, fn () => $this->zipDirectory($this->rebuildPublicPackage()));
+            ->block(10, fn () => $this->zipFiles($this->publicPackageFiles($variant)));
     }
 
     /**
-     * Zip an agent's persisted package dir for download, refreshing the
-     * credential-free generated files first — serialized per agent so a
-     * concurrent download or key rotation can't read a mid-refresh tree.
+     * Zip an agent's plugin package for download. The credential-bearing
+     * mcp.json/.mcp.json come from the persisted package dir (they hold
+     * the plaintext key); every generated file — manifests, umbrella
+     * skill, per-tool skills or the call script, melfina-api.json — is
+     * rebuilt fresh for the requested layout, so a stale dir can't ship
+     * an old tool surface. Serialized per agent so a concurrent key
+     * rotation can't read a mid-rebuild credential.
      */
-    public function packageZip(Agent $agent): string
+    public function packageZip(Agent $agent, PackageVariant $variant = PackageVariant::Multi): string
     {
         $dir = $this->packageDir($agent);
 
         return Cache::lock('melfina-plugin-repo:'.$agent->id.':pkg', 30)
-            ->block(10, function () use ($agent, $dir): string {
-                $this->refreshGeneratedFiles($agent);
+            ->block(10, function () use ($agent, $dir, $variant): string {
+                $files = [];
 
-                return $this->zipDirectory($dir);
+                foreach (['mcp.json', '.mcp.json'] as $credentialFile) {
+                    $contents = @file_get_contents($dir.'/'.$credentialFile);
+                    throw_if($contents === false, RuntimeException::class, "Cannot read package file {$credentialFile}");
+                    $files[$credentialFile] = $contents;
+                }
+
+                return $this->zipFiles(array_merge($files, $this->packageDocs($agent, $variant)));
             });
-    }
-
-    /**
-     * Zip a package directory into a 0600 temp file and return its path —
-     * the caller streams it via response()->download()->deleteFileAfterSend().
-     * tempnam's file is already 0600; OVERWRITE truncates rather than
-     * replacing it, so the credential-bearing archive never exists at
-     * a world-readable path.
-     */
-    public function zipDirectory(string $dir): string
-    {
-        throw_unless(class_exists(\ZipArchive::class), RuntimeException::class, 'PHP ext-zip is not installed');
-
-        $zipPath = tempnam(sys_get_temp_dir(), 'melfina-plugin-');
-        $zip = new \ZipArchive;
-        throw_unless($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true, RuntimeException::class);
-
-        // allFiles with $hidden=true ships the dot-prefixed manifests
-        // (.minimax-plugin/, .claude-plugin/, .mcp.json) — and needs no
-        // GLOB_BRACE, which musl/Alpine PHP builds lack.
-        foreach (File::allFiles($dir, hidden: true) as $file) {
-            throw_unless($zip->addFile($file->getPathname(), $file->getRelativePathname()), RuntimeException::class, 'Cannot add '.$file->getRelativePathname().' to the package zip');
-        }
-
-        throw_unless($zip->close(), RuntimeException::class);
-        chmod($zipPath, 0600);
-
-        return $zipPath;
     }
 
     /**
@@ -247,8 +203,8 @@ class PluginRepo
     {
         $this->dropRepo($agent);
 
-        // Same lock packageZip holds while refreshing + zipping, so a
-        // download can't read a mid-rewrite package tree.
+        // Same lock packageZip holds while reading credentials +
+        // zipping, so a download can't read a mid-rewrite package tree.
         Cache::lock('melfina-plugin-repo:'.$agent->id.':pkg', 30)
             ->block(10, function () use ($agent, $plaintext): void {
                 if ($plaintext !== null) {
@@ -280,31 +236,30 @@ class PluginRepo
     }
 
     /**
-     * Refresh the credential-free generated files (manifests, umbrella
-     * skill, per-tool HTTP-fallback skills, melfina-api.json) inside a
-     * persisted package dir — the mcp.json manifests are the only files
-     * needing the plaintext key, so a ZIP built from an old tree still
-     * ships the current generated surface without it. The skills tree is
-     * rebuilt wholesale so tools removed from the catalog don't leave a
-     * stale SKILL.md behind.
+     * Zip a path→contents map into a 0600 temp file — the caller streams
+     * it via response()->download()->deleteFileAfterSend(). tempnam's
+     * file is already 0600; OVERWRITE truncates rather than replacing
+     * it, so the credential-bearing archive never exists at a
+     * world-readable path.
+     *
+     * @param  array<string, string>  $files
      */
-    public function refreshGeneratedFiles(Agent $agent): void
+    private function zipFiles(array $files): string
     {
-        $dir = $this->packageDir($agent);
+        throw_unless(class_exists(\ZipArchive::class), RuntimeException::class, 'PHP ext-zip is not installed');
 
-        if (is_dir($dir.'/skills')) {
-            throw_unless(File::deleteDirectory($dir.'/skills'), RuntimeException::class, 'Cannot clear the package skills tree');
+        $zipPath = tempnam(sys_get_temp_dir(), 'melfina-plugin-');
+        $zip = new \ZipArchive;
+        throw_unless($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true, RuntimeException::class);
+
+        foreach ($files as $path => $contents) {
+            throw_unless($zip->addFromString($path, $contents), RuntimeException::class, 'Cannot add '.$path.' to the package zip');
         }
 
-        if (is_file($dir.'/melfina-api.json')) {
-            throw_unless(File::delete($dir.'/melfina-api.json'), RuntimeException::class, 'Cannot clear the package manifest');
-        }
+        throw_unless($zip->close(), RuntimeException::class);
+        chmod($zipPath, 0600);
 
-        foreach ($this->packageDocs($agent) as $path => $contents) {
-            $full = $dir.'/'.$path;
-            File::ensureDirectoryExists(dirname($full));
-            throw_unless(file_put_contents($full, $contents) !== false, RuntimeException::class, "Cannot write package file {$path}");
-        }
+        return $zipPath;
     }
 
     /**
@@ -344,9 +299,9 @@ class PluginRepo
         return storage_path('app/mcp-plugins/'.$agent->id.'.pkg');
     }
 
-    public function repoDir(Agent $agent, string $mode): string
+    public function repoDir(Agent $agent, string $mode, PackageVariant $variant = PackageVariant::Multi): string
     {
-        return storage_path('app/mcp-plugins/'.$agent->id.'.'.$mode.'.git');
+        return storage_path('app/mcp-plugins/'.$agent->id.'.'.$mode.$variant->repoMarker().'.git');
     }
 
     /**
@@ -375,9 +330,9 @@ class PluginRepo
      *
      * @return array<string, string>
      */
-    private function skillFiles(): array
+    private function skillFiles(PackageVariant $variant = PackageVariant::Multi): array
     {
-        return $this->skills->files($this->baseUrl());
+        return $this->skills->files($this->baseUrl(), $variant);
     }
 
     /**
@@ -457,7 +412,7 @@ class PluginRepo
      *
      * @return array<string, string>
      */
-    private function packageFiles(Agent $agent, string $mode, string $credential): array
+    private function packageFiles(Agent $agent, string $mode, string $credential, PackageVariant $variant = PackageVariant::Multi): array
     {
         $endpoint = $this->endpoint();
 
@@ -482,19 +437,19 @@ class PluginRepo
         return [
             'mcp.json' => $mcp,
             '.mcp.json' => $mcp,
-            ...$this->packageDocs($agent),
+            ...$this->packageDocs($agent, $variant),
         ];
     }
 
     /**
      * The credential-free half of an agent's package: manifests, docs,
      * and generated skills — everything except mcp.json, which carries
-     * the key. Regenerable without the plaintext (used by
-     * refreshGeneratedFiles to keep pre-existing ZIP packages current).
+     * the key. Regenerable without the plaintext, so packageZip builds
+     * this half fresh for every download in the requested layout.
      *
      * @return array<string, string>
      */
-    private function packageDocs(Agent $agent): array
+    private function packageDocs(Agent $agent, PackageVariant $variant = PackageVariant::Multi): array
     {
         $endpoint = $this->endpoint();
         $slug = Str::slug($agent->name) ?: 'agent';
@@ -511,7 +466,7 @@ class PluginRepo
             'author' => 'Melfina',
             'category' => 'Productivity',
             'mcpServers' => ['mcp.json'],
-            'skills' => ['skills/melfina/SKILL.md', ...$this->skills->skillPaths()],
+            'skills' => ['skills/melfina/SKILL.md', ...$this->skills->skillPaths($variant)],
             'apps' => [],
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
 
@@ -546,10 +501,10 @@ MD;
             '.minimax-plugin/plugin.json' => $minimax,
             'plugin.json' => $agentPlugins,
             '.claude-plugin/plugin.json' => $claude,
-            'skills/melfina/SKILL.md' => $this->umbrellaSkill($agent),
+            'skills/melfina/SKILL.md' => $this->umbrellaSkill($agent, $variant),
             'README.md' => $readme."\n",
             'LICENSE' => $license,
-            ...$this->skillFiles(),
+            ...$this->skillFiles($variant),
         ];
     }
 
@@ -558,7 +513,7 @@ MD;
      * dedicated package — rendered here (not read back from storage) so
      * the console preview shows exactly what a package build embeds.
      */
-    public function umbrellaSkill(Agent $agent): string
+    public function umbrellaSkill(Agent $agent, PackageVariant $variant = PackageVariant::Multi): string
     {
         $skill = <<<MD
 ---
@@ -578,7 +533,7 @@ the fleet key only opens the endpoint. Never paste the plugin URL or the
 fleet key into chat or code.
 MD;
 
-        return $skill.$this->skills->appendix(credentialEmbedded: true)."\n";
+        return $skill.$this->skills->appendix($this->baseUrl(), $variant, credentialEmbedded: true)."\n";
     }
 
     /**
@@ -587,7 +542,7 @@ MD;
      * imp names itself per call. Rendered here (not read back from
      * storage) so the console preview shows exactly what a build embeds.
      */
-    public function fleetUmbrellaSkill(): string
+    public function fleetUmbrellaSkill(PackageVariant $variant = PackageVariant::Multi): string
     {
         $skill = <<<'MD'
 ---
@@ -614,7 +569,7 @@ percent-encode `:` or `@` (`ops:pilot` → `ops%3Apilot`).
 Never paste the plugin URL or the fleet key into chat or code.
 MD;
 
-        return $skill.$this->skills->appendix(credentialEmbedded: true)."\n";
+        return $skill.$this->skills->appendix($this->baseUrl(), $variant, credentialEmbedded: true)."\n";
     }
 
     /**
@@ -627,7 +582,7 @@ MD;
      *
      * @return array<string, string>
      */
-    private function globalPackageFiles(string $fleetKey): array
+    private function globalPackageFiles(string $fleetKey, PackageVariant $variant = PackageVariant::Multi): array
     {
         $endpoint = $this->endpoint();
 
@@ -661,12 +616,12 @@ headers. Discovery (initialize, tools/list) needs no persona at all.
 The endpoint is {$endpoint}.
 MD;
 
-        return array_merge($this->fleetManifestFiles(), [
+        return array_merge($this->fleetManifestFiles($variant), [
             'mcp.json' => $mcp,
             '.mcp.json' => $mcp,
-            'skills/melfina/SKILL.md' => $this->fleetUmbrellaSkill(),
+            'skills/melfina/SKILL.md' => $this->fleetUmbrellaSkill($variant),
             'README.md' => $readme."\n",
-        ], $this->skillFiles());
+        ], $this->skillFiles($variant));
     }
 
     /**
@@ -677,7 +632,7 @@ MD;
      *
      * @return array<string, string>
      */
-    public function publicPackageFiles(): array
+    public function publicPackageFiles(PackageVariant $variant = PackageVariant::Multi): array
     {
         $endpoint = $this->endpoint();
 
@@ -741,12 +696,12 @@ for discovery on its own, and the agent names itself per call with the
 The endpoint is {$endpoint}.
 MD;
 
-        return array_merge($this->fleetManifestFiles(), [
+        return array_merge($this->fleetManifestFiles($variant), [
             'mcp.json' => $mcp,
             '.mcp.json' => $mcp,
-            'skills/melfina/SKILL.md' => $skill.$this->skills->appendix()."\n",
+            'skills/melfina/SKILL.md' => $skill.$this->skills->appendix($this->baseUrl(), $variant)."\n",
             'README.md' => $readme."\n",
-        ], $this->skillFiles());
+        ], $this->skillFiles($variant));
     }
 
     /**
@@ -756,7 +711,7 @@ MD;
      *
      * @return array<string, string>
      */
-    private function fleetManifestFiles(): array
+    private function fleetManifestFiles(PackageVariant $variant = PackageVariant::Multi): array
     {
         $description = 'Melfina brain — private files, instructions, and shared spaces for every agent on this install.';
 
@@ -770,7 +725,7 @@ MD;
                 'author' => 'Melfina',
                 'category' => 'Productivity',
                 'mcpServers' => ['mcp.json'],
-                'skills' => ['skills/melfina/SKILL.md', ...$this->skills->skillPaths()],
+                'skills' => ['skills/melfina/SKILL.md', ...$this->skills->skillPaths($variant)],
                 'apps' => [],
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n",
             'plugin.json' => json_encode([

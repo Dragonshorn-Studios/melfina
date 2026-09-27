@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\Agent;
 use App\Models\AgentMessage;
 use App\Models\User;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -61,17 +62,19 @@ class SendDeliveryWebhook implements ShouldQueue
 
     /**
      * The minimal JSON body sent to the host — enough for a routine to
-     * know mail landed and whose inbox to poll.
+     * know mail landed and whose inbox to poll. `$recipient` is the live
+     * record resolved at send time; when omitted the delivery-time name
+     * snapshot is used (rename-safe callers should pass it).
      *
      * @return array{idempotency_key: string, message_id: int, recipient_id: int, recipient_name: string, delivered_at: string}
      */
-    public static function payload(AgentMessage $message): array
+    public static function payload(AgentMessage $message, ?Agent $recipient = null): array
     {
         return [
             'idempotency_key' => self::idempotencyKey($message),
             'message_id' => $message->id,
             'recipient_id' => $message->recipient_agent_id,
-            'recipient_name' => $message->recipient_name,
+            'recipient_name' => $recipient?->name ?? $message->recipient_name,
             'delivered_at' => $message->created_at->toIso8601String(),
         ];
     }
@@ -86,14 +89,26 @@ class SendDeliveryWebhook implements ShouldQueue
             return;
         }
 
-        $body = json_encode(self::payload($this->message), JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        // Recipient deleted between dispatch and run — no inbox left to
+        // wake a host for.
+        $recipient = Agent::query()->find($this->message->recipient_agent_id);
+        if ($recipient === null) {
+            return;
+        }
+
+        $body = json_encode(self::payload($this->message, $recipient), JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+
+        // Timestamp is folded into the signature so receivers can reject
+        // captured notices replayed outside their freshness window.
+        $timestamp = time();
 
         $response = Http::timeout(10)
             ->withBody($body, 'application/json')
             ->withHeaders([
                 'X-Melfina-Event' => 'message.delivered',
                 'X-Melfina-Delivery' => self::idempotencyKey($this->message),
-                'X-Melfina-Signature' => 'sha256='.hash_hmac('sha256', $body, (string) $owner->webhook_secret),
+                'X-Melfina-Timestamp' => (string) $timestamp,
+                'X-Melfina-Signature' => 'sha256='.hash_hmac('sha256', $timestamp.'.'.$body, (string) $owner->webhook_secret),
                 'User-Agent' => 'Melfina-Delivery-Webhook/1.0',
             ])
             ->post((string) $owner->webhook_url);
