@@ -34,7 +34,7 @@ Route::get('api/tools', [ToolCallController::class, 'index'])
     ->name('api.tools.index');
 Route::post('api/tools/{tool}', ToolCallController::class)
     ->middleware(['throttle:60,1', ResolveApiAgent::class])
-    ->where('tool', '[a-z0-9_]+')
+    ->where('tool', '[a-zA-Z0-9_-]+')
     ->name('api.tools.call');
 
 // Per-agent plugin repositories, cloneable over git's dumb HTTP protocol.

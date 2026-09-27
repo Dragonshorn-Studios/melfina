@@ -135,11 +135,13 @@ class ToolCallController extends Controller
 
         if ($parts->count() === 1 && ($parts->first()['type'] ?? null) === 'text') {
             $text = $parts->first()['text'] ?? '';
+            $decoded = $descriptor['json'] ? json_decode($text, true) : null;
+            $isJson = $descriptor['json'] && json_last_error() === JSON_ERROR_NONE;
 
             return response()->json([
                 'ok' => true,
-                'result' => $descriptor['json'] ? $this->decode($text) : $text,
-                'resultType' => $descriptor['json'] ? 'json' : 'text',
+                'result' => $isJson ? $decoded : $text,
+                'resultType' => $isJson ? 'json' : 'text',
             ]);
         }
 
@@ -165,15 +167,6 @@ class ToolCallController extends Controller
         return collect(is_iterable($result) ? $result : [$result])
             ->flatMap($wrap)
             ->values();
-    }
-
-    private function decode(string $text): mixed
-    {
-        try {
-            return json_decode($text, true, 512, JSON_THROW_ON_ERROR);
-        } catch (\JsonException) {
-            return $text;
-        }
     }
 
     /**

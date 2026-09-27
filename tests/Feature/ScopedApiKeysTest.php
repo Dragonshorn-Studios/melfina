@@ -221,6 +221,26 @@ it('ships the same skills inside the credentialed clone repos', function () {
         ->and(is_file($dir.'/melfina-api.json'))->toBeTrue();
 });
 
+it('refreshes generated files into a stale package dir on zip download', function () {
+    $repos = app(PluginRepo::class);
+    $repos->rebuildPackage($this->agent, 'melf_testkey');
+    $dir = $repos->packageDir($this->agent);
+
+    // A package built before the generated skills existed.
+    unlink($dir.'/melfina-api.json');
+    unlink($dir.'/skills/melfina-read-file/SKILL.md');
+
+    $this->actingAs($this->owner)
+        ->get(route('console.agents.plugin', $this->agent))
+        ->assertOk();
+
+    // The overlay runs at zip time — mcp.json (the credential-bearing
+    // file) is untouched.
+    expect(is_file($dir.'/melfina-api.json'))->toBeTrue()
+        ->and(is_file($dir.'/skills/melfina-read-file/SKILL.md'))->toBeTrue()
+        ->and(file_get_contents($dir.'/mcp.json'))->toContain('melf_testkey');
+});
+
 it('ships the generated skills in the fleet package too', function () {
     $repos = app(PluginRepo::class);
     $dir = $repos->ensureGlobal('melfg_fleetkey');

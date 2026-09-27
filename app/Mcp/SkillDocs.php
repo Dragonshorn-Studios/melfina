@@ -118,7 +118,7 @@ MD;
                 'resultType' => $tool['json'] ? 'json' : 'text',
                 'skill' => 'skills/'.self::skillName($tool['name']).'/SKILL.md',
             ])->all(),
-        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n";
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
     }
 
     /**
@@ -128,7 +128,7 @@ MD;
     {
         $base = rtrim($baseUrl, '/');
         $host = Str::after($base, '://');
-        $schema = json_encode($tool['inputSchema'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        $schema = json_encode($tool['inputSchema'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         $scope = $tool['scope'];
 
         $name = self::skillName($tool['name']);
@@ -138,14 +138,14 @@ MD;
         // the frontmatter parses on strict loaders either way.
         $description = json_encode(
             $tool['description'].' (HTTP fallback for the `'.$tool['name'].'` Melfina MCP tool.)',
-            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
         );
 
         $outSchema = $tool['outputSchema'];
         $resultSchema = $outSchema === null
             ? ''
             : "\n`result` matches the tool's declared output schema:\n\n```json\n"
-                .json_encode($outSchema, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n```\n";
+                .json_encode($outSchema, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n```\n";
 
         $resultDoc = $tool['json']
             ? '`result` is this tool\'s JSON payload, decoded to objects/arrays (`resultType` is `json`).'
