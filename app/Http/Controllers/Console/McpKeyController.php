@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Console;
 
 use App\Http\Controllers\Controller;
+use App\Mcp\PackageVariant;
 use App\Mcp\PluginRepo;
 use App\Models\McpFleetKey;
 use App\Services\GitHubPublisher;
@@ -36,11 +37,14 @@ class McpKeyController extends Controller
             'hasFleetKey' => $request->user()->mcp_key_hash !== null
                 || $request->user()->mcpFleetKeys()->whereNull('revoked_at')->exists(),
             // Public, credential-free package at an unguessable derived name
-            // — for importers that never send Basic credentials.
+            // — for importers that never send Basic credentials. The
+            // `.single.git` name serves the umbrella+script layout.
             'publicRepoUrl' => url('/plugins/'.$repos->publicRepoName()),
+            'publicRepoUrlSingle' => url('/plugins/'.$repos->publicRepoName(PackageVariant::Single)),
             // Credentials travel as HTTP Basic userinfo so they stay out of
             // request-path logs. '${1}' braces guard digit-leading inserts.
             'fleetRepoUrl' => preg_replace('#^(https?://)#', '${1}melfina:melfg_…@', url('/plugins/~melfina.git')),
+            'fleetRepoUrlSingle' => preg_replace('#^(https?://)#', '${1}melfina:melfg_…@', url('/plugins/~melfina.single.git')),
             'personaUrl' => preg_replace('#^(https?://)#', '${1}NAME:melfg_…@', $endpoint),
             'headersConfig' => json_encode([
                 'mcpServers' => [
@@ -166,8 +170,10 @@ class McpKeyController extends Controller
             ]);
         }
 
+        $variant = PackageVariant::fromRequest($request->input('variant'));
+
         try {
-            $url = $github->publish($user->github_token, $user->github_repo, $repos->publicPackageFiles());
+            $url = $github->publish($user->github_token, $user->github_repo, $repos->publicPackageFiles($variant));
         } catch (\RuntimeException $e) {
             throw ValidationException::withMessages(['github_repo' => $e->getMessage()]);
         }
@@ -353,10 +359,10 @@ class McpKeyController extends Controller
      * that take an upload rather than a git URL (e.g. MiniMax's plugin
      * submit refuses non-GitHub repos).
      */
-    public function pluginZip(PluginRepo $repos): BinaryFileResponse
+    public function pluginZip(Request $request, PluginRepo $repos): BinaryFileResponse
     {
         try {
-            $zipPath = $repos->publicPackageZip();
+            $zipPath = $repos->publicPackageZip(PackageVariant::fromRequest($request->query('variant')));
         } catch (\RuntimeException $e) {
             abort(500, $e->getMessage());
         }
