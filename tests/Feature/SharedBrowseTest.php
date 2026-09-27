@@ -15,7 +15,13 @@ it('lets the owner browse a space and read a file inside', function () {
         ->get(route('console.shared.show', $this->space))
         ->assertOk()
         ->assertSee('ops')
-        ->assertSee('notes/plan.txt');
+        ->assertSee('notes/');
+
+    // Descend one level — the file lists inside its directory.
+    $this->actingAs($this->owner)
+        ->get(route('console.shared.show', ['shared' => $this->space, 'dir' => 'notes/']))
+        ->assertOk()
+        ->assertSee('plan.txt');
 
     $this->actingAs($this->owner)
         ->get(route('console.shared.file', ['shared' => $this->space, 'path' => 'notes/plan.txt']))

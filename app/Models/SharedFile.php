@@ -84,4 +84,17 @@ class SharedFile extends Model
                 ->firstOrFail();
         }
     }
+
+    /**
+     * Delete a file scoped to the space. Returns whether a row was removed.
+     */
+    public static function deleteFor(SharedSpace $space, string $path): bool
+    {
+        $normalized = VfsFile::normalizePath($path);
+
+        return static::query()
+            ->where('shared_space_id', $space->id)
+            ->where('path', $normalized)
+            ->delete() > 0;
+    }
 }

@@ -90,7 +90,13 @@ it('lets the owner browse, write, and delete files in an agent tree', function (
     $this->actingAs($this->owner)
         ->get(route('console.files.show', $this->agent))
         ->assertOk()
-        ->assertSee('notes/plan.txt');
+        ->assertSee('notes/');
+
+    // The tree browses per directory — descend to see the file itself.
+    $this->actingAs($this->owner)
+        ->get(route('console.files.show', ['agent' => $this->agent, 'dir' => 'notes/']))
+        ->assertOk()
+        ->assertSee('plan.txt');
 
     $this->actingAs($this->owner)
         ->put(route('console.files.update', $this->agent), [

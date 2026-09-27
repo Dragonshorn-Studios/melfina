@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Console;
 use App\Http\Controllers\Controller;
 use App\Models\Agent;
 use App\Models\VfsFile;
+use App\Support\PathTree;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -21,13 +22,26 @@ class FileController extends Controller
         return redirect()->route('console.agents.index');
     }
 
-    public function show(Agent $agent): View
+    /**
+     * One directory level of the agent's tree — dirs as links under a
+     * breadcrumb, files with open/delete. Same traversal as shared
+     * spaces.
+     */
+    public function show(Request $request, Agent $agent): View
     {
         $this->authorize('view', $agent);
 
+        $dir = PathTree::normalizeDir($request->string('dir')->toString());
+        $paths = VfsFile::listFor($agent);
+        $level = PathTree::level($paths, $dir);
+
         return view('console.files.show', [
             'agent' => $agent,
-            'paths' => VfsFile::listFor($agent),
+            'dir' => $dir,
+            'dirs' => $level['dirs'],
+            'files' => $level['files'],
+            'breadcrumbs' => PathTree::breadcrumbs($dir),
+            'fileCount' => $paths->count(),
         ]);
     }
 
@@ -79,6 +93,7 @@ class FileController extends Controller
 
         $validated = $request->validate([
             'path' => ['required', 'string'],
+            'dir' => ['nullable', 'string'],
         ]);
 
         try {
@@ -87,6 +102,9 @@ class FileController extends Controller
             return back()->withErrors(['path' => $e->getMessage()]);
         }
 
-        return redirect()->route('console.files.show', $agent);
+        return redirect()->route('console.files.show', [
+            'agent' => $agent,
+            'dir' => PathTree::normalizeDir($validated['dir'] ?? null),
+        ]);
     }
 }

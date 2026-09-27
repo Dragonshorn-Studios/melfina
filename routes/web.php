@@ -74,6 +74,7 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::delete('files/{agent}', [FileController::class, 'destroy'])->name('files.destroy');
 
     Route::get('shared/{shared}/file', [SharedSpaceController::class, 'file'])->name('shared.file');
+    Route::delete('shared/{shared}/file', [SharedSpaceController::class, 'destroyFile'])->name('shared.file.destroy');
     Route::resource('shared', SharedSpaceController::class)->except(['destroy']);
 
     Route::get('knowledge', [KnowledgeController::class, 'index'])->name('knowledge.index');
