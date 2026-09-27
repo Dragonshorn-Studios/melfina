@@ -8,7 +8,7 @@
             @method('PUT')
             <div>
                 <label for="path" class="block font-mono text-xs text-steel">path</label>
-                <input id="path" name="path" type="text" value="{{ old('path', $path) }}" required
+                <input id="path" name="path" type="text" value="{{ old('path', $path !== '' ? $path : $dir) }}" required
                     @if ($path !== '') readonly @endif
                     class="mt-1 w-full border border-border bg-void px-3 py-2 font-mono text-sm text-cream outline-none focus:border-amber {{ $path !== '' ? 'opacity-60' : '' }}" style="border-radius: var(--radius-console)">
                 @error('path') <p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p> @enderror
