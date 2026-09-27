@@ -18,7 +18,9 @@
                     <tr class="border-b border-border text-left text-steel">
                         <th class="py-2 pr-4">name</th>
                         <th class="py-2 pr-4">status</th>
+                        <th class="py-2 pr-4">files</th>
                         <th class="py-2 pr-4">key</th>
+                        <th class="py-2 pr-4">last write</th>
                         <th class="py-2"></th>
                     </tr>
                 </thead>
@@ -27,7 +29,9 @@
                         <tr class="border-b border-border/50">
                             <td class="py-2 pr-4 text-cream">{{ $agent->name }}</td>
                             <td class="py-2 pr-4 {{ $agent->isActive() ? 'text-amber' : 'text-danger' }}">{{ $agent->status }}</td>
+                            <td class="py-2 pr-4 text-steel">{{ $agent->files_count }}</td>
                             <td class="py-2 pr-4 text-steel">{{ $agent->key_hash ? 'issued' : '—' }}</td>
+                            <td class="py-2 pr-4 text-steel">{{ $agent->files_max_updated_at ? \Illuminate\Support\Carbon::parse($agent->files_max_updated_at)->diffForHumans(short: true) : '—' }}</td>
                             <td class="py-2 text-right">
                                 <a href="{{ route('console.agents.show', $agent) }}" class="text-amber underline decoration-border underline-offset-4">open</a>
                             </td>

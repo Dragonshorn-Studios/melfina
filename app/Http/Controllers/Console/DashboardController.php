@@ -23,15 +23,6 @@ class DashboardController extends Controller
                 'files' => VfsFile::count(),
                 'spaces' => SharedSpace::count(),
             ],
-            'agents' => Agent::query()
-                ->withCount('files')
-                ->withMax('files', 'updated_at')
-                ->orderBy('name')
-                ->get(),
-            'spaces' => SharedSpace::query()
-                ->withCount(['files', 'aclEntries'])
-                ->orderBy('name')
-                ->get(),
         ]);
     }
 }

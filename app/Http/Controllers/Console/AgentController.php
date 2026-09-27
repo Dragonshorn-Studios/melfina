@@ -30,7 +30,11 @@ class AgentController extends Controller
         $this->authorize('viewAny', Agent::class);
 
         return view('console.agents.index', [
-            'agents' => Agent::query()->orderBy('name')->get(),
+            'agents' => Agent::query()
+                ->withCount('files')
+                ->withMax('files', 'updated_at')
+                ->orderBy('name')
+                ->get(),
             'enrollments' => AgentEnrollment::query()
                 ->with('agent')
                 ->orderByRaw("case status when 'pending' then 0 else 1 end")

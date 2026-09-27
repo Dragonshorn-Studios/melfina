@@ -166,78 +166,9 @@
             @endif
         </section>
 
-        <section class="mt-8">
-            <p class="font-mono text-xs tracking-[0.16em] text-steel">AGENTS</p>
-            @if ($agents->isEmpty())
-                <p class="mt-4 text-sm text-steel">No agents yet — <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.create') }}">create one</a>.</p>
-            @else
-                <table class="mt-3 w-full border-collapse font-mono text-xs">
-                    <thead>
-                        <tr class="border-b border-border text-left text-steel">
-                            <th class="py-2 pr-4">name</th>
-                            <th class="py-2 pr-4">status</th>
-                            <th class="py-2 pr-4">files</th>
-                            <th class="py-2 pr-4">key</th>
-                            <th class="py-2 pr-4">last write</th>
-                            <th class="py-2"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($agents as $agent)
-                            <tr class="border-b border-border/50">
-                                <td class="py-2 pr-4 text-cream">{{ $agent->name }}</td>
-                                <td class="py-2 pr-4 {{ $agent->isActive() ? 'text-amber' : 'text-danger' }}">{{ $agent->status }}</td>
-                                <td class="py-2 pr-4 text-steel">{{ $agent->files_count }}</td>
-                                <td class="py-2 pr-4 text-steel">
-                                    @if ($agent->key_issued_at)
-                                        issued {{ $agent->key_issued_at->diffForHumans(short: true) }}
-                                    @elseif ($agent->key_hash)
-                                        issued
-                                    @else
-                                        —
-                                    @endif
-                                </td>
-                                <td class="py-2 pr-4 text-steel">
-                                    {{ $agent->files_max_updated_at ? \Illuminate\Support\Carbon::parse($agent->files_max_updated_at)->diffForHumans(short: true) : '—' }}
-                                </td>
-                                <td class="py-2 text-right">
-                                    <a href="{{ route('console.agents.show', $agent) }}" class="text-amber underline decoration-border underline-offset-4">open</a>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            @endif
-        </section>
-
-        <section class="mt-8">
-            <p class="font-mono text-xs tracking-[0.16em] text-steel">SHARED SPACES</p>
-            @if ($spaces->isEmpty())
-                <p class="mt-4 text-sm text-steel">No shared spaces yet — <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.shared.create') }}">create one</a>.</p>
-            @else
-                <table class="mt-3 w-full border-collapse font-mono text-xs">
-                    <thead>
-                        <tr class="border-b border-border text-left text-steel">
-                            <th class="py-2 pr-4">name</th>
-                            <th class="py-2 pr-4">members</th>
-                            <th class="py-2 pr-4">files</th>
-                            <th class="py-2"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($spaces as $space)
-                            <tr class="border-b border-border/50">
-                                <td class="py-2 pr-4 text-cream">{{ $space->name }}</td>
-                                <td class="py-2 pr-4 text-steel">{{ $space->acl_entries_count }}</td>
-                                <td class="py-2 pr-4 text-steel">{{ $space->files_count }}</td>
-                                <td class="py-2 text-right">
-                                    <a href="{{ route('console.shared.edit', $space) }}" class="text-amber underline decoration-border underline-offset-4">acl</a>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            @endif
+        <section class="mt-8 flex items-center gap-6 border-t border-border pt-4 font-mono text-xs">
+            <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.index') }}">agent roster →</a>
+            <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.shared.index') }}">shared spaces →</a>
         </section>
     </main>
 </x-console-layout>

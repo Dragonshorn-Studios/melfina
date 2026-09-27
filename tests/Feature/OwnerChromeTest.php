@@ -55,7 +55,7 @@ it('renders the connect guides for an agent', function () {
         ->assertSee('Bearer melf_…', false);
 });
 
-it('shows fleet stats and agent rows on the dashboard', function () {
+it('shows fleet stats and section links on the dashboard', function () {
     VfsFile::writeFor($this->agent, 'a.txt', '1');
     $this->agent->rotateKey();
     $space = SharedSpace::factory()->create();
@@ -66,10 +66,16 @@ it('shows fleet stats and agent rows on the dashboard', function () {
         ->assertOk()
         ->assertSee('Fleet at a glance')
         ->assertSee($this->agent->name)
-        ->assertSee($space->name)
         ->assertSee(route('console.agents.show', $this->agent))
-        ->assertSee(route('console.shared.edit', $space))
-        ->assertSee(route('console.agents.create'))
+        ->assertSee(route('console.agents.index'))
+        ->assertSee(route('console.shared.index'))
+        ->assertSee(route('console.agents.create'));
+
+    // The roster table — with file counts, key state, last write — lives on the index.
+    $this->actingAs($this->owner)
+        ->get(route('console.agents.index'))
+        ->assertOk()
+        ->assertSee($this->agent->name)
         ->assertSee('issued', false);
 });
 
