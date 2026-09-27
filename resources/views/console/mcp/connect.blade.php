@@ -86,6 +86,111 @@
                 <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $headersConfig }}</pre>
             </details>
 
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">CLAUDE DESKTOP</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>Edit Claude Desktop's config (macOS: <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>; Windows: <code>%APPDATA%\Claude\claude_desktop_config.json</code>).</li>
+                    <li>Add a <code>melfina</code> entry that runs <code>npx mcp-remote</code> (Node 18+) against the endpoint — it bridges OAuth automatically.</li>
+                    <li>Restart Claude Desktop and complete the browser consent when prompted.</li>
+                </ol>
+                <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $snippets['claudeDesktop'] }}</pre>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">CLAUDE CODE</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>Add the server with HTTP transport:</li>
+                </ol>
+                <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $snippets['claudeCode'] }}</pre>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel" start="2">
+                    <li>If <code>claude mcp list</code> shows "Needs authentication", run <code>/mcp</code> in a session and choose Authenticate.</li>
+                    <li>Or skip OAuth and send the fleet key + the agent's name directly:</li>
+                </ol>
+                <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $snippets['claudeCodeKey'] }}</pre>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">CURSOR</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>For OAuth, add <code>https://www.cursor.com</code> to the allowed redirect origins below — Cursor registers a fixed callback there.</li>
+                    <li>Edit <code>~/.cursor/mcp.json</code> (or Settings → Tools &amp; Integrations → MCP → Add Custom MCP):</li>
+                </ol>
+                <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $snippets['cursor'] }}</pre>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel" start="3">
+                    <li>Save and refresh the server; complete the browser consent when Cursor prompts.</li>
+                </ol>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">CHATGPT</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>Enable developer mode in ChatGPT (Settings → Connectors → Advanced).</li>
+                    <li>Create a connector, paste the endpoint URL, and complete the OAuth consent in the browser.</li>
+                    <li>If the flow redirects to a <code>chatgpt.com</code> callback that fails, allow that origin below (<code>chatgpt-desktop://</code> is already allowed).</li>
+                </ol>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">OPENCODE</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>Edit <code>~/.config/opencode/opencode.json</code> or a project <code>opencode.json</code> — OAuth stays on by default for remote servers.</li>
+                </ol>
+                <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $snippets['openCode'] }}</pre>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel" start="2">
+                    <li>Restart OpenCode and complete the browser consent when challenged.</li>
+                </ol>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">GROK</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>Open grok.com → Connectors → New Connector → Custom.</li>
+                    <li>Paste the endpoint URL and authenticate. The instance must be reachable on public HTTPS — Grok cannot call a LAN address.</li>
+                    <li>If Grok's redirect lands on a <code>grok.com</code> origin, allow it below first.</li>
+                </ol>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">MINIMAX (MAVIS)</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>MiniMax does not run the OAuth flow — send the fleet key as Bearer plus the agent's name in <code>X-Melfina-Agent-Key</code>. Or install the plugin package from the URL above.</li>
+                    <li>Edit <code>~/.mavis/mcp/mcp.json</code> and add a <code>melfina</code> entry (the file format varies between MiniMax versions — check <code>mavis mcp list</code> after saving):</li>
+                </ol>
+                <pre class="{{ $preClass }}" style="border-radius: var(--radius-console)">{{ $snippets['minimax'] }}</pre>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel" start="3">
+                    <li>Replace <code>NAME</code> and <code>melfg_…</code>, then restart the agent.</li>
+                </ol>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">ANY OTHER CLIENT</summary>
+                <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
+                    <li>Transport: Streamable HTTP at the endpoint URL above.</li>
+                    <li>Auth: OAuth 2.1 with DCR — clients auto-register via <code>POST /oauth/register</code>; discovery is at <code>/.well-known/oauth-protected-resource</code> and <code>/.well-known/oauth-authorization-server</code>. PKCE S256 only.</li>
+                    <li>No OAuth support? Send <code>Authorization: Bearer melfg_…</code> (fleet key) plus <code>X-Melfina-Agent-Key</code> with the agent's name or key on every request. A dedicated config may send <code>Bearer melf_…</code> alone instead.</li>
+                </ol>
+            </details>
+
+            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
+                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">NO MCP? HTTP TOOL FALLBACK</summary>
+                <p class="mt-3 text-sm text-steel">
+                    Runtimes that can't run an MCP server call the same tools over plain JSON —
+                    <code>GET {{ url('/api/tools') }}</code> lists the surface;
+                    <code>POST {{ url('/api/tools') }}/&lt;tool&gt;</code> invokes it with the tool's
+                    arguments object as the body (the same shape as MCP <code>tools/call</code>).
+                    MCP stays the canonical path — prefer it whenever the client supports it, and
+                    never call both for the same operation.
+                </p>
+                <p class="mt-2 text-sm text-steel">
+                    Auth is the same Bearer/Basic credential surface as above, plus scoped
+                    <code>melfs_…</code> keys for least-privilege cloud agents — issue them on each
+                    agent's About tab.
+                    Every plugin package also ships a generated <code>skills/melfina-&lt;tool&gt;/SKILL.md</code>
+                    per tool and a machine-readable <code>melfina-api.json</code>, so skill-only runtimes
+                    can drive the HTTP surface directly.
+                </p>
+            </details>
+
             <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)" open>
                 <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">PUBLISH TO GITHUB</summary>
                 <p class="mt-3 text-sm text-steel">

@@ -603,7 +603,7 @@ it('renders the persona clone URLs on the connect page', function () {
     $this->actingAs($this->owner)
         ->get(route('console.agents.connect', $this->agent))
         ->assertOk()
-        ->assertSee('INSTALL AS PLUGIN')
+        ->assertSee("THIS AGENT'S PLUGIN PACKAGE", false)
         ->assertSee(':melfg_…@', false)
         ->assertSee(rawurlencode($this->agent->name), false)
         ->assertSee('/plugins/~melfina.git', false)
