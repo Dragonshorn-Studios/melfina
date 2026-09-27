@@ -102,11 +102,17 @@ class SendMessage extends Tool
                 }
 
                 $name = VfsFile::normalizePath($item['vfs_path']);
-                $content = VfsFile::readFor($agent, $name);
+                $file = VfsFile::fileFor($agent, $name);
 
-                if ($content === null) {
+                if ($file === null) {
                     throw new InvalidArgumentException("attachments[$i]: no file at '$name' in your private tree.");
                 }
+
+                if ($file->isBinary()) {
+                    throw new InvalidArgumentException("attachments[$i]: '$name' is a binary file ({$file->mime}) — attachments carry text only.");
+                }
+
+                $content = $file->bytes();
 
                 $attachments[] = ['name' => $name, 'content' => $content];
 

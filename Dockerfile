@@ -19,6 +19,10 @@ WORKDIR /app
 
 COPY . .
 
+# Binary VFS uploads are capped at 10 MB app-side; php.ini-production's
+# 2M/8M defaults would reject the multipart bodies before the app sees them.
+RUN cp docker/php/uploads.ini "$PHP_INI_DIR/conf.d/uploads.ini"
+
 RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader \
     && npm ci --ignore-scripts \
     && npm run build \

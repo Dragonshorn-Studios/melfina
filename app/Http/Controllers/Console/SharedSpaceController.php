@@ -7,13 +7,17 @@ use App\Models\Agent;
 use App\Models\SharedAcl;
 use App\Models\SharedFile;
 use App\Models\SharedSpace;
+use App\Models\VfsFile;
+use App\Support\FileMime;
 use App\Support\PathTree;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use InvalidArgumentException;
+use Symfony\Component\HttpFoundation\Response;
 
 class SharedSpaceController extends Controller
 {
@@ -65,8 +69,8 @@ class SharedSpaceController extends Controller
             ->when($dir !== '', fn ($query) => $query->whereRaw('substr(path, 1, ?) = ?', [strlen($dir), $dir]))
             ->whereRaw('instr(substr(path, ?), ?) = 0', [strlen($dir) + 1, '/'])
             ->orderBy('path')
-            ->select(['id', 'shared_space_id', 'path', 'updated_at'])
-            ->selectRaw('length(content) as byte_size')
+            ->select(['id', 'shared_space_id', 'path', 'mime', 'updated_at'])
+            ->selectRaw('length(coalesce(content_blob, content)) as byte_size')
             ->paginate(50)
             ->withQueryString();
 
@@ -123,6 +127,69 @@ class SharedSpaceController extends Controller
             'space' => $shared,
             'file' => $file,
             'dir' => PathTree::normalizeDir($request->string('dir')->toString()),
+            'inlineSafe' => $file->isBinary() && FileMime::isInlineSafe($file->mime),
+        ]);
+    }
+
+    /**
+     * Multipart upload into the space — mirrors the agent file-tree
+     * upload: current dir + filename unless overridden, text bodies stay
+     * text rows.
+     */
+    public function upload(Request $request, SharedSpace $shared): RedirectResponse
+    {
+        $this->authorize('update', $shared);
+
+        $validated = $request->validate([
+            'file' => ['required', 'file', 'max:'.(VfsFile::MAX_BINARY_BYTES / 1024)],
+            'dir' => ['nullable', 'string'],
+            'name' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $dir = PathTree::normalizeDir($validated['dir'] ?? null);
+        $upload = $request->file('file');
+        $name = trim((string) ($validated['name'] ?? ''));
+        $target = $dir.($name !== '' ? $name : basename($upload->getClientOriginalName()));
+
+        $bytes = $upload->get();
+
+        try {
+            $file = FileMime::isTextual($bytes, FileMime::normalize($upload->getMimeType()))
+                ? SharedFile::writeFor($shared, $target, $bytes)
+                : SharedFile::writeBinaryFor($shared, $target, $bytes, $upload->getMimeType());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['file' => $e->getMessage()]);
+        }
+
+        $parent = str_contains($file->path, '/') ? Str::beforeLast($file->path, '/').'/' : '';
+
+        return redirect()->route('console.shared.show', ['shared' => $shared, 'dir' => $parent]);
+    }
+
+    /**
+     * Raw bytes for a file in the space — same inline-mime allowlist as
+     * the agent file raw route; agent-authored HTML/SVG never renders in
+     * the owner's session.
+     */
+    public function rawFile(Request $request, SharedSpace $shared): Response
+    {
+        $this->authorize('view', $shared);
+
+        try {
+            $file = SharedFile::fileFor($shared, $request->string('path')->toString());
+        } catch (InvalidArgumentException) {
+            abort(404);
+        }
+
+        abort_if($file === null, 404);
+
+        $mime = $file->mime ?? 'text/plain';
+        $inline = FileMime::isInlineSafe($mime);
+
+        return response($file->bytes(), 200, [
+            'Content-Type' => $inline ? $mime : 'application/octet-stream',
+            'Content-Disposition' => ($inline ? 'inline' : 'attachment').'; filename="'.addslashes(basename($file->path)).'"',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
