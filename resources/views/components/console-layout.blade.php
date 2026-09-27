@@ -74,6 +74,9 @@
                         <a href="{{ route('console.shared.index') }}"
                             class="border px-3 py-1.5 font-mono text-xs {{ request()->routeIs('console.shared.*') ? 'border-amber bg-void text-amber' : 'border-transparent text-steel hover:border-border hover:text-cream' }}"
                             style="border-radius: var(--radius-console)">shared</a>
+                        <a href="{{ route('console.knowledge.index') }}"
+                            class="border px-3 py-1.5 font-mono text-xs {{ request()->routeIs('console.knowledge.*') ? 'border-amber bg-void text-amber' : 'border-transparent text-steel hover:border-border hover:text-cream' }}"
+                            style="border-radius: var(--radius-console)">knowledge</a>
                         <a href="{{ route('console.messages.index') }}"
                             class="border px-3 py-1.5 font-mono text-xs {{ request()->routeIs('console.messages.*') ? 'border-amber bg-void text-amber' : 'border-transparent text-steel hover:border-border hover:text-cream' }}"
                             style="border-radius: var(--radius-console)">{{ \App\Models\AgentMessage::messagesLabel() }}</a>

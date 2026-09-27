@@ -8,6 +8,7 @@ use App\Http\Controllers\Console\EnrollKeyController;
 use App\Http\Controllers\Console\EnrollmentController;
 use App\Http\Controllers\Console\FileController;
 use App\Http\Controllers\Console\InstructionController;
+use App\Http\Controllers\Console\KnowledgeController;
 use App\Http\Controllers\Console\McpClientController;
 use App\Http\Controllers\Console\McpKeyController;
 use App\Http\Controllers\Console\MessageController;
@@ -74,6 +75,13 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
 
     Route::get('shared/{shared}/file', [SharedSpaceController::class, 'file'])->name('shared.file');
     Route::resource('shared', SharedSpaceController::class)->except(['destroy']);
+
+    Route::get('knowledge', [KnowledgeController::class, 'index'])->name('knowledge.index');
+    Route::get('knowledge/create', [KnowledgeController::class, 'create'])->name('knowledge.create');
+    Route::post('knowledge', [KnowledgeController::class, 'store'])->name('knowledge.store');
+    Route::get('knowledge/{knowledge}/edit', [KnowledgeController::class, 'edit'])->name('knowledge.edit');
+    Route::put('knowledge/{knowledge}', [KnowledgeController::class, 'update'])->name('knowledge.update');
+    Route::delete('knowledge/{knowledge}', [KnowledgeController::class, 'destroy'])->name('knowledge.destroy');
 
     Route::get('messages', [MessageController::class, 'index'])->name('messages.index');
     Route::get('messages/{message}', [MessageController::class, 'show'])->name('messages.show');
