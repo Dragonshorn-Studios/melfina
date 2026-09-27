@@ -537,6 +537,42 @@ MD;
     }
 
     /**
+     * The umbrella skills/melfina/SKILL.md shipped in the fleet-wide
+     * package — persona-less: the key only opens the endpoint and each
+     * imp names itself per call. Rendered here (not read back from
+     * storage) so the console preview shows exactly what a build embeds.
+     */
+    public function fleetUmbrellaSkill(PackageVariant $variant = PackageVariant::Multi): string
+    {
+        $skill = <<<'MD'
+---
+name: melfina
+description: Read and write your private Melfina brain — your file tree, layered instructions, and shared spaces.
+---
+
+This plugin connects you to your own Melfina brain. One copy serves every
+agent on the install — the fleet key only opens the endpoint; it proves
+membership, not identity. Claim your persona by passing your agent name as
+the `name` argument on every tool call — every tool accepts it, and your
+name is a non-secret id you know from your own instructions.
+
+If your client can set headers, a fixed `X-Melfina-Agent-Key: <your name>`
+header works instead of the per-call argument. URL-only clients can pin
+the persona as the Basic username — `https://NAME:<fleet key>@host/mcp`,
+percent-encode `:` or `@` (`ops:pilot` → `ops%3Apilot`).
+
+- `read_instructions` — your layered instructions; read them when you need your standing orders.
+- `list_files` / `read_file` / `write_file` — your private tree. Nobody else can see or touch it.
+- `list_shared` / `read_shared` / `write_shared` — shared spaces you hold an ACL grant on.
+- `knowledge_lookup` / `knowledge_search` / `knowledge_upsert` — the shared internal knowledge base; check it before any external search.
+
+Never paste the plugin URL or the fleet key into chat or code.
+MD;
+
+        return $skill.$this->skills->appendix($this->baseUrl(), $variant, credentialEmbedded: true)."\n";
+    }
+
+    /**
      * Repo-root-relative path → contents for the fleet-wide package. One
      * install covers every agent: the MCP config sends the fleet key as a
      * Bearer credential and nothing else — discovery works persona-less,
@@ -563,31 +599,6 @@ MD;
             ],
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
 
-        $skill = <<<'MD'
----
-name: melfina
-description: Read and write your private Melfina brain — your file tree, layered instructions, and shared spaces.
----
-
-This plugin connects you to your own Melfina brain. One copy serves every
-agent on the install — the fleet key only opens the endpoint; it proves
-membership, not identity. Claim your persona by passing your agent name as
-the `name` argument on every tool call — every tool accepts it, and your
-name is a non-secret id you know from your own instructions.
-
-If your client can set headers, a fixed `X-Melfina-Agent-Key: <your name>`
-header works instead of the per-call argument. URL-only clients can pin
-the persona as the Basic username — `https://NAME:<fleet key>@host/mcp`,
-percent-encode `:` or `@` (`ops:pilot` → `ops%3Apilot`).
-
-- `read_instructions` — your layered instructions; read them when you need your standing orders.
-- `list_files` / `read_file` / `write_file` — your private tree. Nobody else can see or touch it.
-- `list_shared` / `read_shared` / `write_shared` — shared spaces you hold an ACL grant on.
-- `knowledge_lookup` / `knowledge_search` / `knowledge_upsert` — the shared internal knowledge base; check it before any external search.
-
-Never paste the plugin URL or the fleet key into chat or code.
-MD;
-
         $readme = <<<MD
 # melfina
 
@@ -608,7 +619,7 @@ MD;
         return array_merge($this->fleetManifestFiles($variant), [
             'mcp.json' => $mcp,
             '.mcp.json' => $mcp,
-            'skills/melfina/SKILL.md' => $skill.$this->skills->appendix($this->baseUrl(), $variant, credentialEmbedded: true)."\n",
+            'skills/melfina/SKILL.md' => $this->fleetUmbrellaSkill($variant),
             'README.md' => $readme."\n",
         ], $this->skillFiles($variant));
     }

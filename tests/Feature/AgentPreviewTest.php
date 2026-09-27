@@ -62,6 +62,18 @@ it('renders empty payloads cleanly for a fresh agent', function () {
         ->assertSee('persona_hint');
 });
 
+it('shows the fleet-package skill variant alongside the dedicated one', function () {
+    $this->actingAs($this->owner)
+        ->get(route('console.agents.preview', $this->agent))
+        ->assertOk()
+        ->assertSee('fleet package')
+        // dedicated variant: persona baked in
+        ->assertSee('You are nav-brain')
+        // fleet variant: persona claimed per call
+        ->assertSee('Claim your persona by passing your agent name')
+        ->assertSee('X-Melfina-Agent-Key');
+});
+
 it('is owner-only', function () {
     $this->get(route('console.agents.preview', $this->agent))
         ->assertRedirect(route('login'));

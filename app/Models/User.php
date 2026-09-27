@@ -21,9 +21,11 @@ use Laravel\Passport\HasApiTokens;
  * @property string|null $github_token (encrypted at rest)
  * @property string|null $github_repo
  * @property string|null $operator_persona
+ * @property string|null $webhook_url
+ * @property string|null $webhook_secret (encrypted at rest; needed verbatim to sign)
  */
-#[Fillable(['name', 'email', 'password', 'is_owner', 'mcp_key_hash', 'mcp_key_issued_at', 'mcp_redirect_domains', 'operator_persona'])]
-#[Hidden(['password', 'remember_token', 'mcp_key_hash', 'github_token'])]
+#[Fillable(['name', 'email', 'password', 'is_owner', 'mcp_key_hash', 'mcp_key_issued_at', 'mcp_redirect_domains', 'operator_persona', 'webhook_url'])]
+#[Hidden(['password', 'remember_token', 'mcp_key_hash', 'github_token', 'webhook_secret'])]
 class User extends Authenticatable implements OAuthenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -35,6 +37,12 @@ class User extends Authenticatable implements OAuthenticatable
      * picks the persona for the request.
      */
     public const MCP_KEY_PREFIX = 'melfg_';
+
+    /**
+     * Prefix of the delivery-webhook HMAC secret. Shared with the receiving
+     * host so it can verify signatures — not a Melfina credential.
+     */
+    public const WEBHOOK_SECRET_PREFIX = 'melfwh_';
 
     /**
      * Get the attributes that should be cast.
@@ -50,6 +58,7 @@ class User extends Authenticatable implements OAuthenticatable
             'mcp_key_issued_at' => 'datetime',
             'mcp_redirect_domains' => 'array',
             'github_token' => 'encrypted',
+            'webhook_secret' => 'encrypted',
         ];
     }
 
@@ -82,6 +91,30 @@ class User extends Authenticatable implements OAuthenticatable
     public static function hashMcpKey(string $plaintext): string
     {
         return hash('sha256', $plaintext);
+    }
+
+    /**
+     * Generate a new webhook signing secret and return the plaintext. The
+     * secret must stay retrievable — it signs every delivery POST — so it
+     * is stored encrypted rather than hashed, but the plaintext is still
+     * flashed only once for the owner to copy into the receiver.
+     */
+    public function rotateWebhookSecret(): string
+    {
+        $plaintext = self::WEBHOOK_SECRET_PREFIX.Str::random(40);
+
+        $this->webhook_secret = $plaintext;
+        $this->save();
+
+        return $plaintext;
+    }
+
+    /**
+     * Whether signed delivery webhooks are live — both halves configured.
+     */
+    public function hasDeliveryWebhook(): bool
+    {
+        return $this->webhook_url !== null && $this->webhook_secret !== null;
     }
 
     /**
