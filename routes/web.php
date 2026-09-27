@@ -68,12 +68,17 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::put('agents/{agent}/instructions', [InstructionController::class, 'update'])->name('agents.instructions.update');
 
     Route::get('files', [FileController::class, 'index'])->name('files.index');
+    Route::post('files/{agent}/upload', [FileController::class, 'upload'])->name('files.upload');
+    Route::get('files/{agent}/view', [FileController::class, 'view'])->name('files.view');
+    Route::get('files/{agent}/raw', [FileController::class, 'raw'])->name('files.raw');
     Route::get('files/{agent}', [FileController::class, 'show'])->name('files.show');
     Route::get('files/{agent}/edit', [FileController::class, 'edit'])->name('files.edit');
     Route::put('files/{agent}', [FileController::class, 'update'])->name('files.update');
     Route::delete('files/{agent}', [FileController::class, 'destroy'])->name('files.destroy');
 
+    Route::post('shared/{shared}/upload', [SharedSpaceController::class, 'upload'])->name('shared.upload');
     Route::get('shared/{shared}/file', [SharedSpaceController::class, 'file'])->name('shared.file');
+    Route::get('shared/{shared}/file/raw', [SharedSpaceController::class, 'rawFile'])->name('shared.file.raw');
     Route::delete('shared/{shared}/file', [SharedSpaceController::class, 'destroyFile'])->name('shared.file.destroy');
     Route::resource('shared', SharedSpaceController::class)->except(['destroy']);
 

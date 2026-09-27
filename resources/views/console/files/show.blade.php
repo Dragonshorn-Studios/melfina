@@ -3,9 +3,20 @@
         <x-page-header eyebrow="FILE TREE — {{ strtoupper($agent->name) }}" title="{{ $agent->name }}">
             <x-slot:subtitle>{{ $fileCount }} {{ Str::plural('file', $fileCount) }} in the tree.</x-slot:subtitle>
             <x-slot:actions>
-<a href="{{ route('console.files.edit', ['agent' => $agent, 'dir' => $dir]) }}"
-                class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"
-                style="border-radius: var(--radius-console)">new file</a>
+<div class="flex items-center gap-2">
+                <form method="POST" action="{{ route('console.files.upload', $agent) }}" enctype="multipart/form-data" class="flex items-center gap-2">
+                    @csrf
+                    <input type="hidden" name="dir" value="{{ $dir }}">
+                    <input type="file" name="file" required
+                        class="w-44 font-mono text-xs text-steel file:mr-2 file:border file:border-border file:bg-void file:px-2 file:py-1 file:font-mono file:text-xs file:text-cream hover:file:border-amber">
+                    <button type="submit"
+                        class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                        style="border-radius: var(--radius-console)">upload</button>
+                </form>
+                <a href="{{ route('console.files.edit', ['agent' => $agent, 'dir' => $dir]) }}"
+                    class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"
+                    style="border-radius: var(--radius-console)">new file</a>
+            </div>
             </x-slot:actions>
         </x-page-header>
 
@@ -36,16 +47,19 @@
                 <thead>
                     <tr class="border-b border-border text-left text-steel">
                         <th class="py-2 pr-4">name</th>
+                        <th class="py-2 pr-4">size</th>
                         <th class="py-2"></th>
                     </tr>
                 </thead>
                 <tbody>
-                    @include('console.partials.dirrows', ['rows' => $dirRows, 'colspan' => 1])
+                    @include('console.partials.dirrows', ['rows' => $dirRows, 'colspan' => 2])
                     @foreach ($files as $path)
+                        @php $info = $meta->get($path); @endphp
                         <tr class="border-b border-border/50">
-                            <td class="py-2 pr-4 text-cream" title="{{ $path }}">{{ Str::after($path, $dir) }}</td>
+                            <td class="py-2 pr-4 text-cream" title="{{ $path }}">{{ Str::after($path, $dir) }}@if ($info?->mime) <span class="text-steel">({{ $info->mime }})</span>@endif</td>
+                            <td class="py-2 pr-4 text-steel">{{ $info?->byte_size }} B</td>
                             <td class="py-2 text-right">
-                                <a href="{{ route('console.files.edit', ['agent' => $agent, 'path' => $path, 'dir' => $dir]) }}" class="text-amber underline decoration-border underline-offset-4">open</a>
+                                <a href="{{ $info?->mime ? route('console.files.view', ['agent' => $agent, 'path' => $path, 'dir' => $dir]) : route('console.files.edit', ['agent' => $agent, 'path' => $path, 'dir' => $dir]) }}" class="text-amber underline decoration-border underline-offset-4">open</a>
                                 <x-confirm-form action="{{ route('console.files.destroy', $agent) }}" method="DELETE" class="inline" confirm="Delete '{{ $path }}'? The agent sees a miss on its next read.">
                                     <input type="hidden" name="path" value="{{ $path }}">
                                     <input type="hidden" name="dir" value="{{ $dir }}">
@@ -59,6 +73,9 @@
         @endif
 
         @error('path')
+            <p class="mt-2 font-mono text-xs text-danger">{{ $message }}</p>
+        @enderror
+        @error('file')
             <p class="mt-2 font-mono text-xs text-danger">{{ $message }}</p>
         @enderror
     </x-console-panel>

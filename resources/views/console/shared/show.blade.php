@@ -3,7 +3,16 @@
         <x-page-header eyebrow="SHARED SPACE" title="{{ $space->name }}">
             <x-slot:subtitle>Everything agents have put in this folder — {{ $fileCount }} {{ Str::plural('file', $fileCount) }} total.</x-slot:subtitle>
             <x-slot:actions>
-<div class="flex gap-2">
+<div class="flex items-center gap-2">
+                <form method="POST" action="{{ route('console.shared.upload', $space) }}" enctype="multipart/form-data" class="flex items-center gap-2">
+                    @csrf
+                    <input type="hidden" name="dir" value="{{ $dir }}">
+                    <input type="file" name="file" required
+                        class="w-44 font-mono text-xs text-steel file:mr-2 file:border file:border-border file:bg-void file:px-2 file:py-1 file:font-mono file:text-xs file:text-cream hover:file:border-amber">
+                    <button type="submit"
+                        class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                        style="border-radius: var(--radius-console)">upload</button>
+                </form>
                 <a href="{{ route('console.shared.edit', $space) }}"
                     class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
                     style="border-radius: var(--radius-console)">acl</a>
@@ -50,7 +59,7 @@
                     @include('console.partials.dirrows', ['rows' => $dirRows, 'colspan' => 3])
                     @foreach ($files as $file)
                         <tr class="border-b border-border/50">
-                            <td class="py-2 pr-4 text-cream" title="{{ $file->path }}">{{ Str::after($file->path, $dir) }}</td>
+                            <td class="py-2 pr-4 text-cream" title="{{ $file->path }}">{{ Str::after($file->path, $dir) }}@if ($file->mime) <span class="text-steel">({{ $file->mime }})</span>@endif</td>
                             <td class="py-2 pr-4 text-steel">{{ $file->byte_size }} B</td>
                             <td class="py-2 pr-4 text-steel">{{ $file->updated_at->toDateTimeString() }}</td>
                             <td class="py-2 text-right">
@@ -71,6 +80,9 @@
         {{ $files->links() }}
 
         @error('path')
+            <p class="mt-2 font-mono text-xs text-danger">{{ $message }}</p>
+        @enderror
+        @error('file')
             <p class="mt-2 font-mono text-xs text-danger">{{ $message }}</p>
         @enderror
     </x-console-panel>

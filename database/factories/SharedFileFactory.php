@@ -22,4 +22,17 @@ class SharedFileFactory extends Factory
             'content' => fake()->paragraph(),
         ];
     }
+
+    /**
+     * A binary row: text column emptied, bytes in the blob, mime set.
+     */
+    public function binary(string $mime = 'image/png'): static
+    {
+        return $this->state(fn (): array => [
+            'path' => fake()->slug(2).'.bin',
+            'content' => '',
+            'content_blob' => "\x89PNG\r\n\x1a\n".fake()->sha256(),
+            'mime' => $mime,
+        ]);
+    }
 }

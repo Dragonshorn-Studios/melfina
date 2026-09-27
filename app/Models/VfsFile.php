@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\FileMime;
 use Database\Factories\VfsFileFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,9 +17,11 @@ use InvalidArgumentException;
  * source of truth. Paths are stored normalized (relative, `/`-separated).
  *
  * @property string $path
- * @property string $content
+ * @property string $content text content ('' on binary rows)
+ * @property string|null $mime non-null marks a binary row
+ * @property string|null $content_blob binary bytes (null on text rows)
  */
-#[Fillable(['agent_id', 'path', 'content'])]
+#[Fillable(['agent_id', 'path', 'content', 'mime', 'content_blob'])]
 class VfsFile extends Model
 {
     /** @use HasFactory<VfsFileFactory> */
@@ -27,6 +30,8 @@ class VfsFile extends Model
     public const MAX_PATH_LENGTH = 512;
 
     public const MAX_CONTENT_BYTES = 1048576;
+
+    public const MAX_BINARY_BYTES = 10485760;
 
     protected $table = 'files';
 
@@ -94,7 +99,8 @@ class VfsFile extends Model
     }
 
     /**
-     * Read a file's text content scoped to the agent, or null when absent.
+     * Read a text file's content scoped to the agent, or null when absent
+     * — a binary file reads as a miss; fetch it with {@see fileFor()}.
      * Never reaches across agents.
      */
     public static function readFor(Agent $agent, string $path): ?string
@@ -104,7 +110,22 @@ class VfsFile extends Model
         return static::query()
             ->where('agent_id', $agent->id)
             ->where('path', $normalized)
+            ->whereNull('mime')
             ->value('content');
+    }
+
+    /**
+     * Fetch the row itself — the way to reach binary bodies, mime, and
+     * timestamps. Null when absent, never across agents.
+     */
+    public static function fileFor(Agent $agent, string $path): ?self
+    {
+        $normalized = static::normalizePath($path);
+
+        return static::query()
+            ->where('agent_id', $agent->id)
+            ->where('path', $normalized)
+            ->first();
     }
 
     /**
@@ -120,23 +141,83 @@ class VfsFile extends Model
             throw new InvalidArgumentException('Content exceeds '.self::MAX_CONTENT_BYTES.' bytes.');
         }
 
+        $attributes = ['content' => $content, 'content_blob' => null, 'mime' => null];
+
         try {
             return static::query()->updateOrCreate(
                 ['agent_id' => $agent->id, 'path' => $normalized],
-                ['content' => $content],
+                $attributes,
             );
         } catch (UniqueConstraintViolationException) {
             // A concurrent insert won the row — overwrite it so the last writer wins.
             static::query()
                 ->where('agent_id', $agent->id)
                 ->where('path', $normalized)
-                ->update(['content' => $content]);
+                ->update($attributes);
 
             return static::query()
                 ->where('agent_id', $agent->id)
                 ->where('path', $normalized)
                 ->firstOrFail();
         }
+    }
+
+    /**
+     * Write (upsert) a binary file scoped to the agent. The sniffed mime
+     * wins over the caller's declaration — a declared "image/png" holding
+     * HTML must not come back as inline-renderable bytes.
+     *
+     * @throws InvalidArgumentException on invalid path or oversized content.
+     */
+    public static function writeBinaryFor(Agent $agent, string $path, string $bytes, ?string $mime = null): self
+    {
+        $normalized = static::normalizePath($path);
+
+        if (strlen($bytes) > self::MAX_BINARY_BYTES) {
+            throw new InvalidArgumentException('Content exceeds '.self::MAX_BINARY_BYTES.' bytes.');
+        }
+
+        $mime = FileMime::sniff($bytes)
+            ?? FileMime::normalize($mime)
+            ?? 'application/octet-stream';
+
+        $attributes = ['content' => '', 'content_blob' => $bytes, 'mime' => $mime];
+
+        try {
+            return static::query()->updateOrCreate(
+                ['agent_id' => $agent->id, 'path' => $normalized],
+                $attributes,
+            );
+        } catch (UniqueConstraintViolationException) {
+            // Same lost-race fallback as writeFor — the last writer wins.
+            static::query()
+                ->where('agent_id', $agent->id)
+                ->where('path', $normalized)
+                ->update($attributes);
+
+            return static::query()
+                ->where('agent_id', $agent->id)
+                ->where('path', $normalized)
+                ->firstOrFail();
+        }
+    }
+
+    /**
+     * The stored body regardless of kind: text content or blob bytes.
+     */
+    public function bytes(): string
+    {
+        return $this->mime === null ? $this->content : (string) $this->content_blob;
+    }
+
+    public function isBinary(): bool
+    {
+        return $this->mime !== null;
+    }
+
+    public function byteSize(): int
+    {
+        return strlen($this->bytes());
     }
 
     /**

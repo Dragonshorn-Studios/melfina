@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\EnrollController;
+use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Mcp\PluginRepoController;
 use App\Http\Controllers\Mcp\RevokeOAuthTokenController;
 use App\Http\Controllers\Mcp\ToolCallController;
@@ -37,6 +38,28 @@ Route::post('api/tools/{tool}', ToolCallController::class)
     ->middleware(['throttle:60,1', ResolveApiAgent::class])
     ->where('tool', '[a-zA-Z0-9_-]+')
     ->name('api.tools.call');
+
+// Raw file bodies don't belong in JSON tool arguments — these endpoints
+// take the request body verbatim (PUT) and return it verbatim (GET), same
+// key auth and scopes (files:read/files:write, shared:read/shared:write)
+// as the matching tools. UTF-8 text stays text; everything else stores as
+// a blob with a sniffed mime.
+Route::put('api/files/{path}', [FileController::class, 'update'])
+    ->middleware(['throttle:60,1', ResolveApiAgent::class])
+    ->where('path', '.*')
+    ->name('api.files.update');
+Route::get('api/files/{path}', [FileController::class, 'show'])
+    ->middleware(['throttle:60,1', ResolveApiAgent::class])
+    ->where('path', '.*')
+    ->name('api.files.show');
+Route::put('api/shared/{space}/files/{path}', [FileController::class, 'updateShared'])
+    ->middleware(['throttle:60,1', ResolveApiAgent::class])
+    ->where(['space' => '[^/]+', 'path' => '.*'])
+    ->name('api.shared.files.update');
+Route::get('api/shared/{space}/files/{path}', [FileController::class, 'showShared'])
+    ->middleware(['throttle:60,1', ResolveApiAgent::class])
+    ->where(['space' => '[^/]+', 'path' => '.*'])
+    ->name('api.shared.files.show');
 
 // Self-enrollment: a runtime with no secret storage reports in with a
 // named enroll key (`melfe_…`) plus its own id + claimed name. The owner
