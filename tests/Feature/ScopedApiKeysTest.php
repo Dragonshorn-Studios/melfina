@@ -99,7 +99,25 @@ it('is owner-only', function () {
         ])
         ->assertForbidden();
 
+    AgentApiKey::issue($this->agent, 'cloud', ['knowledge:read']);
+    $this->actingAs($plain)
+        ->delete(route('console.agents.api-keys.destroy', [$this->agent, $this->agent->apiKeys()->sole()]))
+        ->assertForbidden();
+
     $this->postJson('/api/tools/knowledge_lookup', ['query' => 'x'])->assertUnauthorized();
+});
+
+it('requires a key name and refuses a scope list with no valid entries', function () {
+    $this->actingAs($this->owner)
+        ->post(route('console.agents.api-keys.store', $this->agent), [
+            'scopes' => ['knowledge:read'],
+        ])
+        ->assertSessionHasErrors('key_name');
+
+    // issue() intersects with the real scope list — all-bogus input
+    // fails closed instead of minting a scopeless key.
+    expect(fn () => AgentApiKey::issue($this->agent, 'x', ['admin:all']))
+        ->toThrow(InvalidArgumentException::class);
 });
 
 it('revokes a key so it stops authenticating', function () {
@@ -159,7 +177,22 @@ it('ships a generated skill per tool plus the manifest in the public package', f
             // endpoint, auth scope, and request schema
             ->toContain('POST '.config('app.url').'/api/tools/'.$tool['name'])
             ->toContain($tool['scope'])
-            ->toContain('"properties"');
+            ->toContain('"properties"')
+            ->toContain('"name"')
+            // response contract + the full error catalog
+            ->toContain('## Response')
+            ->toContain('`401`')
+            ->toContain('`403`')
+            ->toContain('`404`')
+            ->toContain('`422`')
+            ->toContain('`400`');
+
+        // The manifest pins the tool's declared result type and schema.
+        $manifest = json_decode($files['melfina-api.json'], true);
+        $entry = collect($manifest['tools'])->firstWhere('name', $tool['name']);
+        expect($entry['resultType'])->toBe($tool['json'] ? 'json' : 'text')
+            ->and($entry)->toHaveKey('outputSchema')
+            ->and($manifest['auth']['scopes'])->toContain('all:read');
     }
 
     // The machine-readable manifest covers the whole surface.
@@ -230,7 +263,7 @@ it('refreshes generated files into a stale package dir on zip download', functio
     unlink($dir.'/melfina-api.json');
     unlink($dir.'/skills/melfina-read-file/SKILL.md');
 
-    $this->actingAs($this->owner)
+    $response = $this->actingAs($this->owner)
         ->get(route('console.agents.plugin', $this->agent))
         ->assertOk();
 
@@ -239,6 +272,16 @@ it('refreshes generated files into a stale package dir on zip download', functio
     expect(is_file($dir.'/melfina-api.json'))->toBeTrue()
         ->and(is_file($dir.'/skills/melfina-read-file/SKILL.md'))->toBeTrue()
         ->and(file_get_contents($dir.'/mcp.json'))->toContain('melf_testkey');
+
+    // …and the refreshed files are inside the downloaded archive, not
+    // just rewritten on disk — a BinaryFileResponse never sends in tests,
+    // so deleteFileAfterSend hasn't fired and the zip is inspectable.
+    $archive = new ZipArchive;
+    expect($archive->open($response->baseResponse->getFile()->getPathname()))->toBeTrue();
+    $inZip = fn (string $name): bool => $archive->getFromName($name) !== false;
+    expect($inZip('melfina-api.json'))->toBeTrue()
+        ->and($inZip('skills/melfina-read-file/SKILL.md'))->toBeTrue();
+    $archive->close();
 });
 
 it('ships the generated skills in the fleet package too', function () {

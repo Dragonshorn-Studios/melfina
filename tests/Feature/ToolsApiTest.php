@@ -55,6 +55,15 @@ it('requires authentication', function () {
     ($this->call)('list_files', [], 'melfg_dead')->assertUnauthorized();
 });
 
+it('rejects OAuth Bearer tokens on the HTTP fallback', function () {
+    // The documented contract: /api/tools is keys-only — OAuth tokens
+    // issued for /mcp are not interchangeable.
+    $clientId = registerClient()->json('client_id');
+    $token = issueOAuthToken($this->owner, $this->agent, $clientId);
+
+    ($this->call)('list_files', [], $token)->assertUnauthorized();
+});
+
 it('404s unknown tools and tools outside the scoped surface', function () {
     ($this->call)('not_a_tool')->assertNotFound()->assertJson(['ok' => false]);
     ($this->call)('Tools-Call')->assertNotFound();
@@ -117,6 +126,15 @@ it('lists the tool surface with scopes', function () {
         ->and($tools->firstWhere('name', 'knowledge_lookup')['inputSchema']['required'])->toContain('query');
 });
 
+it('lists the tool surface for a scoped key but not anonymously', function () {
+    $key = AgentApiKey::issue($this->agent, 'cloud', ['knowledge:read']);
+
+    $this->getJson('/api/tools', ['Authorization' => 'Bearer '.$key])->assertOk();
+
+    $this->getJson('/api/tools')->assertUnauthorized()
+        ->assertJson(['ok' => false]);
+});
+
 // ── scoped API keys ─────────────────────────────────────────────────
 
 it('lets a scoped key call only its allowed scopes', function () {
@@ -142,6 +160,14 @@ it('honours the all:read and all:write scope presets', function () {
 
     ($this->call)('write_file', ['path' => 'x', 'content' => 'y'], $full)->assertOk();
     ($this->call)('knowledge_lookup', ['query' => 'x'], $full)->assertOk();
+});
+
+it('lets all:read cover the shared and messages read scopes', function () {
+    $reader = AgentApiKey::issue($this->agent, 'reader', ['all:read']);
+
+    ($this->call)('list_shared', [], $reader)->assertOk();
+    ($this->call)('list_inbox', [], $reader)->assertOk();
+    ($this->call)('send_message', ['to' => 'nobody', 'body' => 'hi'], $reader)->assertForbidden();
 });
 
 it('rejects revoked, disabled-agent, and unknown scoped keys', function () {
@@ -177,6 +203,10 @@ it('resolves the persona for fleet-key calls from header, query, or body name', 
 
     ($this->call)('list_files', [], $fleet, ['X-Melfina-Agent-Key' => 'grokbot'])->assertOk();
 
+    // The persona header also accepts the agent's own melf_ key — the
+    // documented form for clients that pin one credential per bot.
+    ($this->call)('list_files', [], $fleet, ['X-Melfina-Agent-Key' => 'melf_testkey'])->assertOk();
+
     $this->postJson('/api/tools/list_files?agent_key=grokbot', [], [
         'Authorization' => 'Bearer '.$fleet,
     ])->assertOk();
@@ -188,6 +218,23 @@ it('resolves the persona for fleet-key calls from header, query, or body name', 
     $this->postJson('/api/tools/list_files?agent_key=melf_testkey', [], [
         'Authorization' => 'Bearer '.$fleet,
     ])->assertUnauthorized();
+
+    // An unknown persona is a 401, not a silent fleet listing.
+    ($this->call)('list_files', [], $fleet, ['X-Melfina-Agent-Key' => 'no-such-agent'])
+        ->assertUnauthorized()
+        ->assertJson(['ok' => false]);
+
+    // Persona precedence is header > query > body — a disagreeing body
+    // name cannot redirect a header-pinned call.
+    Agent::factory()->withKey('melf_otherkey')->create(['name' => 'otherbot']);
+    ($this->call)('write_file', ['name' => 'otherbot', 'path' => 'w.txt', 'content' => 'x'], $fleet, ['X-Melfina-Agent-Key' => 'grokbot'])
+        ->assertOk();
+    expect($this->agent->files()->where('path', 'w.txt')->exists())->toBeTrue();
+
+    // An empty Basic username falls through to the query persona, so
+    // URL-only clients can still claim a fleet persona.
+    $this->withBasicAuth('', $fleet)
+        ->postJson('/api/tools/list_files?agent_key=grokbot')->assertOk();
 });
 
 it('requires a persona for fleet-key tool calls but lists tools persona-less', function () {
