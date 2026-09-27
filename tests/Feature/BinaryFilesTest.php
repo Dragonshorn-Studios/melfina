@@ -206,6 +206,24 @@ it('steers text through read_file, not read_file_binary', function () {
     ])->assertStatus(400)->assertJson(['ok' => false]);
 });
 
+it('stores an ASCII-only PDF without a declared mime as binary', function () {
+    // Pure-ASCII %PDF bytes are valid UTF-8; sniffing must still win over
+    // the missing mime or the file lands in the text column.
+    $pdf = "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< >>\n%%EOF";
+
+    $this->postJson('/api/tools/write_file_binary', [
+        'path' => 'doc.pdf',
+        'content_base64' => base64_encode($pdf),
+    ], ['Authorization' => 'Bearer melf_testkey'])->assertOk();
+
+    $file = VfsFile::fileFor($this->agent, 'doc.pdf');
+    expect($file->isBinary())->toBeTrue()->and($file->mime)->toBe('application/pdf');
+
+    $this->postJson('/api/tools/read_file_binary', ['path' => 'doc.pdf'], [
+        'Authorization' => 'Bearer melf_testkey',
+    ])->assertOk()->assertJson(['ok' => true, 'resultType' => 'json']);
+});
+
 it('keeps UTF-8 base64 writes as text rows via write_file_binary', function () {
     $this->postJson('/api/tools/write_file_binary', [
         'path' => 'note.txt',
