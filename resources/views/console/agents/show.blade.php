@@ -1,12 +1,4 @@
 <x-console-layout :title="$agent->name" :agent="$agent">
-    @if (session('plaintext_key'))
-        <x-key-banner id="plaintext-key"
-            :label="str_starts_with(session('plaintext_key'), 'melfs_') ? 'SCOPED API KEY — SHOWN ONCE' : 'AGENT KEY — SHOWN ONCE'"
-            :value="session('plaintext_key')">
-            <x-slot:hint>Copy it now. Only the hash is stored; we cannot show it again.</x-slot:hint>
-        </x-key-banner>
-    @endif
-
     <x-console-panel>
         <x-page-header eyebrow="ABOUT" title="{{ $agent->name }}">
             <x-slot:actions>
@@ -15,10 +7,6 @@
         </x-page-header>
 
         <dl class="mt-6 space-y-2 font-mono text-xs">
-            <div class="flex gap-4">
-                <dt class="w-28 text-steel">key</dt>
-                <dd class="text-cream">{{ $agent->key_hash ? 'issued (hashed)' : '—' }}</dd>
-            </div>
             <div class="flex gap-4">
                 <dt class="w-28 text-steel">description</dt>
                 <dd class="text-cream">{{ $agent->description ?: '—' }}</dd>
@@ -69,50 +57,90 @@
                 <p class="mt-2 font-mono text-xs text-steel">none issued.</p>
             @endif
 
-            <form method="POST" action="{{ route('console.agents.api-keys.store', $agent) }}" class="mt-3 flex flex-wrap items-end gap-3">
-                @csrf
-                <label class="font-mono text-xs text-steel">
-                    name
-                    <input type="text" name="key_name" required maxlength="60" placeholder="cloud-minimax"
-                        class="mt-1 block border border-border bg-void px-2 py-1 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">
-                </label>
-                <fieldset class="flex w-full min-w-0 flex-wrap gap-x-3 gap-y-1 font-mono text-xs text-steel">
-                    @foreach ($apiScopes as $scope)
-                        <label class="flex items-center gap-1">
-                            <input type="checkbox" name="scopes[]" value="{{ $scope }}" class="accent-amber">
-                            {{ $scope }}
-                            @if ($scope === 'all:read')
-                                <span class="opacity-60">(every read scope)</span>
-                            @elseif ($scope === 'all:write')
-                                <span class="opacity-60">(all read + write)</span>
-                            @endif
-                        </label>
-                    @endforeach
-                </fieldset>
-                <button type="submit"
-                    class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
-                    style="border-radius: var(--radius-console)">issue key</button>
-            </form>
-            @error('key_name')
-                <p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p>
-            @enderror
-            @error('scopes')
-                <p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p>
-            @enderror
-            @foreach ($errors->get('scopes.*') as $scopeErrors)
-                <p class="mt-1 font-mono text-xs text-danger">{{ $scopeErrors[0] }}</p>
-            @endforeach
+            @if (session('plaintext_key') && str_starts_with(session('plaintext_key'), 'melfs_'))
+                <x-key-banner id="plaintext-key" class="mt-3"
+                    label="SCOPED API KEY — SHOWN ONCE"
+                    :value="session('plaintext_key')">
+                    <x-slot:hint>Copy it now. Only the hash is stored; we cannot show it again.</x-slot:hint>
+                </x-key-banner>
+            @endif
+
+            <button type="button" onclick="document.getElementById('issue-key-modal').showModal()"
+                class="mt-3 border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                style="border-radius: var(--radius-console)">issue key…</button>
+        </div>
+
+        <div class="mt-6 border-t border-border pt-4">
+            <p class="font-mono text-xs tracking-[0.16em] text-steel">MCP KEY</p>
+            <p class="mt-1 font-mono text-xs text-steel">The <span class="text-cream">melf_…</span> key this agent presents as Bearer or <code>X-Melfina-Agent-Key</code>. Stored only as a hash — the plaintext is shown once, right here, after a rotate.</p>
+            @if (session('plaintext_key') && ! str_starts_with(session('plaintext_key'), 'melfs_'))
+                <x-key-banner id="plaintext-key" class="mt-3"
+                    label="AGENT KEY — SHOWN ONCE"
+                    :value="session('plaintext_key')">
+                    <x-slot:hint>Copy it now. Only the hash is stored; we cannot show it again.</x-slot:hint>
+                </x-key-banner>
+            @endif
+            <div class="mt-3 flex items-center gap-3">
+                <span class="font-mono text-xs text-steel">status: <span class="text-cream">{{ $agent->key_hash ? 'issued (hashed)' : 'none' }}</span></span>
+                <x-confirm-form action="{{ route('console.agents.rotate', $agent) }}" confirm="Rotate key? The old key stops working immediately.">
+                    <button type="submit"
+                        class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"
+                        style="border-radius: var(--radius-console)">rotate key</button>
+                </x-confirm-form>
+            </div>
         </div>
 
         <div class="mt-8 flex items-center gap-3">
             <a href="{{ route('console.agents.edit', $agent) }}"
                 class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
                 style="border-radius: var(--radius-console)">rename / status</a>
-            <x-confirm-form action="{{ route('console.agents.rotate', $agent) }}" confirm="Rotate key? The old key stops working immediately."><button type="submit"
-                    class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"
-                    style="border-radius: var(--radius-console)">rotate key</button>
-            </x-confirm-form>
             <a href="{{ route('console.agents.index') }}" class="font-mono text-xs text-steel underline decoration-border underline-offset-4">back</a>
         </div>
     </x-console-panel>
+
+    <dialog id="issue-key-modal" class="m-auto w-full max-w-lg border border-border bg-panel p-6 shadow-xl backdrop:bg-void/80" style="border-radius: var(--radius-console)">
+        <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">ISSUE SCOPED KEY</p>
+        <form method="POST" action="{{ route('console.agents.api-keys.store', $agent) }}" class="mt-4 space-y-4">
+            @csrf
+            <div>
+                <label class="font-mono text-xs text-steel">
+                    name
+                    <input type="text" name="key_name" required maxlength="60" placeholder="cloud-minimax" value="{{ old('key_name') }}"
+                        class="mt-1 block w-full border border-border bg-void px-2 py-1 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">
+                </label>
+                @error('key_name')
+                    <p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p>
+                @enderror
+            </div>
+            <fieldset class="flex flex-wrap gap-x-3 gap-y-1 font-mono text-xs text-steel">
+                @foreach ($apiScopes as $scope)
+                    <label class="flex items-center gap-1">
+                        <input type="checkbox" name="scopes[]" value="{{ $scope }}" @checked(in_array($scope, old('scopes', []))) class="accent-amber">
+                        {{ $scope }}
+                        @if ($scope === 'all:read')
+                            <span class="opacity-60">(every read scope)</span>
+                        @elseif ($scope === 'all:write')
+                            <span class="opacity-60">(all read + write)</span>
+                        @endif
+                    </label>
+                @endforeach
+            </fieldset>
+            @error('scopes')
+                <p class="font-mono text-xs text-danger">{{ $message }}</p>
+            @enderror
+            @foreach ($errors->get('scopes.*') as $scopeErrors)
+                <p class="font-mono text-xs text-danger">{{ $scopeErrors[0] }}</p>
+            @endforeach
+            <div class="flex items-center gap-3">
+                <button type="submit"
+                    class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"
+                    style="border-radius: var(--radius-console)">issue key</button>
+                <button type="button" onclick="document.getElementById('issue-key-modal').close()"
+                    class="font-mono text-xs text-steel underline decoration-border underline-offset-4">cancel</button>
+            </div>
+        </form>
+    </dialog>
+    @if ($errors->hasAny(['key_name', 'scopes', 'scopes.*']))
+        <script>document.getElementById('issue-key-modal').showModal();</script>
+    @endif
 </x-console-layout>
