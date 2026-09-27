@@ -97,6 +97,17 @@ class User extends Authenticatable implements OAuthenticatable
     }
 
     /**
+     * Named enrollment keys (`melfe_…`) — the rotatable "global secret"
+     * secret-less runtimes present to POST /api/enroll.
+     *
+     * @return HasMany<AgentEnrollKey, $this>
+     */
+    public function agentEnrollKeys(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(AgentEnrollKey::class);
+    }
+
+    /**
      * Whether the plaintext credential is a live fleet key — any unrevoked
      * named key, or the legacy single hash (pre-multi-key installs).
      * Fails closed.

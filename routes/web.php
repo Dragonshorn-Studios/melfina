@@ -4,6 +4,8 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredOwnerController;
 use App\Http\Controllers\Console\AgentController;
 use App\Http\Controllers\Console\DashboardController;
+use App\Http\Controllers\Console\EnrollKeyController;
+use App\Http\Controllers\Console\EnrollmentController;
 use App\Http\Controllers\Console\FileController;
 use App\Http\Controllers\Console\InstructionController;
 use App\Http\Controllers\Console\McpClientController;
@@ -33,6 +35,10 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::get('/', DashboardController::class)->name('dashboard');
 
     Route::post('mcp-key', [McpKeyController::class, 'store'])->name('mcp-key.store');
+    Route::post('enroll-keys', [EnrollKeyController::class, 'store'])->name('enroll-keys.store');
+    Route::delete('enroll-keys/{enrollKey}', [EnrollKeyController::class, 'destroy'])->name('enroll-keys.destroy');
+    Route::post('enrollments/{enrollment}/accept', [EnrollmentController::class, 'accept'])->name('enrollments.accept');
+    Route::post('enrollments/{enrollment}/revoke', [EnrollmentController::class, 'revoke'])->name('enrollments.revoke');
     Route::delete('mcp-keys/{fleetKey}', [McpKeyController::class, 'destroy'])->name('mcp-key.destroy');
     Route::get('mcp', [McpKeyController::class, 'connect'])->name('mcp.connect');
     Route::get('mcp/plugin.zip', [McpKeyController::class, 'pluginZip'])->name('mcp.plugin.zip');

@@ -12,6 +12,19 @@
         </div>
     @endif
 
+    @if (session('plaintext_enroll_key'))
+        <div id="plaintext-enroll-key" class="mb-6 border border-amber bg-void p-4" style="border-radius: var(--radius-console)">
+            <div class="flex items-center justify-between">
+                <p class="font-mono text-xs tracking-[0.16em] text-amber">ENROLL KEY — SHOWN ONCE</p>
+                <button type="button" onclick="document.getElementById('plaintext-enroll-key').remove()"
+                    class="border border-border px-2 py-1 font-mono text-xs text-steel hover:border-amber hover:text-cream"
+                    style="border-radius: var(--radius-console)">dismiss</button>
+            </div>
+            <p class="mt-2 select-all break-all font-mono text-sm text-cream">{{ session('plaintext_enroll_key') }}</p>
+            <p class="mt-2 font-mono text-xs text-steel">Copy it now. Only the hash is stored; we cannot show it again. Agents send it as <code>secret</code> to POST /api/enroll.</p>
+        </div>
+    @endif
+
     <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
         <div class="flex items-center justify-between">
             <div>
@@ -97,6 +110,50 @@
                                 @if ($key->isLive())
                                     <form method="POST" action="{{ route('console.mcp-key.destroy', $key) }}"
                                         onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Revoke fleet key '{{ $key->name }}'? Shared configs using it stop working immediately.">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">REVOKE</button>
+                                    </form>
+                                @endif
+                            </span>
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
+        </section>
+
+        <section class="mt-8">
+            <p class="font-mono text-xs tracking-[0.16em] text-steel">ENROLLMENT KEYS</p>
+            <form method="POST" action="{{ route('console.enroll-keys.store') }}" class="mt-3 flex gap-2"
+                onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Issue an enroll key under this name? An existing live key with the same name is revoked.">
+                @csrf
+                <input type="text" name="enroll_name" placeholder="key name (e.g. minimax)" maxlength="64"
+                    class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream placeholder:text-steel/60"
+                    style="border-radius: var(--radius-console)">
+                <button type="submit"
+                    class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                    style="border-radius: var(--radius-console)">issue key</button>
+            </form>
+            @error('enroll_name')
+                <p class="mt-2 font-mono text-xs text-red-400">{{ $message }}</p>
+            @enderror
+            <p class="mt-3 text-sm text-steel">
+                An enroll key (<code>melfe_…</code>) is the shared secret a runtime without secret storage
+                presents to <code>POST /api/enroll</code> with its own <code>id</code> and claimed
+                <code>name</code>. Reports land on the
+                <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.index') }}">agents accept list</a>;
+                once accepted, each call mints a 24&nbsp;h scoped key. It never authenticates a tool call itself.
+            </p>
+            @if ($enrollKeys->isNotEmpty())
+                <ul class="mt-3 space-y-1 font-mono text-xs">
+                    @foreach ($enrollKeys as $key)
+                        <li class="flex items-center justify-between gap-3 border {{ $key->isLive() ? 'border-amber/40' : 'border-border/50' }} bg-void/60 px-3 py-1.5" style="border-radius: var(--radius-console)">
+                            <span class="{{ $key->isLive() ? 'text-cream' : 'text-steel line-through' }}">{{ $key->name }}</span>
+                            <span class="flex items-center gap-3">
+                                <span class="text-steel">{{ $key->isLive() ? 'issued '.$key->created_at->diffForHumans(short: true) : 'revoked '.$key->revoked_at->diffForHumans(short: true) }}</span>
+                                @if ($key->isLive())
+                                    <form method="POST" action="{{ route('console.enroll-keys.destroy', $key) }}"
+                                        onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Revoke enroll key '{{ $key->name }}'? Runtimes using it can no longer report in or mint.">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">REVOKE</button>

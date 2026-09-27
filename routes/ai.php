@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\EnrollController;
 use App\Http\Controllers\Mcp\PluginRepoController;
 use App\Http\Controllers\Mcp\RevokeOAuthTokenController;
 use App\Http\Controllers\Mcp\ToolCallController;
@@ -36,6 +37,14 @@ Route::post('api/tools/{tool}', ToolCallController::class)
     ->middleware(['throttle:60,1', ResolveApiAgent::class])
     ->where('tool', '[a-zA-Z0-9_-]+')
     ->name('api.tools.call');
+
+// Self-enrollment: a runtime with no secret storage reports in with a
+// named enroll key (`melfe_…`) plus its own id + claimed name. The owner
+// accepts in the console; every subsequent accepted call mints a fresh
+// 24h scoped key. Tightly throttled — the endpoint is unauthenticated.
+Route::post('api/enroll', EnrollController::class)
+    ->middleware('throttle:10,1')
+    ->name('api.enroll');
 
 // Per-agent plugin repositories, cloneable over git's dumb HTTP protocol.
 // Credentials ride in HTTP Basic auth (userinfo in the clone URL — git
