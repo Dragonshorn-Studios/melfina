@@ -66,7 +66,6 @@ class McpKeyController extends Controller
             // GitHub publish settings — the token itself is never rendered.
             'hasGitHubToken' => $request->user()->github_token !== null,
             'githubRepo' => $request->user()->github_repo,
-            'operatorPersona' => $request->user()->operator_persona,
             // Generic per-client snippets — NAME is the persona placeholder.
             'snippets' => [
                 'claudeDesktop' => json_encode([
@@ -126,7 +125,7 @@ class McpKeyController extends Controller
         $user->save();
 
         return redirect()
-            ->route('console.mcp.connect')
+            ->route('console.dashboard')
             ->with('status', 'Operator persona saved.');
     }
 

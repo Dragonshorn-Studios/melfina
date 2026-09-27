@@ -75,7 +75,7 @@ it('appends the shared operator persona to read_instructions', function () {
 it('lets the owner edit the operator persona and agent description from the console', function () {
     $this->actingAs($this->owner)
         ->put(route('console.mcp.operator-persona.store'), ['operator_persona' => 'Antoni, Dragonshorn lead'])
-        ->assertRedirect(route('console.mcp.connect'));
+        ->assertRedirect(route('console.dashboard'));
 
     expect($this->owner->fresh()->operator_persona)->toBe('Antoni, Dragonshorn lead');
 

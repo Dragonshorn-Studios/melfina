@@ -30,6 +30,9 @@
             <div>
                 <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">DASHBOARD</p>
                 <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">Fleet at a glance</h1>
+                @if (session('status'))
+                    <p class="mt-2 font-mono text-xs text-amber">{{ session('status') }}</p>
+                @endif
             </div>
             <div class="flex gap-2">
                 <a href="{{ route('console.agents.create') }}"
@@ -164,6 +167,26 @@
                     @endforeach
                 </ul>
             @endif
+        </section>
+
+        <section class="mt-8">
+            <p class="font-mono text-xs tracking-[0.16em] text-steel">OPERATOR PERSONA</p>
+            <p class="mt-1 text-sm text-steel">
+                Who you are, appended to every agent's <code>read_instructions</code> — how the
+                fleet should address its human. Leave empty to send nothing.
+            </p>
+            <form method="POST" action="{{ route('console.mcp.operator-persona.store') }}" class="mt-3">
+                @csrf
+                @method('PUT')
+                <textarea name="operator_persona" rows="3"
+                    placeholder="The user is Antoni — address them as Antoni; they run Dragonshorn and prefer terse replies."
+                    class="w-full border border-border bg-void/60 px-3 py-2 font-mono text-xs text-cream placeholder:text-steel/60"
+                    style="border-radius: var(--radius-console)">{{ old('operator_persona', $operatorPersona) }}</textarea>
+                @error('operator_persona') <p class="mt-1 font-mono text-xs text-red-400">{{ $message }}</p> @enderror
+                <button type="submit"
+                    class="mt-2 border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                    style="border-radius: var(--radius-console)">save persona</button>
+            </form>
         </section>
 
         <section class="mt-8 flex items-center gap-6 border-t border-border pt-4 font-mono text-xs">

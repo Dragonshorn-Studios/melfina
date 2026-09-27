@@ -277,26 +277,6 @@
             </details>
 
             <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
-                <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">OPERATOR PERSONA</summary>
-                <p class="mt-3 text-sm text-steel">
-                    Who you are, appended to every agent's <code>read_instructions</code> — how the
-                    fleet should address its human. Leave empty to send nothing.
-                </p>
-                <form method="POST" action="{{ route('console.mcp.operator-persona.store') }}" class="mt-3">
-                    @csrf
-                    @method('PUT')
-                    <textarea name="operator_persona" rows="4"
-                        placeholder="The user is Antoni — address them as Antoni; they run Dragonshorn and prefer terse replies."
-                        class="w-full border border-border bg-void/60 px-3 py-2 font-mono text-xs text-cream placeholder:text-steel/60"
-                        style="border-radius: var(--radius-console)">{{ old('operator_persona', $operatorPersona) }}</textarea>
-                    @error('operator_persona') <p class="mt-1 font-mono text-xs text-red-400">{{ $message }}</p> @enderror
-                    <button type="submit"
-                        class="mt-2 border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
-                        style="border-radius: var(--radius-console)">save persona</button>
-                </form>
-            </details>
-
-            <details class="{{ $guideClass }}" style="border-radius: var(--radius-console)">
                 <summary class="cursor-pointer font-mono text-xs tracking-[0.12em] text-cream">OAUTH CLIENTS</summary>
                 <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-steel">
                     <li>OAuth clients don't need the fleet key: point them at the endpoint, they auto-register via <code>POST /oauth/register</code>, and the token is bound to one agent — chosen on the consent screen, which needs a one-time owner click <em>per bot</em>.</li>
