@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Console;
 
 use App\Http\Controllers\Controller;
 use App\Mcp\PluginRepo;
+use App\Mcp\Servers\MelfinaServer;
 use App\Mcp\ToolCatalog;
+use App\Mcp\Tools\ReadInstructions;
+use App\Mcp\Tools\ReadPersona;
 use App\Models\Agent;
 use App\Models\AgentApiKey;
 use Illuminate\Contracts\Cache\LockTimeoutException;
@@ -15,6 +18,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Laravel\Mcp\Server\Attributes\Instructions;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class AgentController extends Controller
@@ -174,6 +178,31 @@ class AgentController extends Controller
                     ],
                 ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
             ],
+        ]);
+    }
+
+    /**
+     * Read-only preview of everything the agent receives: the exact
+     * read_instructions / read_persona payloads, the MCP server's
+     * instructions blurb, the generated umbrella skill, and the tool
+     * surface — so the owner verifies the composed result without
+     * calling the tools.
+     */
+    public function preview(Agent $agent, ToolCatalog $catalog, PluginRepo $repos): View
+    {
+        $this->authorize('view', $agent);
+
+        $serverInstructions = collect(
+            (new \ReflectionClass(MelfinaServer::class))->getAttributes(Instructions::class)
+        )->first()?->newInstance()->value;
+
+        return view('console.agents.preview', [
+            'agent' => $agent,
+            'serverInstructions' => $serverInstructions,
+            'instructionsPayload' => ReadInstructions::payload($agent),
+            'personaPayload' => ReadPersona::payload($agent),
+            'umbrellaSkill' => $repos->umbrellaSkill($agent),
+            'tools' => $catalog->all(),
         ]);
     }
 

@@ -3,6 +3,7 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Concerns\ResolvesAgent;
+use App\Models\Agent;
 use App\Models\User;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
@@ -23,19 +24,30 @@ class ReadInstructions extends Tool
      */
     public function handle(Request $request): Response
     {
-        $agent = $this->agent();
+        return Response::text(json_encode(self::payload($this->agent())));
+    }
+
+    /**
+     * The exact payload read_instructions returns for the agent — shared
+     * with the console preview so the owner sees the same thing the imp
+     * does.
+     *
+     * @return array{content: string, layers: array<int, string>, operator: string, persona_hint: string}
+     */
+    public static function payload(Agent $agent): array
+    {
         $instruction = $agent->instruction;
 
         // The owner's shared operator persona rides on every read — agents
         // always know who the human behind the console is.
         $operator = User::operatorPersona();
 
-        return Response::text(json_encode([
+        return [
             'content' => $instruction?->content ?? '',
             'layers' => $instruction?->layersList() ?? [],
             'operator' => $operator ?? '',
             'persona_hint' => 'Your persona and memories live in your brain — read them with read_persona, maintain them with update_persona.',
-        ]));
+        ];
     }
 
     /**

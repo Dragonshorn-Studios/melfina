@@ -102,6 +102,7 @@
                             ['label' => 'Files', 'route' => route('console.files.show', $agent), 'active' => request()->routeIs('console.files.*')],
                             ['label' => 'Instructions', 'route' => route('console.agents.instructions.edit', $agent), 'active' => request()->routeIs('console.agents.instructions.*')],
                             ['label' => 'Persona', 'route' => route('console.agents.persona.edit', $agent), 'active' => request()->routeIs('console.agents.persona.*')],
+                            ['label' => 'Preview', 'route' => route('console.agents.preview', $agent), 'active' => request()->routeIs('console.agents.preview')],
                             ['label' => 'Key', 'route' => route('console.agents.show', $agent), 'active' => request()->routeIs('console.agents.show') || request()->routeIs('console.agents.edit')],
                             ['label' => 'Connect', 'route' => route('console.agents.connect', $agent), 'active' => request()->routeIs('console.agents.connect')],
                         ];

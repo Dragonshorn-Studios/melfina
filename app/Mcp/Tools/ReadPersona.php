@@ -3,6 +3,7 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Concerns\ResolvesAgent;
+use App\Models\Agent;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Laravel\Mcp\Request;
@@ -22,14 +23,23 @@ class ReadPersona extends Tool
      */
     public function handle(Request $request): Response
     {
-        $agent = $this->agent();
+        return Response::text(json_encode(self::payload($this->agent())));
+    }
 
-        return Response::text(json_encode([
+    /**
+     * The exact payload read_persona returns for the agent — shared with
+     * the console preview so the owner sees the same thing the imp does.
+     *
+     * @return array{name: string, description: string, persona: string, memories: array<int, array{at: string, text: string}>}
+     */
+    public static function payload(Agent $agent): array
+    {
+        return [
             'name' => $agent->name,
             'description' => $agent->description ?? '',
             'persona' => $agent->persona ?? '',
             'memories' => $agent->memories ?? [],
-        ]));
+        ];
     }
 
     /**
