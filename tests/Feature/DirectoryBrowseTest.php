@@ -38,11 +38,13 @@ it('browses an agent tree one directory level at a time', function () {
         ->assertDontSee('top.txt')
         ->assertDontSee('loose.md');
 
-    // Two levels down.
+    // Two levels down — with a '..' row pointing back to notes/.
     $this->actingAs($this->owner)
         ->get(route('console.files.show', ['agent' => $this->agent, 'dir' => 'notes/adr/']))
         ->assertOk()
-        ->assertSee('001.md');
+        ->assertSee('001.md')
+        ->assertSee('>..</a>', false)
+        ->assertSee('dir=notes%2F', false);
 });
 
 it('browses a shared space the same way and deletes files', function () {
@@ -82,11 +84,12 @@ it('falls back to the root listing on a traversal dir', function () {
     expect(PathTree::normalizeDir("notes/\n"))->toBe('')
         ->and(PathTree::normalizeDir("notes/\tadr"))->toBe('');
 
-    // A well-formed but empty dir is a normal level, not an error.
+    // A well-formed but empty dir is a normal level — just '..' back.
     $this->actingAs($this->owner)
         ->get(route('console.files.show', ['agent' => $this->agent, 'dir' => 'nope/']))
         ->assertOk()
-        ->assertSee('Nothing at this level.');
+        ->assertSee('>..</a>', false)
+        ->assertDontSee('top.txt');
 });
 
 it('returns to the same directory after deleting an agent file', function () {

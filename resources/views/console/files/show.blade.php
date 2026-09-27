@@ -6,7 +6,7 @@
                 <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">{{ $agent->name }}</h1>
                 <p class="mt-2 text-sm text-steel">{{ $fileCount }} {{ Str::plural('file', $fileCount) }} in the tree.</p>
             </div>
-            <a href="{{ route('console.files.edit', ['agent' => $agent, 'path' => '']) }}"
+            <a href="{{ route('console.files.edit', ['agent' => $agent, 'dir' => $dir]) }}"
                 class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"
                 style="border-radius: var(--radius-console)">new file</a>
         </div>
@@ -16,23 +16,33 @@
                 'name' => $c['name'],
                 'url' => route('console.files.show', ['agent' => $agent, 'dir' => $c['dir']]),
             ]),
-            'dirs' => collect($dirs)->map(fn ($d) => [
-                'name' => $d,
-                'url' => route('console.files.show', ['agent' => $agent, 'dir' => $dir.$d.'/']),
-            ]),
         ])
 
-        @if (empty($files) && empty($dirs))
+        @php
+            $dirRows = collect($dirs)->map(fn ($d) => [
+                'label' => $d.'/',
+                'url' => route('console.files.show', ['agent' => $agent, 'dir' => $dir.$d.'/']),
+            ]);
+            if ($dir !== '') {
+                $dirRows->prepend([
+                    'label' => '..',
+                    'url' => route('console.files.show', ['agent' => $agent, 'dir' => $breadcrumbs[count($breadcrumbs) - 2]['dir'] ?? '']),
+                ]);
+            }
+        @endphp
+
+        @if (empty($files) && $dirRows->isEmpty())
             <p class="mt-6 text-sm text-steel">{{ $fileCount === 0 ? 'The tree is empty. The agent will write here over MCP, or you can seed a file now.' : 'Nothing at this level.' }}</p>
-        @elseif (! empty($files))
+        @else
             <table class="mt-4 w-full border-collapse font-mono text-xs">
                 <thead>
                     <tr class="border-b border-border text-left text-steel">
-                        <th class="py-2 pr-4">file</th>
+                        <th class="py-2 pr-4">name</th>
                         <th class="py-2"></th>
                     </tr>
                 </thead>
                 <tbody>
+                    @include('console.partials.dirrows', ['rows' => $dirRows, 'colspan' => 1])
                     @foreach ($files as $path)
                         <tr class="border-b border-border/50">
                             <td class="py-2 pr-4 text-cream" title="{{ $path }}">{{ Str::after($path, $dir) }}</td>

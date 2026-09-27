@@ -21,25 +21,35 @@
                 'name' => $c['name'],
                 'url' => route('console.shared.show', ['shared' => $space, 'dir' => $c['dir']]),
             ]),
-            'dirs' => collect($dirs)->map(fn ($d) => [
-                'name' => $d,
-                'url' => route('console.shared.show', ['shared' => $space, 'dir' => $dir.$d.'/']),
-            ]),
         ])
 
-        @if ($files->isEmpty() && empty($dirs))
+        @php
+            $dirRows = collect($dirs)->map(fn ($d) => [
+                'label' => $d.'/',
+                'url' => route('console.shared.show', ['shared' => $space, 'dir' => $dir.$d.'/']),
+            ]);
+            if ($dir !== '') {
+                $dirRows->prepend([
+                    'label' => '..',
+                    'url' => route('console.shared.show', ['shared' => $space, 'dir' => $breadcrumbs[count($breadcrumbs) - 2]['dir'] ?? '']),
+                ]);
+            }
+        @endphp
+
+        @if ($files->isEmpty() && $dirRows->isEmpty())
             <p class="mt-6 text-sm text-steel">{{ $fileCount === 0 ? 'No files in this space yet.' : 'Nothing at this level.' }}</p>
-        @elseif ($files->isNotEmpty())
+        @else
             <table class="mt-4 w-full border-collapse font-mono text-xs">
                 <thead>
                     <tr class="border-b border-border text-left text-steel">
-                        <th class="py-2 pr-4">file</th>
+                        <th class="py-2 pr-4">name</th>
                         <th class="py-2 pr-4">size</th>
                         <th class="py-2 pr-4">updated</th>
                         <th class="py-2"></th>
                     </tr>
                 </thead>
                 <tbody>
+                    @include('console.partials.dirrows', ['rows' => $dirRows, 'colspan' => 3])
                     @foreach ($files as $file)
                         <tr class="border-b border-border/50">
                             <td class="py-2 pr-4 text-cream" title="{{ $file->path }}">{{ Str::after($file->path, $dir) }}</td>
