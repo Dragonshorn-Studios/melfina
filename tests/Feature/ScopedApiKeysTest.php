@@ -35,6 +35,40 @@ it('issues a scoped key from the console and flashes it once', function () {
         ->and($key->key_hash)->toBe(Agent::hashKey($plaintext));
 });
 
+it('issues preset scopes from the console and stores them as-is', function () {
+    $this->actingAs($this->owner)
+        ->post(route('console.agents.api-keys.store', $this->agent), [
+            'key_name' => 'reader',
+            'scopes' => ['all:read'],
+        ])
+        ->assertSessionHasNoErrors();
+
+    $key = $this->agent->apiKeys()->sole();
+    expect($key->scopes)->toBe(['all:read'])
+        ->and($key->allows('files:read'))->toBeTrue()
+        ->and($key->allows('knowledge:read'))->toBeTrue()
+        ->and($key->allows('files:write'))->toBeFalse()
+        ->and($key->allows('knowledge:write'))->toBeFalse();
+});
+
+it('lets all:write cover every concrete scope', function () {
+    AgentApiKey::issue($this->agent, 'full', ['all:write']);
+    $key = $this->agent->apiKeys()->sole();
+
+    foreach (app(ToolCatalog::class)->scopes() as $scope) {
+        expect($key->allows($scope))->toBeTrue();
+    }
+});
+
+it('offers the preset scopes in the issue form', function () {
+    $this->actingAs($this->owner)
+        ->get(route('console.agents.show', $this->agent))
+        ->assertOk()
+        ->assertSee('value="all:read"', false)
+        ->assertSee('value="all:write"', false)
+        ->assertSee('all read + write');
+});
+
 it('requires at least one valid scope', function () {
     $this->actingAs($this->owner)
         ->post(route('console.agents.api-keys.store', $this->agent), [

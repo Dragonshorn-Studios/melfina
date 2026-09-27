@@ -101,6 +101,19 @@ it('lets a scoped key call only its allowed scopes', function () {
     ($this->call)('write_file', ['path' => 'x', 'content' => 'y'], $key)->assertForbidden();
 });
 
+it('honours the all:read and all:write scope presets', function () {
+    $reader = AgentApiKey::issue($this->agent, 'reader', ['all:read']);
+
+    ($this->call)('list_files', [], $reader)->assertOk();
+    ($this->call)('knowledge_lookup', ['query' => 'x'], $reader)->assertOk();
+    ($this->call)('write_file', ['path' => 'x', 'content' => 'y'], $reader)->assertForbidden();
+
+    $full = AgentApiKey::issue($this->agent, 'full', ['all:write']);
+
+    ($this->call)('write_file', ['path' => 'x', 'content' => 'y'], $full)->assertOk();
+    ($this->call)('knowledge_lookup', ['query' => 'x'], $full)->assertOk();
+});
+
 it('rejects revoked, disabled-agent, and unknown scoped keys', function () {
     $key = AgentApiKey::issue($this->agent, 'cloud', ['knowledge:read']);
     AgentApiKey::query()->first()->revoke();

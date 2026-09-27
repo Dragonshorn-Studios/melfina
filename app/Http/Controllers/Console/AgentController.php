@@ -65,7 +65,7 @@ class AgentController extends Controller
         return view('console.agents.show', [
             'agent' => $agent,
             'apiKeys' => $agent->apiKeys()->whereNull('revoked_at')->latest()->get(),
-            'apiScopes' => $catalog->scopes(),
+            'apiScopes' => $catalog->scopeChoices(),
         ]);
     }
 
@@ -81,7 +81,7 @@ class AgentController extends Controller
         $validated = $request->validate([
             'key_name' => ['required', 'string', 'max:60'],
             'scopes' => ['required', 'array', 'min:1'],
-            'scopes.*' => ['string', Rule::in($catalog->scopes())],
+            'scopes.*' => ['string', Rule::in($catalog->scopeChoices())],
         ]);
 
         $plaintext = AgentApiKey::issue($agent, $validated['key_name'], $validated['scopes']);

@@ -57,12 +57,21 @@ class AgentApiKey extends Model
 
     /**
      * Whether this key may call tools that require the given scope.
+     * `all:read` covers every `*:read` scope; `all:write` covers every
+     * scope (all read + write).
      *
      * @param  string  $scope  e.g. 'knowledge:read'
      */
     public function allows(string $scope): bool
     {
-        return in_array($scope, $this->scopes ?? [], true);
+        $scopes = $this->scopes ?? [];
+
+        if (in_array(ToolCatalog::SCOPE_ALL_WRITE, $scopes, true)) {
+            return true;
+        }
+
+        return in_array($scope, $scopes, true)
+            || (str_ends_with($scope, ':read') && in_array(ToolCatalog::SCOPE_ALL_READ, $scopes, true));
     }
 
     /**
@@ -74,7 +83,7 @@ class AgentApiKey extends Model
      */
     public static function issue(Agent $agent, string $name, array $scopes): string
     {
-        $scopes = array_values(array_intersect($scopes, app(ToolCatalog::class)->scopes()));
+        $scopes = array_values(array_intersect($scopes, app(ToolCatalog::class)->scopeChoices()));
 
         if ($scopes === []) {
             throw new \InvalidArgumentException('A scoped key needs at least one known scope.');

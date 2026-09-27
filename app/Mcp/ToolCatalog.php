@@ -3,6 +3,7 @@
 namespace App\Mcp;
 
 use App\Mcp\Servers\MelfinaServer;
+use App\Models\AgentApiKey;
 use Laravel\Mcp\Server\Tool;
 
 /**
@@ -17,6 +18,17 @@ use Laravel\Mcp\Server\Tool;
  */
 class ToolCatalog
 {
+    /**
+     * Pseudo-scopes a scoped API key may carry instead of enumerating
+     * individual tool scopes: `all:read` covers every `*:read` scope and
+     * `all:write` covers every scope (all read + write). They are checked
+     * in {@see AgentApiKey::allows()} rather than expanded at issue time,
+     * so a preset key keeps covering tools added later.
+     */
+    public const SCOPE_ALL_READ = 'all:read';
+
+    public const SCOPE_ALL_WRITE = 'all:write';
+
     /**
      * tool name => scope a scoped API key (`melfs_…`) must carry to call
      * it over HTTP. Dedicated agent keys (`melf_…`) and fleet keys
@@ -75,14 +87,35 @@ class ToolCatalog
     }
 
     /**
-     * Every scope a scoped API key may carry — the checkbox list the
-     * console renders and issue() validates against.
+     * Every concrete scope a scoped API key may carry.
      *
      * @return list<string>
      */
     public function scopes(): array
     {
         return array_values(array_unique(array_values(self::SCOPES)));
+    }
+
+    /**
+     * Convenience scopes that stand in for whole classes of concrete
+     * scopes (`all:read`, `all:write`).
+     *
+     * @return list<string>
+     */
+    public function presets(): array
+    {
+        return [self::SCOPE_ALL_READ, self::SCOPE_ALL_WRITE];
+    }
+
+    /**
+     * Every scope value a scoped API key may carry — presets first — the
+     * checkbox list the console renders and issue() validates against.
+     *
+     * @return list<string>
+     */
+    public function scopeChoices(): array
+    {
+        return array_merge($this->presets(), $this->scopes());
     }
 
     /**

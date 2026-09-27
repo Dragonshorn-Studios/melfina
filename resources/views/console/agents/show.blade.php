@@ -97,6 +97,11 @@
                         <label class="flex items-center gap-1">
                             <input type="checkbox" name="scopes[]" value="{{ $scope }}" class="accent-amber">
                             {{ $scope }}
+                            @if ($scope === 'all:read')
+                                <span class="opacity-60">(every read scope)</span>
+                            @elseif ($scope === 'all:write')
+                                <span class="opacity-60">(all read + write)</span>
+                            @endif
                         </label>
                     @endforeach
                 </fieldset>

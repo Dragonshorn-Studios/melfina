@@ -105,6 +105,7 @@ MD;
                 'bearer' => 'Authorization: Bearer $MELFINA_API_KEY — melf_… (dedicated), melfs_… (scoped), or melfg_… (fleet)',
                 'basic' => 'https://<agent name>:$MELFINA_API_KEY@host/api/tools/{tool} — Basic username pins the persona on fleet keys',
                 'persona' => 'fleet keys name the agent per call via the `name` argument or an X-Melfina-Agent-Key header',
+                'scopes' => 'melfs_… keys carry a scope allowlist per tool; the `all:read` preset covers every `*:read` scope and `all:write` covers every scope',
                 'credentials' => 'injected by the target runtime ($MELFINA_API_KEY); never stored in generated files',
             ],
             'tools' => collect($this->catalog->all())->map(fn (array $tool): array => [
@@ -165,7 +166,8 @@ Key forms:
 
 - `melf_…` dedicated agent key — your persona is included in the key.
 - `melfs_…` scoped API key — this call needs the `{$scope}` scope (403
-  without it).
+  without it; the `all:read` preset covers every read scope and
+  `all:write` every scope).
 - `melfg_…` fleet key — also name your agent: `"name": "<your agent
   name>"` in the body, or an `X-Melfina-Agent-Key: <your agent name>`
   header. URL-only clients can pin it as the Basic username:
