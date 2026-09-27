@@ -23,6 +23,8 @@ final class FileMime
         'application/yaml',
         'application/toml',
         'application/x-sh',
+        'application/x-pem-file',
+        'application/x-empty',
         'image/svg+xml',
     ];
 
@@ -81,14 +83,23 @@ final class FileMime
     }
 
     /**
-     * Store-as-text check: UTF-8 bytes with a text-ish declared (or absent)
-     * mime. Anything else lands in the blob column.
+     * Store-as-text check: UTF-8 bytes with a text-ish mime. When the
+     * caller declares none, the bytes themselves are sniffed — a valid
+     * UTF-8 body that finfo recognizes as a real binary format (an
+     * ASCII-only %PDF, say) lands in the blob column like any other
+     * binary instead of masquerading as text.
      */
     public static function isTextual(string $bytes, ?string $mime): bool
     {
+        if ($bytes === '') {
+            return true;
+        }
+
         if (! mb_check_encoding($bytes, 'UTF-8')) {
             return false;
         }
+
+        $mime ??= self::sniff($bytes);
 
         if ($mime === null) {
             return true;

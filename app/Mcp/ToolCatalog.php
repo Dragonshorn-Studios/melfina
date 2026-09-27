@@ -39,7 +39,9 @@ class ToolCatalog
     private const SCOPES = [
         'list_files' => 'files:read',
         'read_file' => 'files:read',
+        'read_file_binary' => 'files:read',
         'write_file' => 'files:write',
+        'write_file_binary' => 'files:write',
         'read_instructions' => 'instructions:read',
         'list_shared' => 'shared:read',
         'read_shared' => 'shared:read',
@@ -76,6 +78,7 @@ class ToolCatalog
         'list_agents',
         'list_files',
         'list_inbox',
+        'read_file_binary',
         'list_message_recipients',
         'list_sent_messages',
         'list_shared',

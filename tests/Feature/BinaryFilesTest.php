@@ -167,6 +167,88 @@ it('refuses a malformed base64 hatch', function () {
     ], ['Authorization' => 'Bearer melf_testkey'])->assertStatus(400)->assertJson(['ok' => false]);
 });
 
+it('writes and reads binaries through the dedicated binary tools', function () {
+    $this->postJson('/api/tools/write_file_binary', [
+        'path' => 'img/logo.png',
+        'content_base64' => PNG_BYTES,
+        'mime' => 'application/octet-stream',
+    ], ['Authorization' => 'Bearer melf_testkey'])->assertOk();
+
+    $file = VfsFile::fileFor($this->agent, 'img/logo.png');
+    expect($file->isBinary())->toBeTrue()->and($file->mime)->toBe('image/png');
+
+    // Images come back as MCP image content.
+    $response = $this->postJson('/api/tools/read_file_binary', ['path' => 'img/logo.png'], [
+        'Authorization' => 'Bearer melf_testkey',
+    ])->assertOk();
+
+    expect($response->json('resultType'))->toBe('content')
+        ->and($response->json('result.content.0.type'))->toBe('image')
+        ->and($response->json('result.content.0.data'))->toBe(PNG_BYTES);
+});
+
+it('returns JSON base64 for non-image binaries via read_file_binary', function () {
+    VfsFile::writeBinaryFor($this->agent, 'blob.bin', "\x00\x01\x02raw", 'application/octet-stream');
+
+    $response = $this->postJson('/api/tools/read_file_binary', ['path' => 'blob.bin'], [
+        'Authorization' => 'Bearer melf_testkey',
+    ])->assertOk()->assertJson(['ok' => true, 'resultType' => 'json']);
+
+    expect(base64_decode($response->json('result.content_base64')))->toBe("\x00\x01\x02raw")
+        ->and($response->json('result.mime'))->toBe('application/octet-stream');
+});
+
+it('steers text through read_file, not read_file_binary', function () {
+    VfsFile::writeFor($this->agent, 'note.txt', 'hello');
+
+    $this->postJson('/api/tools/read_file_binary', ['path' => 'note.txt'], [
+        'Authorization' => 'Bearer melf_testkey',
+    ])->assertStatus(400)->assertJson(['ok' => false]);
+});
+
+it('stores an ASCII-only PDF without a declared mime as binary', function () {
+    // Pure-ASCII %PDF bytes are valid UTF-8; sniffing must still win over
+    // the missing mime or the file lands in the text column.
+    $pdf = "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< >>\n%%EOF";
+
+    $this->postJson('/api/tools/write_file_binary', [
+        'path' => 'doc.pdf',
+        'content_base64' => base64_encode($pdf),
+    ], ['Authorization' => 'Bearer melf_testkey'])->assertOk();
+
+    $file = VfsFile::fileFor($this->agent, 'doc.pdf');
+    expect($file->isBinary())->toBeTrue()->and($file->mime)->toBe('application/pdf');
+
+    $this->postJson('/api/tools/read_file_binary', ['path' => 'doc.pdf'], [
+        'Authorization' => 'Bearer melf_testkey',
+    ])->assertOk()->assertJson(['ok' => true, 'resultType' => 'json']);
+});
+
+it('keeps UTF-8 base64 writes as text rows via write_file_binary', function () {
+    $this->postJson('/api/tools/write_file_binary', [
+        'path' => 'note.txt',
+        'content_base64' => base64_encode('plain notes'),
+    ], ['Authorization' => 'Bearer melf_testkey'])->assertOk();
+
+    expect(VfsFile::fileFor($this->agent, 'note.txt')->isBinary())->toBeFalse()
+        ->and(VfsFile::readFor($this->agent, 'note.txt'))->toBe('plain notes');
+});
+
+it('scopes the binary tools like their text counterparts', function () {
+    VfsFile::writeBinaryFor($this->agent, 'img.png', $this->png, 'image/png');
+
+    $readKey = AgentApiKey::issue($this->agent, 'reader', ['files:read']);
+
+    $this->postJson('/api/tools/read_file_binary', ['path' => 'img.png'], [
+        'Authorization' => 'Bearer '.$readKey,
+    ])->assertOk();
+
+    $this->postJson('/api/tools/write_file_binary', [
+        'path' => 'x.png',
+        'content_base64' => PNG_BYTES,
+    ], ['Authorization' => 'Bearer '.$readKey])->assertForbidden();
+});
+
 it('reports real byte counts for binaries in the console listing', function () {
     VfsFile::writeBinaryFor($this->agent, 'img.png', $this->png, 'image/png');
     VfsFile::writeFor($this->agent, 'note.txt', 'hello');
