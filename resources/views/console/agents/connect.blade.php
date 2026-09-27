@@ -40,16 +40,25 @@ X-Melfina-Agent-Key: {{ $agent->name }}</pre>
             <p class="mt-2 text-sm text-steel">
                 For clients that install MCP servers from a plugin repo — substitute the key
                 after the <code>:</code>. Credentials ride as HTTP Basic userinfo, so they stay
-                out of request-path logs:
+                out of request-path logs. Two layouts: <strong class="text-cream">multi-skill</strong>
+                (one <code>SKILL.md</code> per tool) and <strong class="text-cream">single skill +
+                script</strong> (umbrella skill plus a <code>melfina-call.mjs</code> Node shim
+                with arg checks and retries):
             </p>
-            <pre class="mt-3 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $pluginUrl }}</pre>
+            <p class="mt-2 font-mono text-[10px] tracking-[0.12em] text-steel">MULTI-SKILL</p>
+            <pre class="mt-1 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $pluginUrl }}</pre>
+            <p class="mt-2 font-mono text-[10px] tracking-[0.12em] text-steel">SINGLE SKILL + SCRIPT</p>
+            <pre class="mt-1 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $pluginUrlSingle }}</pre>
             <p class="mt-2 text-sm text-steel">
                 Without a fleet key, <code>{{ $pluginUrlDirect }}</code> works too — it carries
-                just the agent key. One package for every agent instead:
+                just the agent key (append <code>.single</code> before <code>.git</code> for the
+                single layout). One package for every agent instead:
                 <code>{{ $pluginUrlFleet }}</code>.
                 @if ($hasPackage)
-                    For upload-only flows,
-                    <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.plugin', $agent) }}">download the plugin ZIP</a>
+                    For upload-only flows, download the plugin ZIP —
+                    <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.plugin', $agent) }}">multi-skill</a>
+                    or
+                    <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.agents.plugin', [$agent, 'variant' => 'single']) }}">single skill + script</a>
                     (it contains live keys — treat it like a password).
                 @else
                     The upload-flow ZIP is built on key create/rotate — rotate this agent's key once

@@ -28,16 +28,26 @@
             <p class="font-mono text-xs tracking-[0.12em] text-amber">INSTALL AS PLUGIN (ONE FOR EVERYONE)</p>
             <p class="mt-2 text-sm text-steel">
                 For clients that install MCP servers from a plugin repo (MiniMax Code, mavis, zcode,
-                Claude plugin marketplaces, …) — paste this URL. It's public but unguessable, and the
+                Claude plugin marketplaces, …) — paste a URL below. It's public but unguessable, and the
                 package carries <em>no</em> credentials: each agent fills <code>YOUR_KEY</code>
-                in the shipped <code>mcp.json</code> itself:
+                in the shipped <code>mcp.json</code> itself. Two layouts:
+                <strong class="text-cream">multi-skill</strong> (one <code>SKILL.md</code> per tool) and
+                <strong class="text-cream">single skill + script</strong> (umbrella skill plus a
+                <code>scripts/melfina-call.mjs</code> Node shim that validates args, retries, and
+                reports readable errors).
             </p>
-            <pre class="mt-3 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $publicRepoUrl }}</pre>
+            <p class="mt-3 font-mono text-[10px] tracking-[0.12em] text-steel">MULTI-SKILL</p>
+            <pre class="mt-1 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $publicRepoUrl }}</pre>
+            <p class="mt-2 font-mono text-[10px] tracking-[0.12em] text-steel">SINGLE SKILL + SCRIPT</p>
+            <pre class="mt-1 overflow-x-auto border border-border bg-void/60 p-3 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $publicRepoUrlSingle }}</pre>
             <p class="mt-2 text-sm text-steel">
-                Importer insists on GitHub or a file upload (MiniMax)?
-                <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.mcp.plugin.zip') }}">Download the same package as a ZIP</a>,
+                Importer insists on GitHub or a file upload (MiniMax)? Download the same package as a ZIP —
+                <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.mcp.plugin.zip') }}">multi-skill</a>
+                or
+                <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.mcp.plugin.zip', ['variant' => 'single']) }}">single skill + script</a> —
                 or publish it straight to a GitHub repo below.
-                Prefer the key baked in instead? <code>{{ $fleetRepoUrl }}</code> embeds the fleet key —
+                Prefer the key baked in instead? <code>{{ $fleetRepoUrl }}</code> embeds the fleet key
+                (<code>{{ $fleetRepoUrlSingle }}</code> for the single layout) —
                 the clone needs Basic credentials, so use it only with clients that pass
                 <code>user:pass@</code> URLs correctly.
             </p>
@@ -185,9 +195,14 @@
                     Auth is the same Bearer/Basic credential surface as above, plus scoped
                     <code>melfs_…</code> keys for least-privilege cloud agents — issue them on each
                     agent's About tab.
-                    Every plugin package also ships a generated <code>skills/melfina-&lt;tool&gt;/SKILL.md</code>
-                    per tool and a machine-readable <code>melfina-api.json</code>, so skill-only runtimes
-                    can drive the HTTP surface directly.
+                    Every package also ships a machine-readable <code>melfina-api.json</code>.
+                    The <em>multi-skill</em> layout adds one generated
+                    <code>skills/melfina-&lt;tool&gt;/SKILL.md</code> per tool; the
+                    <em>single skill + script</em> layout instead ships
+                    <code>scripts/melfina-call.mjs</code>, a zero-dependency Node shim agents run as
+                    <code>node scripts/melfina-call.mjs call &lt;tool&gt; '&lt;args&gt;'</code> — it reads
+                    the manifest, checks arguments, retries throttled calls, and prints actionable
+                    errors.
                 </p>
             </details>
 
@@ -215,7 +230,14 @@
                         style="border-radius: var(--radius-console)">save</button>
                 </form>
                 @if ($hasGitHubToken && $githubRepo)
-                    <x-confirm-form action="{{ route('console.mcp.github.publish') }}" class="mt-2" confirm="Publish the fleet package to github.com/{{ $githubRepo }}? The repo is created public if it doesn't exist."><button type="submit"
+                    <x-confirm-form action="{{ route('console.mcp.github.publish') }}" class="mt-2 flex items-center gap-2" confirm="Publish the fleet package to github.com/{{ $githubRepo }}? The repo is created public if it doesn't exist.">
+                        <select name="variant"
+                            class="border border-border bg-void px-2 py-1.5 font-mono text-xs text-cream"
+                            style="border-radius: var(--radius-console)">
+                            <option value="multi">multi-skill</option>
+                            <option value="single">single skill + script</option>
+                        </select>
+                        <button type="submit"
                             class="border border-amber/50 bg-void px-3 py-1.5 font-mono text-xs text-amber hover:border-amber"
                             style="border-radius: var(--radius-console)">publish to github.com/{{ $githubRepo }}</button>
                     </x-confirm-form>
