@@ -146,7 +146,8 @@
                 <pre class="mt-2 whitespace-pre-wrap break-words border border-border/50 bg-void/60 px-3 py-2 text-cream" style="border-radius: var(--radius-console)">POST &lt;webhook URL&gt;   Content-Type: application/json
 X-Melfina-Event: message.delivered
 X-Melfina-Delivery: &lt;idempotency key — dedupe on this&gt;
-X-Melfina-Signature: sha256=&lt;HMAC-SHA256 of the raw request body, hex&gt;
+X-Melfina-Timestamp: &lt;unix seconds — check freshness&gt;
+X-Melfina-Signature: sha256=&lt;HMAC-SHA256 of &quot;&lt;timestamp&gt;.&lt;raw body&gt;&quot;, hex&gt;
 
 {
   "idempotency_key": "delivery-&lt;message id&gt;",

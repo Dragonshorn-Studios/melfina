@@ -98,14 +98,16 @@ it('posts a signed minimal payload to the configured URL', function () {
     Http::assertSent(function ($request) use ($secret, $message) {
         $payload = $request->data();
         $body = json_encode($payload, JSON_UNESCAPED_SLASHES);
+        $timestamp = $request->header('X-Melfina-Timestamp')[0] ?? '';
 
         return $request->url() === 'https://host.test/wake'
             && $request->hasHeader('X-Melfina-Event', 'message.delivered')
             && $request->hasHeader('X-Melfina-Delivery', 'delivery-'.$message->id)
             && $request->hasHeader(
                 'X-Melfina-Signature',
-                'sha256='.hash_hmac('sha256', $body, $secret)
+                'sha256='.hash_hmac('sha256', $timestamp.'.'.$body, $secret)
             )
+            && abs(time() - (int) $timestamp) < 60
             && $payload['idempotency_key'] === 'delivery-'.$message->id
             && $payload['message_id'] === $message->id
             && $payload['recipient_id'] === $this->recipient->id
@@ -119,12 +121,46 @@ it('produces a payload whose signature a receiver can verify', function () {
 
     $payload = SendDeliveryWebhook::payload($message);
     $body = json_encode($payload, JSON_UNESCAPED_SLASHES);
-    $signature = 'sha256='.hash_hmac('sha256', $body, 'melfwh_testsecret');
+    $timestamp = '1759000000';
+    $signature = 'sha256='.hash_hmac('sha256', $timestamp.'.'.$body, 'melfwh_testsecret');
 
     // receiver-side verification
-    expect(hash_equals('sha256='.hash_hmac('sha256', $body, 'melfwh_testsecret'), $signature))->toBeTrue()
-        ->and(hash_equals('sha256='.hash_hmac('sha256', $body, 'wrong'), $signature))->toBeFalse()
+    expect(hash_equals('sha256='.hash_hmac('sha256', $timestamp.'.'.$body, 'melfwh_testsecret'), $signature))->toBeTrue()
+        ->and(hash_equals('sha256='.hash_hmac('sha256', $timestamp.'.'.$body, 'wrong'), $signature))->toBeFalse()
         ->and(SendDeliveryWebhook::idempotencyKey($message))->toBe('delivery-'.$message->id);
+});
+
+it('declares a bounded retry contract', function () {
+    $job = new SendDeliveryWebhook(AgentMessage::factory()->between($this->sender, $this->recipient)->create());
+
+    expect($job->tries)->toBe(5)
+        ->and($job->backoff())->toBe([15, 60, 300, 900]);
+});
+
+it("uses the recipient's current name, not the delivery-time snapshot", function () {
+    Http::fake(['*' => Http::response(null, 200)]);
+
+    $this->owner->update(['webhook_url' => 'https://host.test/wake']);
+    $this->owner->rotateWebhookSecret();
+    $message = AgentMessage::factory()->between($this->sender, $this->recipient)->create();
+    $this->recipient->update(['name' => 'renamed-recipient']);
+
+    (new SendDeliveryWebhook($message))->handle();
+
+    Http::assertSent(fn ($request) => $request->data()['recipient_name'] === 'renamed-recipient');
+});
+
+it('skips when the recipient was deleted between dispatch and run', function () {
+    Http::fake();
+
+    $this->owner->update(['webhook_url' => 'https://host.test/wake']);
+    $this->owner->rotateWebhookSecret();
+    $message = AgentMessage::factory()->between($this->sender, $this->recipient)->create();
+    $this->recipient->delete();
+
+    (new SendDeliveryWebhook($message))->handle();
+
+    Http::assertNothingSent();
 });
 
 it('skips cleanly when the webhook was cleared between dispatch and run', function () {
