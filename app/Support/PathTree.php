@@ -19,9 +19,11 @@ final class PathTree
      */
     public static function normalizeDir(?string $dir): string
     {
-        $dir = trim((string) $dir, " \t\n\r\v\f/");
+        // Strip only spaces and slashes at the edges — normalizePath
+        // trims each segment, so control bytes are rejected here first.
+        $dir = trim((string) $dir, ' /');
 
-        if ($dir === '') {
+        if ($dir === '' || preg_match('/[\x00-\x1F\x7F]/', $dir)) {
             return '';
         }
 

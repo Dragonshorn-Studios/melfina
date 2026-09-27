@@ -59,17 +59,23 @@ class SharedSpaceController extends Controller
         $paths = $shared->files()->orderBy('path')->pluck('path');
         $level = PathTree::level($paths, $dir);
 
+        // Files at exactly this level: bound prefix match + no '/' in
+        // the remainder — avoids binding one param per path.
+        $files = $shared->files()
+            ->when($dir !== '', fn ($query) => $query->whereRaw('substr(path, 1, ?) = ?', [strlen($dir), $dir]))
+            ->whereRaw('instr(substr(path, ?), ?) = 0', [strlen($dir) + 1, '/'])
+            ->orderBy('path')
+            ->select(['id', 'shared_space_id', 'path', 'updated_at'])
+            ->selectRaw('length(content) as byte_size')
+            ->paginate(50)
+            ->withQueryString();
+
         return view('console.shared.show', [
             'space' => $shared,
             'dir' => $dir,
             'dirs' => $level['dirs'],
             'breadcrumbs' => PathTree::breadcrumbs($dir),
-            'files' => $shared->files()
-                ->whereIn('path', $level['files'])
-                ->orderBy('path')
-                ->select(['id', 'shared_space_id', 'path', 'updated_at'])
-                ->selectRaw('length(content) as byte_size')
-                ->get(),
+            'files' => $files,
             'fileCount' => $paths->count(),
         ]);
     }
@@ -116,6 +122,7 @@ class SharedSpaceController extends Controller
         return view('console.shared.file', [
             'space' => $shared,
             'file' => $file,
+            'dir' => PathTree::normalizeDir($request->string('dir')->toString()),
         ]);
     }
 

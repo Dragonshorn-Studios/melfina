@@ -8,6 +8,7 @@ use App\Models\VfsFile;
 use App\Support\PathTree;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use InvalidArgumentException;
 
@@ -66,6 +67,7 @@ class FileController extends Controller
             'agent' => $agent,
             'path' => $path,
             'content' => $content,
+            'dir' => PathTree::normalizeDir($request->string('dir')->toString()),
         ]);
     }
 
@@ -79,12 +81,15 @@ class FileController extends Controller
         ]);
 
         try {
-            VfsFile::writeFor($agent, $validated['path'], $validated['content']);
+            $file = VfsFile::writeFor($agent, $validated['path'], $validated['content']);
         } catch (InvalidArgumentException $e) {
             return back()->withInput()->withErrors(['path' => $e->getMessage()]);
         }
 
-        return redirect()->route('console.files.show', $agent);
+        // Land in the directory the file actually lives in.
+        $parent = str_contains($file->path, '/') ? Str::beforeLast($file->path, '/').'/' : '';
+
+        return redirect()->route('console.files.show', ['agent' => $agent, 'dir' => $parent]);
     }
 
     public function destroy(Request $request, Agent $agent): RedirectResponse

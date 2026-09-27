@@ -46,7 +46,7 @@
                             <td class="py-2 pr-4 text-steel">{{ $file->byte_size }} B</td>
                             <td class="py-2 pr-4 text-steel">{{ $file->updated_at->toDateTimeString() }}</td>
                             <td class="py-2 text-right">
-                                <a href="{{ route('console.shared.file', ['shared' => $space, 'path' => $file->path]) }}"
+                                <a href="{{ route('console.shared.file', ['shared' => $space, 'path' => $file->path, 'dir' => $dir]) }}"
                                     class="text-amber underline decoration-border underline-offset-4">open</a>
                                 <form method="POST" action="{{ route('console.shared.file.destroy', $space) }}" class="inline"
                                     onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Delete '{{ $file->path }}'? Any agent reading it next sees a miss.">
@@ -62,6 +62,8 @@
                 </tbody>
             </table>
         @endif
+
+        {{ $files->links() }}
 
         @error('path')
             <p class="mt-2 font-mono text-xs text-danger">{{ $message }}</p>

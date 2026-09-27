@@ -24,7 +24,7 @@
                     class="border border-amber bg-amber px-4 py-2 font-mono text-sm font-semibold text-void hover:bg-amber-dim" style="border-radius: var(--radius-console)">
                     save file
                 </button>
-                <a href="{{ route('console.files.show', $agent) }}" class="font-mono text-xs text-steel underline decoration-border underline-offset-4">back to tree</a>
+                <a href="{{ route('console.files.show', ['agent' => $agent, 'dir' => $dir]) }}" class="font-mono text-xs text-steel underline decoration-border underline-offset-4">back to tree</a>
             </div>
         </form>
 
@@ -34,6 +34,7 @@
                 @csrf
                 @method('DELETE')
                 <input type="hidden" name="path" value="{{ $path }}">
+                <input type="hidden" name="dir" value="{{ $dir }}">
                 <button type="submit"
                     class="border border-danger px-3 py-1.5 font-mono text-xs text-danger hover:bg-danger hover:text-void" style="border-radius: var(--radius-console)">
                     delete file

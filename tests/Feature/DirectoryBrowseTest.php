@@ -5,6 +5,7 @@ use App\Models\SharedFile;
 use App\Models\SharedSpace;
 use App\Models\User;
 use App\Models\VfsFile;
+use App\Support\PathTree;
 
 beforeEach(function () {
     $this->owner = User::factory()->owner()->create();
@@ -74,6 +75,12 @@ it('falls back to the root listing on a traversal dir', function () {
         ->get(route('console.files.show', ['agent' => $this->agent, 'dir' => '../../etc']))
         ->assertOk()
         ->assertSee('top.txt');
+
+    // Unit-level: control bytes fall back to root instead of being
+    // trimmed into a valid dir. (Over HTTP, TrimStrings already strips
+    // them before the input reaches the controller.)
+    expect(PathTree::normalizeDir("notes/\n"))->toBe('')
+        ->and(PathTree::normalizeDir("notes/\tadr"))->toBe('');
 
     // A well-formed but empty dir is a normal level, not an error.
     $this->actingAs($this->owner)

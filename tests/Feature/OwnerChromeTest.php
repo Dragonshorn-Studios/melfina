@@ -102,7 +102,7 @@ it('lets the owner browse, write, and delete files in an agent tree', function (
         ->put(route('console.files.update', $this->agent), [
             'path' => 'notes/plan.txt',
             'content' => 'edited',
-        ])->assertRedirect(route('console.files.show', $this->agent));
+        ])->assertRedirect(route('console.files.show', ['agent' => $this->agent, 'dir' => 'notes/']));
 
     expect(VfsFile::readFor($this->agent, 'notes/plan.txt'))->toBe('edited');
 

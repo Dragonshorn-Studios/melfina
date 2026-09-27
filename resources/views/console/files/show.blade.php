@@ -37,7 +37,7 @@
                         <tr class="border-b border-border/50">
                             <td class="py-2 pr-4 text-cream" title="{{ $path }}">{{ Str::after($path, $dir) }}</td>
                             <td class="py-2 text-right">
-                                <a href="{{ route('console.files.edit', ['agent' => $agent, 'path' => $path]) }}" class="text-amber underline decoration-border underline-offset-4">open</a>
+                                <a href="{{ route('console.files.edit', ['agent' => $agent, 'path' => $path, 'dir' => $dir]) }}" class="text-amber underline decoration-border underline-offset-4">open</a>
                                 <form method="POST" action="{{ route('console.files.destroy', $agent) }}" class="inline"
                                     onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Delete '{{ $path }}'? The agent sees a miss on its next read.">
                                     @csrf
