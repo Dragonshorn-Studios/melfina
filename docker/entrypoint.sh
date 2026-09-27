@@ -80,4 +80,7 @@ fi
 
 php artisan migrate --force --graceful
 
-exec php artisan serve --host=0.0.0.0 --port="${PORT:-8000}"
+# FrankenPHP serves the app concurrently (php artisan serve is single-threaded,
+# so one slow request stalls everything — including the /up healthcheck).
+export PORT="${PORT:-8000}"
+exec frankenphp run --config /app/docker/Caddyfile

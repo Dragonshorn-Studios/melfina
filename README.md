@@ -54,7 +54,7 @@ Single service — no K8s, no external database:
 docker compose up --build -d
 ```
 
-The app listens on [http://localhost:8000](http://localhost:8000) (override with `APP_PORT`). The image bakes code, Composer deps, and built assets; the entrypoint seeds `.env` and `APP_KEY` on first boot, migrates SQLite, then serves.
+The app listens on [http://localhost:8000](http://localhost:8000) (override with `APP_PORT`). The image bakes code, Composer deps, and built assets; the entrypoint seeds `.env` and `APP_KEY` on first boot, migrates SQLite, then serves via [FrankenPHP](https://frankenphp.dev) (concurrent — `php artisan serve` is single-threaded and stalls every request behind a slow one).
 
 **Persistence:** all mutable state lives in the `melfina-data` volume at `/data` — `.env` (with the generated `APP_KEY`) and `database.sqlite`. The container itself is disposable; `docker compose down` keeps data, `docker compose down -v` wipes it.
 
