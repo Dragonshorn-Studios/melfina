@@ -1,5 +1,7 @@
 <?php
 
+use App\Mcp\Servers\MelfinaServer;
+use App\Mcp\ToolCatalog;
 use App\Models\Agent;
 use App\Models\AgentApiKey;
 use App\Models\User;
@@ -72,10 +74,38 @@ it('rejects a non-object body', function () {
     ], content: json_encode(['a', 'b']))->assertUnprocessable();
 });
 
+it('rejects a malformed JSON body', function () {
+    $this->call('POST', '/api/tools/list_files', server: [
+        'HTTP_AUTHORIZATION' => 'Bearer melf_testkey',
+        'CONTENT_TYPE' => 'application/json',
+    ], content: '{not json')->assertUnprocessable();
+});
+
+it('returns raw file content verbatim, even when it parses as JSON', function () {
+    ($this->call)('write_file', ['path' => 'doc.json', 'content' => '{"a": 1}'])->assertOk();
+
+    ($this->call)('read_file', ['path' => 'doc.json'])
+        ->assertOk()
+        ->assertJson(['ok' => true, 'result' => '{"a": 1}', 'resultType' => 'text']);
+
+    // A JSON-payload tool still decodes its result.
+    ($this->call)('list_files', [])
+        ->assertOk()
+        ->assertJson(['resultType' => 'json'])
+        ->assertJsonPath('result.0', 'doc.json');
+});
+
 it('maps tool-level errors to a 400 {ok:false} envelope', function () {
     ($this->call)('read_file', ['path' => 'missing.txt'])
         ->assertBadRequest()
         ->assertJson(['ok' => false, 'error' => 'File not found.']);
+});
+
+it('keeps every MCP tool on the scoped HTTP surface', function () {
+    // A tool added to TOOLS without a SCOPES entry would silently vanish
+    // from HTTP + generated skills while staying on MCP.
+    expect(app(ToolCatalog::class)->all())
+        ->toHaveCount(count(MelfinaServer::TOOLS));
 });
 
 it('lists the tool surface with scopes', function () {

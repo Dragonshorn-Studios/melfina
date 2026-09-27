@@ -98,7 +98,7 @@ class ResolveApiAgent
         if ($persona === null) {
             $candidate = $request->query('agent_key');
 
-            $persona = is_string($candidate) && ! str_starts_with($candidate, 'melf_')
+            $persona = is_string($candidate) && ! preg_match('/^melf[gs]?_/', $candidate)
                 ? $candidate
                 : null;
         }

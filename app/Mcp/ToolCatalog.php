@@ -59,7 +59,34 @@ class ToolCatalog
     ];
 
     /**
-     * @return list<array{name: string, class: class-string<Tool>, tool: Tool, description: string, inputSchema: array<string, mixed>, outputSchema: array<string, mixed>|null, scope: string}>
+     * Tools whose successful text result is a JSON payload — the HTTP
+     * adapter decodes `result` for these, so API consumers get objects
+     * instead of JSON-encoded strings. Text tools (read_file,
+     * write_file, …) are deliberately absent: their payload is opaque
+     * bytes and must round-trip as a string even when it looks like
+     * JSON.
+     *
+     * @var list<string>
+     */
+    private const JSON_TOOLS = [
+        'ack_message',
+        'knowledge_lookup',
+        'knowledge_search',
+        'knowledge_upsert',
+        'list_agents',
+        'list_files',
+        'list_inbox',
+        'list_message_recipients',
+        'list_sent_messages',
+        'list_shared',
+        'read_instructions',
+        'read_message',
+        'read_persona',
+        'send_message',
+    ];
+
+    /**
+     * @return list<array{name: string, class: class-string<Tool>, tool: Tool, description: string, inputSchema: array<string, mixed>, outputSchema: array<string, mixed>|null, scope: string, json: bool}>
      */
     public function all(): array
     {
@@ -71,7 +98,7 @@ class ToolCatalog
     }
 
     /**
-     * @return array{name: string, class: class-string<Tool>, tool: Tool, description: string, inputSchema: array<string, mixed>, outputSchema: array<string, mixed>|null, scope: string}|null
+     * @return array{name: string, class: class-string<Tool>, tool: Tool, description: string, inputSchema: array<string, mixed>, outputSchema: array<string, mixed>|null, scope: string, json: bool}|null
      */
     public function find(string $name): ?array
     {
@@ -130,7 +157,7 @@ class ToolCatalog
 
     /**
      * @param  class-string<Tool>  $class
-     * @return array{name: string, class: class-string<Tool>, tool: Tool, description: string, inputSchema: array<string, mixed>, outputSchema: array<string, mixed>|null, scope: string}|null
+     * @return array{name: string, class: class-string<Tool>, tool: Tool, description: string, inputSchema: array<string, mixed>, outputSchema: array<string, mixed>|null, scope: string, json: bool}|null
      */
     private function describe(string $class): ?array
     {
@@ -153,6 +180,7 @@ class ToolCatalog
             'inputSchema' => $shape['inputSchema'] ?? [],
             'outputSchema' => $shape['outputSchema'] ?? null,
             'scope' => $scope,
+            'json' => in_array($name, self::JSON_TOOLS, true),
         ];
     }
 }

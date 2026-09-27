@@ -44,6 +44,7 @@ class ToolCallController extends Controller
                 'description' => $tool['description'],
                 'inputSchema' => $tool['inputSchema'],
                 'outputSchema' => $tool['outputSchema'],
+                'resultType' => $tool['json'] ? 'json' : 'text',
                 'scope' => $tool['scope'],
             ])->all(),
         ]);
@@ -69,6 +70,12 @@ class ToolCallController extends Controller
 
         if ($apiKey instanceof AgentApiKey && ! $apiKey->allows($descriptor['scope'])) {
             return $this->fail("This key lacks the {$descriptor['scope']} scope.", 403);
+        }
+
+        $raw = trim((string) $request->getContent());
+
+        if ($raw !== '' && ! json_validate($raw)) {
+            return $this->fail('Request body must be a JSON object of tool arguments.', 422);
         }
 
         $arguments = $request->json()->all();
@@ -102,12 +109,13 @@ class ToolCallController extends Controller
 
     /**
      * Fold the tool's MCP response(s) into the HTTP contract:
-     * `{ok: true, result}` on success, `{ok: false, error}` on a tool
-     * error. `result` is the decoded JSON payload our tools emit as text;
-     * a non-JSON text stays a string, and multi-part results keep their
-     * MCP content shape under `result.content`.
+     * `{ok: true, result, resultType}` on success, `{ok: false, error}`
+     * on a tool error. JSON-payload tools decode `result` to objects;
+     * text tools surface their payload verbatim — file contents stay a
+     * string even when they happen to parse as JSON; multi-part results
+     * keep their MCP content shape under `result.content`.
      *
-     * @param  array{name: string, tool: Tool}  $descriptor
+     * @param  array{name: string, tool: Tool, json: bool}  $descriptor
      */
     private function respond(mixed $result, array $descriptor): JsonResponse
     {
@@ -121,11 +129,25 @@ class ToolCallController extends Controller
 
         $parts = $responses->map(fn (McpResponse $response): array => $response->content()->toTool($descriptor['tool']));
 
-        $payload = $parts->count() === 1 && ($parts->first()['type'] ?? null) === 'text'
-            ? $this->decode($parts->first()['text'] ?? '')
-            : ['content' => $parts->all()];
+        if ($parts->isEmpty()) {
+            return $this->fail('Tool returned an empty response.', 500);
+        }
 
-        return response()->json(['ok' => true, 'result' => $payload]);
+        if ($parts->count() === 1 && ($parts->first()['type'] ?? null) === 'text') {
+            $text = $parts->first()['text'] ?? '';
+
+            return response()->json([
+                'ok' => true,
+                'result' => $descriptor['json'] ? $this->decode($text) : $text,
+                'resultType' => $descriptor['json'] ? 'json' : 'text',
+            ]);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'result' => ['content' => $parts->all()],
+            'resultType' => 'content',
+        ]);
     }
 
     /**

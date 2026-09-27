@@ -115,13 +115,14 @@ MD;
                 'scope' => $tool['scope'],
                 'inputSchema' => $tool['inputSchema'],
                 'outputSchema' => $tool['outputSchema'],
+                'resultType' => $tool['json'] ? 'json' : 'text',
                 'skill' => 'skills/'.self::skillName($tool['name']).'/SKILL.md',
             ])->all(),
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n";
     }
 
     /**
-     * @param  array{name: string, description: string, inputSchema: array<string, mixed>, outputSchema: array<string, mixed>|null, scope: string}  $tool
+     * @param  array{name: string, description: string, inputSchema: array<string, mixed>, outputSchema: array<string, mixed>|null, scope: string, json: bool}  $tool
      */
     private function skill(array $tool, string $baseUrl): string
     {
@@ -145,6 +146,10 @@ MD;
             ? ''
             : "\n`result` matches the tool's declared output schema:\n\n```json\n"
                 .json_encode($outSchema, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n```\n";
+
+        $resultDoc = $tool['json']
+            ? '`result` is this tool\'s JSON payload, decoded to objects/arrays (`resultType` is `json`).'
+            : '`result` is this tool\'s text payload verbatim (`resultType` is `text`) — file contents stay a string even when they look like JSON.';
 
         return <<<MD
 ---
@@ -199,9 +204,9 @@ takes in `params.arguments`:
 
 ## Response
 
-`200 OK` returns `{"ok": true, "result": …}`. `result` is the tool's
-payload — tools that answer with JSON text surface as decoded objects;
-plain-text answers surface as a string.
+`200 OK` returns `{"ok": true, "result": …, "resultType": "…"}`.
+{$resultDoc} Multi-part results surface as `resultType: "content"`
+with `result.content` holding the MCP content parts.
 
 Errors return `{"ok": false, "error": "…"}` with a non-2xx status:
 
