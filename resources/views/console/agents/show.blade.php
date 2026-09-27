@@ -15,7 +15,7 @@
     <main class="border border-border bg-panel p-6 shadow-[inset_0_1px_0_0_rgba(232,168,56,0.08)]" style="border-radius: var(--radius-console)">
         <div class="flex items-center justify-between">
             <div>
-                <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">AGENT</p>
+                <p class="font-mono text-xs tracking-[0.16em] text-amber-dim">ABOUT</p>
                 <h1 class="mt-2 text-xl font-semibold tracking-tight text-cream">{{ $agent->name }}</h1>
             </div>
             <span class="font-mono text-xs {{ $agent->isActive() ? 'text-amber' : 'text-danger' }}">{{ $agent->status }}</span>
@@ -40,24 +40,15 @@
             <div class="flex items-center justify-between">
                 <p class="font-mono text-xs tracking-[0.16em] text-steel">PERSONA &amp; MEMORY</p>
                 <a href="{{ route('console.agents.persona.edit', $agent) }}"
-                    class="font-mono text-xs text-amber underline decoration-border underline-offset-4">edit →</a>
+                    class="font-mono text-xs text-amber underline decoration-border underline-offset-4">persona tab →</a>
             </div>
-            @if ($agent->persona)
-                <pre class="mt-2 whitespace-pre-wrap break-words border border-border/50 bg-void/60 px-3 py-2 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">{{ $agent->persona }}</pre>
-            @endif
-            @if ($agent->memories)
-                <ul class="mt-3 space-y-1 font-mono text-xs">
-                    @foreach ($agent->memories as $memory)
-                        <li class="border border-border/50 bg-void/60 px-3 py-1.5" style="border-radius: var(--radius-console)">
-                            <span class="text-steel">{{ $memory['at'] ?? '' }}</span>
-                            <span class="text-cream">{{ $memory['text'] ?? '' }}</span>
-                        </li>
-                    @endforeach
-                </ul>
-            @endif
-            @if (! $agent->persona && ! $agent->memories)
-                <p class="mt-2 font-mono text-xs text-steel">nothing yet — the imp writes these itself via update_persona.</p>
-            @endif
+            <p class="mt-2 font-mono text-xs text-steel">
+                @if ($agent->persona)
+                    {{ Str::limit($agent->persona, 120) }}
+                @else
+                    nothing yet — the imp writes these itself via update_persona.
+                @endif
+            </p>
         </div>
 
         <div class="mt-6 border-t border-border pt-4">
@@ -127,9 +118,6 @@
             <a href="{{ route('console.agents.edit', $agent) }}"
                 class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
                 style="border-radius: var(--radius-console)">rename / status</a>
-            <a href="{{ route('console.agents.instructions.edit', $agent) }}"
-                class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
-                style="border-radius: var(--radius-console)">instructions</a>
             <form method="POST" action="{{ route('console.agents.rotate', $agent) }}"
                 onsubmit="return window.__melfinaConfirm || confirm(this.dataset.confirm)" data-confirm="Rotate key? The old key stops working immediately.">
                 @csrf

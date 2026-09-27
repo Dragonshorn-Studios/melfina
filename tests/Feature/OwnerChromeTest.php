@@ -16,7 +16,7 @@ it('renders the sidebar with agents and section links', function () {
         ->get(route('console.agents.index'))
         ->assertOk()
         ->assertSee($this->agent->name)
-        ->assertSee(route('console.files.show', $this->agent))
+        ->assertSee(route('console.agents.show', $this->agent))
         ->assertSee(route('console.shared.index'))
         ->assertSee(route('console.clients.index'))
         ->assertSee(route('console.agents.create'));
@@ -67,7 +67,7 @@ it('shows fleet stats and agent rows on the dashboard', function () {
         ->assertSee('Fleet at a glance')
         ->assertSee($this->agent->name)
         ->assertSee($space->name)
-        ->assertSee(route('console.files.show', $this->agent))
+        ->assertSee(route('console.agents.show', $this->agent))
         ->assertSee(route('console.shared.edit', $space))
         ->assertSee(route('console.agents.create'))
         ->assertSee('issued', false);
@@ -151,12 +151,12 @@ it('lets the owner read and curate an agent persona and memories', function () {
         ->assertSee('owner prefers terse replies')
         ->assertSee('prod host is melfina.dragonshorn.cloud');
 
-    // The show page links to the editor and shows the log too.
+    // The About page links to the persona tab and shows an excerpt.
     $this->actingAs($this->owner)
         ->get(route('console.agents.show', $this->agent))
         ->assertOk()
         ->assertSee(route('console.agents.persona.edit', $this->agent))
-        ->assertSee('owner prefers terse replies');
+        ->assertSee('gruff and precise');
 
     // Persona rewrite + owner-appended memory in one submit.
     $this->actingAs($this->owner)

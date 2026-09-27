@@ -47,7 +47,7 @@
                             @php
                                 $current = $agent?->is($entry);
                             @endphp
-                            <a href="{{ route('console.files.show', $entry) }}"
+                            <a href="{{ route('console.agents.show', $entry) }}"
                                 class="flex shrink-0 items-center justify-between gap-3 border px-3 py-1.5 font-mono text-xs {{ $current ? 'border-amber bg-void text-amber' : 'border-transparent text-steel hover:border-border hover:text-cream' }}"
                                 style="border-radius: var(--radius-console)">
                                 <span class="truncate">{{ $entry->name }}</span>
@@ -102,11 +102,11 @@
                 @if ($agent)
                     @php
                         $agentTabs = [
-                            ['label' => 'Files', 'route' => route('console.files.show', $agent), 'active' => request()->routeIs('console.files.*')],
+                            ['label' => 'About', 'route' => route('console.agents.show', $agent), 'active' => request()->routeIs('console.agents.show') || request()->routeIs('console.agents.edit')],
                             ['label' => 'Instructions', 'route' => route('console.agents.instructions.edit', $agent), 'active' => request()->routeIs('console.agents.instructions.*')],
                             ['label' => 'Persona', 'route' => route('console.agents.persona.edit', $agent), 'active' => request()->routeIs('console.agents.persona.*')],
+                            ['label' => 'Files', 'route' => route('console.files.show', $agent), 'active' => request()->routeIs('console.files.*')],
                             ['label' => 'Preview', 'route' => route('console.agents.preview', $agent), 'active' => request()->routeIs('console.agents.preview')],
-                            ['label' => 'Key', 'route' => route('console.agents.show', $agent), 'active' => request()->routeIs('console.agents.show') || request()->routeIs('console.agents.edit')],
                             ['label' => 'Connect', 'route' => route('console.agents.connect', $agent), 'active' => request()->routeIs('console.agents.connect')],
                         ];
                     @endphp

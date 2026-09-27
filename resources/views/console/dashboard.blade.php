@@ -201,7 +201,7 @@
                                     {{ $agent->files_max_updated_at ? \Illuminate\Support\Carbon::parse($agent->files_max_updated_at)->diffForHumans(short: true) : '—' }}
                                 </td>
                                 <td class="py-2 text-right">
-                                    <a href="{{ route('console.files.show', $agent) }}" class="text-amber underline decoration-border underline-offset-4">open</a>
+                                    <a href="{{ route('console.agents.show', $agent) }}" class="text-amber underline decoration-border underline-offset-4">open</a>
                                 </td>
                             </tr>
                         @endforeach
