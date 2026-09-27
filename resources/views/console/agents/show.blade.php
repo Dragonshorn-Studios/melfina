@@ -115,6 +115,9 @@
             @error('scopes')
                 <p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p>
             @enderror
+            @foreach ($errors->get('scopes.*') as $scopeErrors)
+                <p class="mt-1 font-mono text-xs text-danger">{{ $scopeErrors[0] }}</p>
+            @endforeach
         </div>
 
         <div class="mt-8 flex items-center gap-3">

@@ -6,6 +6,7 @@ use App\Models\Agent;
 use App\Models\AgentApiKey;
 use App\Models\User;
 use Symfony\Component\Process\Process;
+use Symfony\Component\Yaml\Yaml;
 
 beforeEach(function () {
     $this->owner = User::factory()->owner()->create();
@@ -176,6 +177,25 @@ it('ships a generated skill per tool plus the manifest in the public package', f
     $minimax = json_decode($files['.minimax-plugin/plugin.json'], true);
     foreach (collect($tools)->map(fn ($t) => 'skills/melfina-'.str_replace('_', '-', $t['name']).'/SKILL.md') as $path) {
         expect($minimax['skills'])->toContain($path);
+    }
+});
+
+it('generates parseable YAML frontmatter on every skill', function () {
+    $files = app(PluginRepo::class)->publicPackageFiles();
+
+    // Tool descriptions contain ': ' — a raw `description:` line is
+    // invalid YAML on strict loaders, so the value is a quoted scalar.
+    foreach ($files as $path => $contents) {
+        if (preg_match('#^skills/melfina-.+/SKILL\.md$#', $path)) {
+            preg_match('/\A---\n(.*?)\n---\n/s', $contents, $m);
+
+            $parsed = Yaml::parse($m[1] ?? '');
+
+            expect($parsed, $path)->toBeArray()
+                ->and($parsed['name'])->toStartWith('melfina-')
+                ->and($parsed['description'])->toBeString()
+                ->toContain('HTTP fallback');
+        }
     }
 });
 

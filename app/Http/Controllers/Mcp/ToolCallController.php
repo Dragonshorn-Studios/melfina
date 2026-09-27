@@ -43,6 +43,7 @@ class ToolCallController extends Controller
                 'name' => $tool['name'],
                 'description' => $tool['description'],
                 'inputSchema' => $tool['inputSchema'],
+                'outputSchema' => $tool['outputSchema'],
                 'scope' => $tool['scope'],
             ])->all(),
         ]);

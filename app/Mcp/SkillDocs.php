@@ -114,6 +114,7 @@ MD;
                 'endpoint' => $base.'/api/tools/'.$tool['name'],
                 'scope' => $tool['scope'],
                 'inputSchema' => $tool['inputSchema'],
+                'outputSchema' => $tool['outputSchema'],
                 'skill' => 'skills/'.self::skillName($tool['name']).'/SKILL.md',
             ])->all(),
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n";
@@ -131,10 +132,24 @@ MD;
 
         $name = self::skillName($tool['name']);
 
+        // Descriptions contain `: ` (e.g. "Internal nouns first: …") —
+        // a JSON-encoded string is a valid YAML double-quoted scalar, so
+        // the frontmatter parses on strict loaders either way.
+        $description = json_encode(
+            $tool['description'].' (HTTP fallback for the `'.$tool['name'].'` Melfina MCP tool.)',
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+        );
+
+        $outSchema = $tool['outputSchema'];
+        $resultSchema = $outSchema === null
+            ? ''
+            : "\n`result` matches the tool's declared output schema:\n\n```json\n"
+                .json_encode($outSchema, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n```\n";
+
         return <<<MD
 ---
 name: {$name}
-description: {$tool['description']} (HTTP fallback for the `{$tool['name']}` Melfina MCP tool.)
+description: {$description}
 ---
 
 If the Melfina MCP server is available, use the corresponding MCP tool instead of this skill. Use this skill only as an HTTP fallback when MCP is unavailable.
@@ -199,7 +214,7 @@ Errors return `{"ok": false, "error": "…"}` with a non-2xx status:
 - `400` — a tool-level error — the failure the MCP tool would return as
   `isError` (for example a not-found file or a rate limit), as the
   `error` string.
-MD."\n";
+MD.$resultSchema."\n";
     }
 
     private static function skillName(string $tool): string
