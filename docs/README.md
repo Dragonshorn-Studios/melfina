@@ -46,5 +46,6 @@ Owner auth, agent CRUD, VFS, MCP, Shared ACL, and that chrome are implemented �
 | [market.md](market.md) | Positioning, locked Liter copy, discovery |
 | [theme/](theme/README.md) | Token swatch for the locked palette |
 | [delivery-webhooks.md](delivery-webhooks.md) | Receiver contract for the signed delivery webhook |
+| [knowledge-graph.md](knowledge-graph.md) | **Proposal** — rework the shared knowledge base into a typed world graph (entities, links, observations, confidence). Not locked; do not implement until accepted. |
 
 Product name **Imp** stays as-is. **ImpPost** is retired as a product boundary — it survives only as an optional label for the owner messages screen.
