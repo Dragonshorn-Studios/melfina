@@ -1,6 +1,8 @@
-# Knowledge graph — proposal
+# Knowledge graph
 
-**Status:** proposal. Not locked. Do not implement against this until the owner accepts it. When accepted, `shape.md` gains a fourth collaboration primitive (canonical world graph) and this file becomes the contract.
+**Status:** implemented (typed links, observations, confidence, and person identity). This file is the contract. Parts of the original proposal that were never built (dropping the `related` column, recursive SQL CTEs, auto-rejecting `related` on upsert) stay out of scope — `related` remains a compatibility projection dual-written as `related_to` edges.
+
+Person identity (canonical people, global names, per-imp contextual titles, operator binding) is implemented as described in [Person identity](#person-identity) below. Do not treat every earlier proposal paragraph as a live guarantee.
 
 The shared knowledge base today is a wiki of named entries with an untyped `related` name list. Agents cannot connect the dots. This rework turns that base into a **knowledge graph**: typed entities, typed links with meaning, an append-only event log for every assertion, and **confidence** that rises when independent agents re-assert the same point or the owner states it directly.
 
@@ -346,10 +348,74 @@ Do not implement owner auth, agents CRUD, VFS, MCP plumbing, Shared ACL, or chro
 - Auto-extracting entities from VFS / mail / shared files
 - Per-agent private graphs (the private brain is still files)
 - Free-text predicates, RDF, user-defined types
-- Entity merge UI, temporal "valid at" intervals beyond `occurred_at` on an observation
-- Force-directed / constellation visualization
+- General-purpose entity merge UI beyond owner-approved duplicate redirects
+- Temporal "valid at" intervals beyond `occurred_at` on an observation
+- Force-directed / constellation visualization (a console constellation view exists)
 - Confidence decay over time (revisit if stale edges become a problem)
 - Broadcasting graph changes over mail ping
+- Parsing instruction text to decide a form of address
+- Treating `Agent.persona` as a human operator persona
+
+## Person identity
+
+One installation operator is one person: a canonical `knowledge_entries` row with `type=person`. Operator is a **binding** (`users.operator_entry_id`), not a second person named Operator.
+
+Four independent concerns:
+
+| Concern | Store | Example |
+| --- | --- | --- |
+| Canonical person | `knowledge_entries` (`type=person`) | Rughalt |
+| Global names | `knowledge_identifiers` (`alias`, `handle`, `persona`) | Runako is a persona name of Rughalt |
+| Contextual titles | `agent_entity_references` unique per `(agent_id, normalized_value)` | Szefowa for one imp |
+| Addressing preference | `agent_addressing_preferences` | fallback form; never an instruction |
+
+JSON `aliases` remains a compatibility projection of `kind=alias` identifiers, updated in the same write. Scoped titles never become global aliases. `operator_persona` text is unchanged presentation copy and is not parsed into structured identity.
+
+### Resolution
+
+`KnowledgeIdentityResolver` is the only resolver. Context is the middleware-resolved agent (plus optional trusted author agent from authorized message history). It does not read `agent_id` from tool arguments.
+
+Order of match *methods* when they agree on one canonical id:
+
+1. Stable `entry_id`
+2. Reserved operator role (`query=operator` or `ref=operator`)
+3. This agent's contextual reference
+4. Trusted author agent's contextual reference
+5. Canonical name and global identifiers (JSON aliases as a legacy fallback)
+
+If those layers point at **different** people, the result is `ambiguous_reference` — never `first()`. Ambiguity does not create stubs and does not suggest internet search. Redirects from duplicate ids are followed; cycles are `inconsistent_identity`.
+
+`KnowledgeEntry::lookup()` stays a global compatibility wrapper and must not pull the current agent from request state.
+
+### Tools
+
+- `knowledge_lookup` returns additive `entry_id` and `resolution` (`matched_by`, `scope`). `name` stays the canonical name.
+- `knowledge_upsert` treats `entry` as a target reference, not a rename. Optional `entry_id` must agree. `expected_version` is a SQLite compare-and-swap (conditional update + affected-row count).
+- `knowledge_search` includes this agent's titles, ranks an exact title hit first, dedupes by canonical id, and never lists another agent's titles.
+- `knowledge_connect` accepts optional `from_id` / `to_id`. Ambiguous endpoints with `create_missing` create nothing. Failed connects roll back stub entities.
+
+### Owner configuration (not hardcoded)
+
+```
+php artisan knowledge:bind-operator Rughalt
+php artisan knowledge:add-identifier Rughalt Runako --kind=persona
+php artisan knowledge:bind-reference Rughalt Szefowa --agent=grokbot
+php artisan knowledge:backfill-identifiers
+php artisan knowledge:audit-identities
+php artisan knowledge:repair-duplicates path/to/manifest.json
+```
+
+Repair is dry-run by default (`--execute` to apply). Manifest shape: `{ "canonical_id": 1, "source_ids": [2], "rebind_operator": false }`. Redirects cannot cycle. History stays on the old ids; graph reads expose canonical endpoints and dedupe logical edges without inflating confidence.
+
+### Rollback
+
+Keep the new tables. Do not `migrate:rollback` after identity data is in use. Turning the resolver off while old writers still create rows by canonical name will recreate duplicates — pause writes, restore a backup taken before cutover, or leave the resolver on.
+
+### Harness
+
+No harness change is required for the basic path: existing middleware resolves the agent, the resolver uses stored references, and the imp keeps the instruction “Always address user as Szefowa” unchanged. MCP and HTTP share `ToolCatalog`. `melfina-call.mjs` must not grow identity logic.
+
+If a harness is later extended, it may pass the existing agent identity and a trusted structured operator id. It must not parse instruction text, replace names in prose, inject preferences as overriding instructions, or equate every “user” with the installation operator in a multi-person setup. Caches must be keyed by agent. Cross-agent mail remains transport — structured references should carry `entry_id`.
 
 ## Copy
 

@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -21,10 +22,11 @@ use Laravel\Passport\HasApiTokens;
  * @property string|null $github_token (encrypted at rest)
  * @property string|null $github_repo
  * @property string|null $operator_persona
+ * @property int|null $operator_entry_id
  * @property string|null $webhook_url
  * @property string|null $webhook_secret (encrypted at rest; needed verbatim to sign)
  */
-#[Fillable(['name', 'email', 'password', 'is_owner', 'mcp_key_hash', 'mcp_key_issued_at', 'mcp_redirect_domains', 'operator_persona', 'webhook_url'])]
+#[Fillable(['name', 'email', 'password', 'is_owner', 'mcp_key_hash', 'mcp_key_issued_at', 'mcp_redirect_domains', 'operator_persona', 'operator_entry_id', 'webhook_url'])]
 #[Hidden(['password', 'remember_token', 'mcp_key_hash', 'github_token', 'webhook_secret'])]
 class User extends Authenticatable implements OAuthenticatable
 {
@@ -124,6 +126,11 @@ class User extends Authenticatable implements OAuthenticatable
      *
      * @return HasMany<McpFleetKey, $this>
      */
+    public function operatorEntry(): BelongsTo
+    {
+        return $this->belongsTo(KnowledgeEntry::class, 'operator_entry_id');
+    }
+
     public function mcpFleetKeys(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(McpFleetKey::class);

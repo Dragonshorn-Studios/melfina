@@ -7,6 +7,7 @@ use App\Models\KnowledgeAuthorKind;
 use App\Models\KnowledgeObservationKind;
 use App\Models\KnowledgePredicate;
 use App\Services\KnowledgeGraph;
+use App\Services\KnowledgeIdentityContext;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Carbon;
@@ -31,6 +32,8 @@ class KnowledgeConnect extends Tool
         $request->validate([
             'from' => 'required|string|max:200',
             'to' => 'required|string|max:200',
+            'from_id' => 'nullable|integer|min:1',
+            'to_id' => 'nullable|integer|min:1',
             'predicate' => ['required', 'string', Rule::in(KnowledgePredicate::values())],
             'op' => 'nullable|string|in:assert,retract',
             'note' => 'nullable|string|max:500',
@@ -74,6 +77,9 @@ class KnowledgeConnect extends Tool
             occurredAt: $occurred,
             createMissing: $request->boolean('create_missing'),
             eventName: $request->filled('event') ? $request->string('event')->toString() : null,
+            identity: KnowledgeIdentityContext::forAgent($agent),
+            fromId: $request->filled('from_id') ? $request->integer('from_id') : null,
+            toId: $request->filled('to_id') ? $request->integer('to_id') : null,
         );
 
         if (! $result->ok) {
@@ -81,7 +87,13 @@ class KnowledgeConnect extends Tool
                 'updated' => false,
                 'error' => $result->error ?? 'Could not write the link.',
             ];
-            if ($result->unresolved !== null) {
+            if ($result->code !== null) {
+                $payload['code'] = $result->code;
+            }
+            if ($result->ambiguous !== null) {
+                $payload['ambiguous'] = $result->ambiguous;
+                $payload['hint'] = $result->error ?? 'Multiple internal entities match that name. Pass from_id/to_id to disambiguate.';
+            } elseif ($result->unresolved !== null) {
                 $payload['unresolved'] = $result->unresolved;
                 $payload['hint'] = 'No internal entity matches that name. Create it with knowledge_upsert, pass create_missing, or check the spelling.';
             }
@@ -95,7 +107,9 @@ class KnowledgeConnect extends Tool
             'updated' => true,
             'created' => $result->created,
             'from' => $link->fromEntry->name,
+            'from_id' => $link->from_entry_id,
             'to' => $link->toEntry->name,
+            'to_id' => $link->to_entry_id,
             'predicate' => $link->predicate->value,
             'status' => $link->status->value,
             'confidence' => $link->confidence,
@@ -111,8 +125,10 @@ class KnowledgeConnect extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'from' => $schema->string()->description('Canonical name or alias of the source entity.')->required(),
-            'to' => $schema->string()->description('Canonical name or alias of the target entity.')->required(),
+            'from' => $schema->string()->description('Canonical name, alias, persona name, or this agent\'s contextual title of the source entity.')->required(),
+            'to' => $schema->string()->description('Canonical name, alias, persona name, or this agent\'s contextual title of the target entity.')->required(),
+            'from_id' => $schema->integer()->description('Stable source entity id. When supplied with from, both must name the same canonical entity.'),
+            'to_id' => $schema->integer()->description('Stable target entity id. When supplied with to, both must name the same canonical entity.'),
             'predicate' => $schema->string()->enum(KnowledgePredicate::values())->description('Typed meaning of the link. Inverse names (hosts, owns, …) are stored as the canonical opposite with ends swapped.')->required(),
             'op' => $schema->string()->enum(['assert', 'retract'])->description('assert (default) strengthens the link; retract records a disagreement. Permanent links reject agent retracts.'),
             'note' => $schema->string()->description('One-line why this connection exists.'),

@@ -159,6 +159,29 @@
                     class="mt-2 border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
                     style="border-radius: var(--radius-console)">save persona</button>
             </form>
+
+            <p class="mt-6 font-mono text-xs tracking-[0.16em] text-steel">OPERATOR PERSON</p>
+            <p class="mt-1 text-sm text-steel">
+                Canonical <code>person</code> in the knowledge graph this install's operator is.
+                Separate from the persona text above — titles like a private form of address
+                are bound per imp, not here.
+            </p>
+            <form method="POST" action="{{ route('console.mcp.operator-binding.store') }}" class="mt-3">
+                @csrf
+                @method('PUT')
+                <input type="text" name="operator_entry"
+                    value="{{ old('operator_entry', $operatorEntry?->name) }}"
+                    placeholder="person name or entry id"
+                    class="w-full border border-border bg-void/60 px-3 py-2 font-mono text-xs text-cream placeholder:text-steel/60"
+                    style="border-radius: var(--radius-console)">
+                @error('operator_entry') <p class="mt-1 font-mono text-xs text-red-400">{{ $message }}</p> @enderror
+                @if ($operatorEntry)
+                    <p class="mt-1 font-mono text-xs text-steel">currently {{ $operatorEntry->name }} (id {{ $operatorEntry->id }})</p>
+                @endif
+                <button type="submit"
+                    class="mt-2 border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                    style="border-radius: var(--radius-console)">save operator person</button>
+            </form>
         </section>
 
         <section class="mt-8 flex items-center gap-6 border-t border-border pt-4 font-mono text-xs">

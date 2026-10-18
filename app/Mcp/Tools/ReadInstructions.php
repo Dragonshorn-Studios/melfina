@@ -4,7 +4,9 @@ namespace App\Mcp\Tools;
 
 use App\Mcp\Concerns\ResolvesAgent;
 use App\Models\Agent;
+use App\Models\KnowledgeIdentityStatus;
 use App\Models\User;
+use App\Services\KnowledgeIdentityResolver;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Laravel\Mcp\Request;
@@ -32,7 +34,7 @@ class ReadInstructions extends Tool
      * with the console preview so the owner sees the same thing the imp
      * does.
      *
-     * @return array{content: string, layers: array<int, string>, operator: string, persona_hint: string}
+     * @return array{content: string, layers: array<int, string>, operator: string, persona_hint: string, identity_context: array{operator_entry_id: int|null}}
      */
     public static function payload(Agent $agent): array
     {
@@ -42,11 +44,19 @@ class ReadInstructions extends Tool
         // always know who the human behind the console is.
         $operator = User::operatorPersona();
 
+        $binding = app(KnowledgeIdentityResolver::class)->operatorBinding();
+        $operatorEntryId = $binding['status'] === KnowledgeIdentityStatus::Resolved
+            ? $binding['entry']?->id
+            : null;
+
         return [
             'content' => $instruction?->content ?? '',
             'layers' => $instruction?->layersList() ?? [],
             'operator' => $operator ?? '',
             'persona_hint' => 'Your persona and memories live in your brain — read them with read_persona, maintain them with update_persona.',
+            'identity_context' => [
+                'operator_entry_id' => $operatorEntryId,
+            ],
         ];
     }
 

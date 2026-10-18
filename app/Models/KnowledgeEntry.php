@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Services\KnowledgeIdentityResolver;
 use Database\Factories\KnowledgeEntryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -75,41 +77,29 @@ class KnowledgeEntry extends Model
         return $this->hasMany(KnowledgeObservation::class, 'entry_id');
     }
 
+    public function identifiers(): HasMany
+    {
+        return $this->hasMany(KnowledgeIdentifier::class, 'entry_id');
+    }
+
+    public function entityReferences(): HasMany
+    {
+        return $this->hasMany(AgentEntityReference::class, 'entry_id');
+    }
+
+    public function redirect(): HasOne
+    {
+        return $this->hasOne(KnowledgeEntryRedirect::class, 'from_entry_id');
+    }
+
     /**
-     * Cheap deterministic lookup: exact canonical name first, then
-     * case-insensitive, then aliases (exact, then case-insensitive).
-     * Returns null when nothing internal answers the name.
+     * Global-only compatibility wrapper. Agent-facing tools must pass
+     * explicit context to {@see KnowledgeIdentityResolver} instead of
+     * reading the current agent from request state here.
      */
     public static function lookup(string $name): ?self
     {
-        $name = trim($name);
-
-        if ($name === '') {
-            return null;
-        }
-
-        $exact = static::query()->where('name', $name)->first();
-
-        if ($exact !== null) {
-            return $exact;
-        }
-
-        $lower = Str::lower($name);
-
-        $ci = static::query()->where('name_lower', $lower)->first();
-
-        if ($ci !== null) {
-            return $ci;
-        }
-
-        // Aliases live in a JSON column — LIKE narrows to candidate rows
-        // (an unescaped %/_ in the needle can only over-match, never miss),
-        // and the PHP pass does the actual case-insensitive compare.
-        return static::query()
-            ->where('aliases', 'like', '%'.$name.'%')
-            ->get()
-            ->first(fn (self $entry) => collect($entry->aliases)
-                ->contains(fn (string $alias) => Str::lower($alias) === $lower));
+        return app(KnowledgeIdentityResolver::class)->lookupGlobal($name);
     }
 
     /**
@@ -139,7 +129,7 @@ class KnowledgeEntry extends Model
      * that no longer match an entry are reported under 'unresolved' so a
      * stale link is visible instead of silently dropped.
      *
-     * @return array{entries: Collection<int, array{name: string, summary: string}>, unresolved: array<int, string>}
+     * @return array{entries: Collection<int, array{entry_id?: int, name: string, summary: string}>, unresolved: array<int, string>}
      */
     public function resolvedRelated(): array
     {
@@ -148,6 +138,7 @@ class KnowledgeEntry extends Model
             ->with('toEntry')
             ->get()
             ->map(fn (KnowledgeLink $link) => [
+                'entry_id' => $link->toEntry->id,
                 'name' => $link->toEntry->name,
                 'summary' => $link->toEntry->summary,
             ]);
@@ -157,6 +148,7 @@ class KnowledgeEntry extends Model
             ->with('fromEntry')
             ->get()
             ->map(fn (KnowledgeLink $link) => [
+                'entry_id' => $link->fromEntry->id,
                 'name' => $link->fromEntry->name,
                 'summary' => $link->fromEntry->summary,
             ]);
@@ -185,6 +177,7 @@ class KnowledgeEntry extends Model
         return [
             'entries' => $fromGraph
                 ->concat($found->map(fn (self $entry) => [
+                    'entry_id' => $entry->id,
                     'name' => $entry->name,
                     'summary' => $entry->summary,
                 ]))

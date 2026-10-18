@@ -12,7 +12,11 @@ use App\Mcp\Tools\ReadPersona;
 use App\Models\Agent;
 use App\Models\AgentApiKey;
 use App\Models\AgentEnrollment;
+use App\Models\AgentEntityReference;
+use App\Models\AgentEntityReferenceKind;
+use App\Models\KnowledgeEntry;
 use App\Rules\UnreservedAgentName;
+use App\Services\KnowledgeIdentityAdmin;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -84,6 +88,10 @@ class AgentController extends Controller
             'agent' => $agent,
             'apiKeys' => $agent->apiKeys()->whereNull('revoked_at')->latest()->get(),
             'apiScopes' => $catalog->scopeChoices(),
+            'entityReferences' => $agent->entityReferences()->with('entry')->orderBy('normalized_value')->get(),
+            'addressingPreferences' => $agent->addressingPreferences()->with('person')->orderBy('id')->get(),
+            'people' => KnowledgeEntry::query()->where('type', 'person')->orderBy('name_lower')->get(['id', 'name']),
+            'referenceKinds' => AgentEntityReferenceKind::values(),
         ]);
     }
 
@@ -117,6 +125,58 @@ class AgentController extends Controller
         $agentApiKey->revoke();
 
         return redirect()->route('console.agents.show', $agent);
+    }
+
+    public function storeReference(Request $request, Agent $agent, KnowledgeIdentityAdmin $admin): RedirectResponse
+    {
+        $this->authorize('update', $agent);
+
+        $validated = $request->validate([
+            'value' => ['required', 'string', 'max:200'],
+            'entry_id' => ['required', 'integer', 'exists:knowledge_entries,id'],
+            'kind' => ['required', 'string', Rule::in(AgentEntityReferenceKind::values())],
+        ]);
+
+        $entry = KnowledgeEntry::query()->findOrFail($validated['entry_id']);
+        $admin->bindReference(
+            [$agent],
+            $entry,
+            $validated['value'],
+            AgentEntityReferenceKind::from($validated['kind']),
+        );
+
+        return redirect()->route('console.agents.show', $agent)->with('status', 'Contextual reference saved.');
+    }
+
+    public function destroyReference(Agent $agent, AgentEntityReference $reference): RedirectResponse
+    {
+        $this->authorize('update', $agent);
+        abort_unless($reference->agent_id === $agent->id, 404);
+
+        $reference->delete();
+
+        return redirect()->route('console.agents.show', $agent)->with('status', 'Contextual reference removed.');
+    }
+
+    public function storeAddressingPreference(Request $request, Agent $agent, KnowledgeIdentityAdmin $admin): RedirectResponse
+    {
+        $this->authorize('update', $agent);
+
+        $validated = $request->validate([
+            'person_entry_id' => ['required', 'integer', 'exists:knowledge_entries,id'],
+            'form' => ['required', 'string', 'max:200'],
+            'context' => ['nullable', 'string', 'max:80'],
+        ]);
+
+        $person = KnowledgeEntry::query()->findOrFail($validated['person_entry_id']);
+        $admin->setAddressingPreference(
+            $agent,
+            $person,
+            $validated['form'],
+            $validated['context'] ?: 'default',
+        );
+
+        return redirect()->route('console.agents.show', $agent)->with('status', 'Addressing preference stored. It is not an instruction.');
     }
 
     /**

@@ -64,6 +64,16 @@ class Agent extends Model
         return $this->hasMany(AgentEnrollment::class);
     }
 
+    public function entityReferences(): HasMany
+    {
+        return $this->hasMany(AgentEntityReference::class);
+    }
+
+    public function addressingPreferences(): HasMany
+    {
+        return $this->hasMany(AgentAddressingPreference::class);
+    }
+
     public function isActive(): bool
     {
         return $this->status === self::STATUS_ACTIVE;
