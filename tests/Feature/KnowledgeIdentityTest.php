@@ -341,6 +341,7 @@ it('projects a new alias identifier onto JSON so the next owner save keeps it', 
 it('lets the owner remove an identifier from the operator person', function () {
     $person = bindRughaltWorld($this->agent);
     $alias = app(KnowledgeIdentityAdmin::class)->addIdentifier($person, 'Rug', KnowledgeIdentifierKind::Alias);
+    $this->owner->refresh();
 
     $this->actingAs($this->owner)
         ->get(route('console.dashboard'))
