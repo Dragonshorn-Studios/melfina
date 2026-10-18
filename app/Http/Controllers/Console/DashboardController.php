@@ -18,6 +18,7 @@ class DashboardController extends Controller
             'fleetKeys' => $request->user()->mcpFleetKeys()->latest()->get(),
             'enrollKeys' => $request->user()->agentEnrollKeys()->latest()->get(),
             'operatorPersona' => $request->user()->operator_persona,
+            'operatorEntry' => $request->user()->operatorEntry,
             'stats' => [
                 'agents' => Agent::count(),
                 'active' => Agent::where('status', Agent::STATUS_ACTIVE)->count(),

@@ -4,14 +4,17 @@ namespace App\Services;
 
 use App\Models\KnowledgeAuthorKind;
 use App\Models\KnowledgeEntry;
+use App\Models\KnowledgeEntryRedirect;
+use App\Models\KnowledgeIdentityStatus;
 use App\Models\KnowledgeLink;
 use App\Models\KnowledgeLinkStatus;
 use App\Models\KnowledgeObservation;
 use App\Models\KnowledgeObservationKind;
 use App\Models\KnowledgePredicate;
+use App\Support\KnowledgeName;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 /**
  * Install-wide world graph: typed links between canonical knowledge
@@ -35,6 +38,8 @@ class KnowledgeGraph
 
     public const CONFIDENCE_MAX = 990;
 
+    public function __construct(private KnowledgeIdentityResolver $resolver) {}
+
     /**
      * Assert or retract a typed link. Missing endpoints do not auto-create
      * unless `$createMissing` is true — typos must not spawn nodes.
@@ -54,114 +59,119 @@ class KnowledgeGraph
         ?Carbon $occurredAt = null,
         bool $createMissing = false,
         ?string $eventName = null,
+        ?KnowledgeIdentityContext $identity = null,
+        ?int $fromId = null,
+        ?int $toId = null,
     ): KnowledgeConnectResult {
         if ($op !== KnowledgeObservationKind::LinkAssert && $op !== KnowledgeObservationKind::LinkRetract) {
             return new KnowledgeConnectResult(ok: false, error: 'op must be link_assert or link_retract.');
         }
 
-        $fromEntry = $this->resolveEndpoint($from, $createMissing, $author);
-        $toEntry = $this->resolveEndpoint($to, $createMissing, $author);
+        $identity ??= KnowledgeIdentityContext::global();
 
-        $unresolved = [];
-        if ($fromEntry === null) {
-            $unresolved['from'] = $from;
-        }
-        if ($toEntry === null) {
-            $unresolved['to'] = $to;
-        }
-        if ($unresolved !== []) {
-            return new KnowledgeConnectResult(ok: false, unresolved: $unresolved);
-        }
-
-        if ($fromEntry->is($toEntry)) {
-            return new KnowledgeConnectResult(ok: false, error: 'A link cannot point an entity at itself.');
-        }
-
-        if ($predicate->swapsEndpoints()) {
-            [$fromEntry, $toEntry] = [$toEntry, $fromEntry];
-        }
-        $stored = $predicate->stored();
-
-        return DB::transaction(function () use (
-            $author,
-            $authorKind,
-            $fromEntry,
-            $toEntry,
-            $stored,
-            $op,
-            $note,
-            $data,
-            $source,
-            $occurredAt,
-            $eventName,
-        ): KnowledgeConnectResult {
-            $link = KnowledgeLink::query()->firstOrNew([
-                'from_entry_id' => $fromEntry->id,
-                'to_entry_id' => $toEntry->id,
-                'predicate' => $stored,
-            ]);
-
-            $created = ! $link->exists;
-
-            if ($op === KnowledgeObservationKind::LinkRetract && $created) {
-                return new KnowledgeConnectResult(
-                    ok: false,
-                    error: 'No such link to retract.',
-                );
-            }
-
-            if ($op === KnowledgeObservationKind::LinkRetract
-                && $link->permanent
-                && $authorKind === KnowledgeAuthorKind::Agent) {
-                return new KnowledgeConnectResult(
-                    ok: false,
-                    link: $link,
-                    error: 'This link is permanent — only the owner can retract it.',
-                );
-            }
-
-            if ($created) {
-                $link->status = KnowledgeLinkStatus::Active;
-                $link->confidence = 0;
-                $link->observation_count = 0;
-                $link->disputed = false;
-                $link->permanent = false;
-                $link->first_seen_at = now();
-                $link->last_seen_at = now();
-                $link->save();
-            }
-
-            $observation = $this->recordObservation(
-                $link,
-                $fromEntry,
-                $op,
+        try {
+            return DB::transaction(function () use (
                 $author,
                 $authorKind,
-                [
-                    'from' => $fromEntry->name,
-                    'to' => $toEntry->name,
-                    'predicate' => $stored->value,
-                    'note' => $note,
-                    'data' => $data ?? [],
-                    'event' => $eventName,
-                ],
+                $from,
+                $to,
+                $predicate,
+                $op,
+                $note,
+                $data,
                 $source,
                 $occurredAt,
-            );
+                $createMissing,
+                $eventName,
+                $identity,
+                $fromId,
+                $toId,
+            ): KnowledgeConnectResult {
+                $fromEntry = $this->requireEndpoint($from, $fromId, $createMissing, $author, $identity, 'from');
+                $toEntry = $this->requireEndpoint($to, $toId, $createMissing, $author, $identity, 'to');
 
-            $this->recompute($link);
+                if ($fromEntry->is($toEntry)) {
+                    throw new KnowledgeConnectAborted(new KnowledgeConnectResult(ok: false, error: 'A link cannot point an entity at itself.'));
+                }
 
-            if ($eventName !== null && $eventName !== '' && $op === KnowledgeObservationKind::LinkAssert) {
-                $this->attachNamedEvent($eventName, $fromEntry, $toEntry, $author, $authorKind, $source, $occurredAt);
-            }
+                if ($predicate->swapsEndpoints()) {
+                    [$fromEntry, $toEntry] = [$toEntry, $fromEntry];
+                }
+                $stored = $predicate->stored();
 
-            return new KnowledgeConnectResult(
-                ok: true,
-                link: $link->fresh(['fromEntry', 'toEntry']),
-                observation: $observation,
-                created: $created,
-            );
-        });
+                $link = KnowledgeLink::query()->firstOrNew([
+                    'from_entry_id' => $fromEntry->id,
+                    'to_entry_id' => $toEntry->id,
+                    'predicate' => $stored,
+                ]);
+
+                $created = ! $link->exists;
+
+                if ($op === KnowledgeObservationKind::LinkRetract && $created) {
+                    throw new KnowledgeConnectAborted(new KnowledgeConnectResult(
+                        ok: false,
+                        error: 'No such link to retract.',
+                    ));
+                }
+
+                if ($op === KnowledgeObservationKind::LinkRetract
+                    && $link->permanent
+                    && $authorKind === KnowledgeAuthorKind::Agent) {
+                    throw new KnowledgeConnectAborted(new KnowledgeConnectResult(
+                        ok: false,
+                        link: $link,
+                        error: 'This link is permanent — only the owner can retract it.',
+                    ));
+                }
+
+                if ($created) {
+                    $link->status = KnowledgeLinkStatus::Active;
+                    $link->confidence = 0;
+                    $link->observation_count = 0;
+                    $link->disputed = false;
+                    $link->permanent = false;
+                    $link->first_seen_at = now();
+                    $link->last_seen_at = now();
+                    $link->save();
+                }
+
+                $observation = $this->recordObservation(
+                    $link,
+                    $fromEntry,
+                    $op,
+                    $author,
+                    $authorKind,
+                    [
+                        'from' => $fromEntry->name,
+                        'to' => $toEntry->name,
+                        'predicate' => $stored->value,
+                        'note' => $note,
+                        'data' => $data ?? [],
+                        'event' => $eventName,
+                    ],
+                    $source,
+                    $occurredAt,
+                );
+
+                $this->recompute($link);
+
+                if ($eventName !== null && $eventName !== '' && $op === KnowledgeObservationKind::LinkAssert) {
+                    $eventResult = $this->attachNamedEvent($eventName, $fromEntry, $toEntry, $author, $authorKind, $source, $occurredAt, $identity);
+                    if (! $eventResult->ok) {
+                        throw new KnowledgeConnectAborted($eventResult);
+                    }
+                }
+
+                return new KnowledgeConnectResult(
+                    ok: true,
+                    link: $link->fresh(['fromEntry', 'toEntry']),
+                    observation: $observation,
+                    created: $created,
+                );
+            });
+        } catch (KnowledgeConnectAborted $e) {
+            return $e->result;
+        }
     }
 
     /**
@@ -252,27 +262,27 @@ class KnowledgeGraph
      */
     public function neighborhood(KnowledgeEntry $entry, int $minConfidence = 0, bool $includeRetracted = false): array
     {
+        $ids = $this->equivalentIds($entry);
+        $canonical = $this->resolver->canonicalEntry($entry) ?? $entry;
+
         $outgoing = KnowledgeLink::query()
-            ->with('toEntry')
-            ->where('from_entry_id', $entry->id)
+            ->with(['toEntry', 'fromEntry'])
+            ->whereIn('from_entry_id', $ids)
             ->when(! $includeRetracted, fn ($q) => $q->where('status', KnowledgeLinkStatus::Active))
             ->where('confidence', '>=', $minConfidence)
-            ->get()
-            ->map(fn (KnowledgeLink $link) => $this->serializeHop($link, outgoing: true))
-            ->values()
-            ->all();
+            ->get();
 
         $incoming = KnowledgeLink::query()
-            ->with('fromEntry')
-            ->where('to_entry_id', $entry->id)
+            ->with(['toEntry', 'fromEntry'])
+            ->whereIn('to_entry_id', $ids)
             ->when(! $includeRetracted, fn ($q) => $q->where('status', KnowledgeLinkStatus::Active))
             ->where('confidence', '>=', $minConfidence)
-            ->get()
-            ->map(fn (KnowledgeLink $link) => $this->serializeHop($link, outgoing: false))
-            ->values()
-            ->all();
+            ->get();
 
-        return ['outgoing' => $outgoing, 'incoming' => $incoming];
+        return [
+            'outgoing' => $this->dedupeHops($outgoing, outgoing: true, selfId: $canonical->id, minConfidence: $minConfidence),
+            'incoming' => $this->dedupeHops($incoming, outgoing: false, selfId: $canonical->id, minConfidence: $minConfidence),
+        ];
     }
 
     /**
@@ -284,9 +294,11 @@ class KnowledgeGraph
     public function walk(KnowledgeEntry $entry, int $hops = 2, int $minConfidence = 0, int $nodeCap = 25): array
     {
         $hops = max(1, min(2, $hops));
-        $seen = [$entry->id => true];
-        $frontier = [$entry->id];
+        $canonical = $this->resolver->canonicalEntry($entry) ?? $entry;
+        $seen = [$canonical->id => true];
+        $frontier = $this->equivalentIds($canonical);
         $edges = [];
+        $seenEdges = [];
 
         for ($depth = 1; $depth <= $hops; $depth++) {
             $next = [];
@@ -304,11 +316,22 @@ class KnowledgeGraph
             foreach ($links as $link) {
                 $fromId = $link->from_entry_id;
                 $toId = $link->to_entry_id;
-                $peerId = in_array($fromId, $frontier, true) ? $toId : $fromId;
+
+                $from = $this->resolver->canonicalEntry($link->fromEntry) ?? $link->fromEntry;
+                $to = $this->resolver->canonicalEntry($link->toEntry) ?? $link->toEntry;
+                $peerId = in_array($fromId, $frontier, true) ? $to->id : $from->id;
+
+                $edgeKey = $from->id.'|'.$to->id.'|'.$link->predicate->value.'|'.$depth;
+                if (isset($seenEdges[$edgeKey]) || $from->id === $to->id) {
+                    continue;
+                }
+                $seenEdges[$edgeKey] = true;
 
                 $edges[] = [
-                    'from' => $link->fromEntry->name,
-                    'to' => $link->toEntry->name,
+                    'from' => $from->name,
+                    'from_id' => $from->id,
+                    'to' => $to->name,
+                    'to_id' => $to->id,
                     'predicate' => $link->predicate->value,
                     'confidence' => $link->confidence,
                     'permanent' => $link->permanent,
@@ -317,7 +340,7 @@ class KnowledgeGraph
 
                 if (! isset($seen[$peerId])) {
                     $seen[$peerId] = true;
-                    $next[] = $peerId;
+                    $next = array_merge($next, $this->equivalentIdsById($peerId));
                 }
 
                 if (count($seen) >= $nodeCap) {
@@ -341,24 +364,42 @@ class KnowledgeGraph
      */
     public function constellation(?int $focusId = null, int $hops = 2, int $limit = 250): array
     {
-        $entries = KnowledgeEntry::query()->orderBy('name_lower')->get();
+        $redirectSources = KnowledgeEntryRedirect::query()->pluck('from_entry_id')->all();
+        $entries = KnowledgeEntry::query()
+            ->whereNotIn('id', $redirectSources ?: [0])
+            ->orderBy('name_lower')
+            ->get();
         $links = KnowledgeLink::query()
             ->where('status', KnowledgeLinkStatus::Active)
             ->get();
 
         if ($focusId !== null && $entries->count() > $limit) {
-            $keep = $this->focusIds($focusId, $hops, $limit);
+            $keep = $this->focusIds($this->resolver->canonicalId($focusId) ?? $focusId, $hops, $limit);
             $entries = $entries->whereIn('id', $keep)->values();
-            $links = $links->filter(
-                fn (KnowledgeLink $link) => isset($keep[$link->from_entry_id]) && isset($keep[$link->to_entry_id]),
-            )->values();
         } elseif ($entries->count() > $limit) {
             $entries = $entries->take($limit)->values();
-            $ids = $entries->pluck('id')->all();
-            $links = $links->filter(
-                fn (KnowledgeLink $link) => in_array($link->from_entry_id, $ids, true)
-                    && in_array($link->to_entry_id, $ids, true),
-            )->values();
+        }
+
+        $visible = $entries->pluck('id')->flip()->all();
+        $deduped = [];
+        foreach ($links as $link) {
+            $fromId = $this->resolver->canonicalId($link->from_entry_id) ?? $link->from_entry_id;
+            $toId = $this->resolver->canonicalId($link->to_entry_id) ?? $link->to_entry_id;
+            if ($fromId === $toId || ! isset($visible[$fromId]) || ! isset($visible[$toId])) {
+                continue;
+            }
+            $key = $fromId.'|'.$toId.'|'.$link->predicate->value;
+            if (! isset($deduped[$key]) || $deduped[$key]['confidence'] < $link->confidence) {
+                $deduped[$key] = [
+                    'id' => $link->id,
+                    'from' => $fromId,
+                    'to' => $toId,
+                    'predicate' => $link->predicate->value,
+                    'confidence' => $link->confidence,
+                    'permanent' => $link->permanent,
+                    'disputed' => $link->disputed,
+                ];
+            }
         }
 
         return [
@@ -368,15 +409,7 @@ class KnowledgeGraph
                 'type' => $e->type,
                 'summary' => $e->summary,
             ])->values()->all(),
-            'links' => $links->map(fn (KnowledgeLink $link) => [
-                'id' => $link->id,
-                'from' => $link->from_entry_id,
-                'to' => $link->to_entry_id,
-                'predicate' => $link->predicate->value,
-                'confidence' => $link->confidence,
-                'permanent' => $link->permanent,
-                'disputed' => $link->disputed,
-            ])->values()->all(),
+            'links' => array_values($deduped),
         ];
     }
 
@@ -544,23 +577,74 @@ class KnowledgeGraph
         });
     }
 
-    private function resolveEndpoint(string $name, bool $createMissing, string $author): ?KnowledgeEntry
-    {
-        $entry = KnowledgeEntry::lookup($name);
+    private function requireEndpoint(
+        string $name,
+        ?int $id,
+        bool $createMissing,
+        string $author,
+        KnowledgeIdentityContext $identity,
+        string $end,
+        string $createType = 'concept',
+    ): KnowledgeEntry {
+        $resolved = $this->resolver->resolve($identity, query: $name, entryId: $id);
 
-        if ($entry !== null || ! $createMissing) {
-            return $entry;
+        if ($resolved->status === KnowledgeIdentityStatus::Ambiguous) {
+            throw new KnowledgeConnectAborted(new KnowledgeConnectResult(
+                ok: false,
+                error: $resolved->error,
+                code: 'ambiguous_reference',
+                ambiguous: [$end => $resolved->candidates],
+            ));
+        }
+
+        if (in_array($resolved->status, [
+            KnowledgeIdentityStatus::Inconsistent,
+            KnowledgeIdentityStatus::Conflict,
+            KnowledgeIdentityStatus::Closed,
+        ], true)) {
+            throw new KnowledgeConnectAborted(new KnowledgeConnectResult(
+                ok: false,
+                error: $resolved->error,
+                code: $resolved->code,
+            ));
+        }
+
+        if ($resolved->found()) {
+            if ($createType === 'event' && $resolved->entry->type !== 'event') {
+                throw new KnowledgeConnectAborted(new KnowledgeConnectResult(
+                    ok: false,
+                    error: "'{$resolved->entry->name}' is a {$resolved->entry->type}, not an event.",
+                    code: 'wrong_entity_type',
+                ));
+            }
+
+            return $resolved->entry;
+        }
+
+        if (! $createMissing) {
+            throw new KnowledgeConnectAborted(new KnowledgeConnectResult(
+                ok: false,
+                unresolved: [$end => $name],
+            ));
         }
 
         $trimmed = trim($name);
-        if ($trimmed === '') {
-            return null;
+        if ($trimmed === '' || KnowledgeName::isOperatorToken(KnowledgeName::normalize($trimmed))) {
+            throw new KnowledgeConnectAborted(new KnowledgeConnectResult(
+                ok: false,
+                unresolved: [$end => $name],
+            ));
         }
 
+        return $this->createStub($trimmed, $author, $createType);
+    }
+
+    private function createStub(string $name, string $author, string $type): KnowledgeEntry
+    {
         $entry = new KnowledgeEntry([
-            'name' => $trimmed,
-            'name_lower' => Str::lower($trimmed),
-            'type' => 'concept',
+            'name' => $name,
+            'name_lower' => KnowledgeName::normalize($name),
+            'type' => $type,
             'aliases' => [],
             'summary' => '',
             'state' => '',
@@ -582,29 +666,45 @@ class KnowledgeGraph
         KnowledgeAuthorKind $authorKind,
         ?string $source,
         ?Carbon $occurredAt,
-    ): void {
-        $event = KnowledgeEntry::lookup($eventName);
-        if ($event === null) {
-            $event = new KnowledgeEntry([
-                'name' => trim($eventName),
-                'name_lower' => Str::lower(trim($eventName)),
-                'type' => 'event',
-                'aliases' => [],
-                'summary' => '',
-                'state' => '',
-                'related' => [],
-                'updated_by' => $author,
-                'version' => 1,
-            ]);
-            $event->save();
-            $event->recordVersion($author);
+        KnowledgeIdentityContext $identity,
+    ): KnowledgeConnectResult {
+        $resolved = $this->resolver->resolve($identity, query: $eventName);
+
+        if ($resolved->status === KnowledgeIdentityStatus::Ambiguous) {
+            return new KnowledgeConnectResult(
+                ok: false,
+                error: $resolved->error,
+                code: 'ambiguous_reference',
+                ambiguous: ['event' => $resolved->candidates],
+            );
+        }
+
+        if (in_array($resolved->status, [
+            KnowledgeIdentityStatus::Inconsistent,
+            KnowledgeIdentityStatus::Conflict,
+        ], true)) {
+            return new KnowledgeConnectResult(ok: false, error: $resolved->error, code: $resolved->code);
+        }
+
+        if ($resolved->found()) {
+            if ($resolved->entry->type !== 'event') {
+                return new KnowledgeConnectResult(
+                    ok: false,
+                    error: "'{$resolved->entry->name}' is a {$resolved->entry->type}, not an event.",
+                    code: 'wrong_entity_type',
+                );
+            }
+            $event = $resolved->entry;
+        } else {
+            $event = $this->createStub(trim($eventName), $author, 'event');
         }
 
         foreach ([$from, $to] as $participant) {
             if ($participant->is($event)) {
                 continue;
             }
-            $this->connect(
+
+            $result = $this->connect(
                 author: $author,
                 authorKind: $authorKind,
                 from: $event->name,
@@ -612,31 +712,118 @@ class KnowledgeGraph
                 predicate: KnowledgePredicate::Involves,
                 source: $source,
                 occurredAt: $occurredAt,
+                identity: $identity,
+                fromId: $event->id,
+                toId: $participant->id,
             );
+
+            if (! $result->ok) {
+                return $result;
+            }
         }
+
+        return new KnowledgeConnectResult(ok: true);
     }
 
     /**
-     * @return array<string, mixed>
+     * @param  Collection<int, KnowledgeLink>  $links
+     * @return list<array<string, mixed>>
      */
-    private function serializeHop(KnowledgeLink $link, bool $outgoing): array
+    private function dedupeHops($links, bool $outgoing, int $selfId, int $minConfidence): array
+    {
+        $grouped = [];
+
+        foreach ($links as $link) {
+            $hop = $this->serializeHop($link, $outgoing);
+            if ($hop === null || $hop['entry_id'] === $selfId) {
+                continue;
+            }
+            if ($hop['confidence'] < $minConfidence) {
+                continue;
+            }
+            $key = $hop['entry_id'].'|'.$hop['predicate'];
+            $grouped[$key][] = ['hop' => $hop, 'link_id' => $link->id];
+        }
+
+        $out = [];
+        foreach ($grouped as $rows) {
+            $linkIds = array_column($rows, 'link_id');
+            $best = $rows[0]['hop'];
+            foreach ($rows as $row) {
+                if ($row['hop']['confidence'] > $best['confidence']) {
+                    $best = $row['hop'];
+                }
+            }
+            $best['observations'] = KnowledgeObservation::query()
+                ->whereIn('link_id', $linkIds)
+                ->count();
+            $out[] = $best;
+        }
+
+        return array_values($out);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function serializeHop(KnowledgeLink $link, bool $outgoing): ?array
     {
         $peer = $outgoing ? $link->toEntry : $link->fromEntry;
+        if ($peer === null) {
+            return null;
+        }
+
+        $canonical = $this->resolver->canonicalEntry($peer) ?? $peer;
         $predicate = $outgoing ? $link->predicate : $link->predicate->inverse();
 
         return [
             'id' => $link->id,
             'predicate' => $predicate->value,
             'stored_predicate' => $link->predicate->value,
-            'name' => $peer->name,
-            'type' => $peer->type,
-            'summary' => $peer->summary,
+            'entry_id' => $canonical->id,
+            'name' => $canonical->name,
+            'type' => $canonical->type,
+            'summary' => $canonical->summary,
             'confidence' => $link->confidence,
             'disputed' => $link->disputed,
             'permanent' => $link->permanent,
             'status' => $link->status->value,
             'observations' => $link->observation_count,
         ];
+    }
+
+    /**
+     * Canonical id plus every historical id that redirects here.
+     *
+     * @return list<int>
+     */
+    private function equivalentIds(KnowledgeEntry $entry): array
+    {
+        $canonical = $this->resolver->canonicalEntry($entry) ?? $entry;
+
+        return $this->equivalentIdsById($canonical->id);
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function equivalentIdsById(int $canonicalId): array
+    {
+        $ids = [$canonicalId];
+        $redirects = KnowledgeEntryRedirect::query()->get(['from_entry_id', 'to_entry_id']);
+        $changed = true;
+
+        while ($changed) {
+            $changed = false;
+            foreach ($redirects as $redirect) {
+                if (in_array($redirect->to_entry_id, $ids, true) && ! in_array($redirect->from_entry_id, $ids, true)) {
+                    $ids[] = $redirect->from_entry_id;
+                    $changed = true;
+                }
+            }
+        }
+
+        return $ids;
     }
 
     /**

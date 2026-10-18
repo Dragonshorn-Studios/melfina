@@ -5,14 +5,22 @@ namespace App\Http\Controllers\Console;
 use App\Http\Controllers\Controller;
 use App\Models\KnowledgeAuthorKind;
 use App\Models\KnowledgeEntry;
+use App\Models\KnowledgeEntryRedirect;
+use App\Models\KnowledgeIdentifierKind;
+use App\Models\KnowledgeIdentityStatus;
 use App\Models\KnowledgeLink;
 use App\Models\KnowledgeObservationKind;
 use App\Models\KnowledgePredicate;
+use App\Models\User;
+use App\Services\KnowledgeEntryWriter;
 use App\Services\KnowledgeGraph;
+use App\Services\KnowledgeIdentityAdmin;
+use App\Services\KnowledgeIdentityContext;
+use App\Services\KnowledgeIdentityResolver;
+use App\Services\KnowledgeIdentityResult;
+use App\Support\KnowledgeName;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -31,7 +39,7 @@ class KnowledgeController extends Controller
      */
     public function index(Request $request): View
     {
-        $tokens = collect(preg_split('/\s+/', Str::lower(trim($request->string('q')->toString()))))
+        $tokens = collect(preg_split('/\s+/', KnowledgeName::normalize($request->string('q')->toString())))
             ->filter()->unique()->values();
 
         $entries = KnowledgeEntry::query()
@@ -67,9 +75,9 @@ class KnowledgeController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, KnowledgeEntryWriter $writer): RedirectResponse
     {
-        $entry = $this->save($request, null);
+        $entry = $this->save($request, null, $writer);
 
         if ($request->string('return')->toString() === 'graph') {
             return redirect()
@@ -88,12 +96,15 @@ class KnowledgeController extends Controller
             'entry' => $knowledge,
             'types' => KnowledgeEntry::TYPES,
             'versions' => $knowledge->versions()->orderByDesc('version')->get(),
+            'identifiers' => $knowledge->identifiers()->orderBy('kind')->orderBy('id')->get(),
+            'isOperator' => User::query()->where('operator_entry_id', $knowledge->id)->exists(),
+            'identifierKinds' => KnowledgeIdentifierKind::values(),
         ]);
     }
 
-    public function update(Request $request, KnowledgeEntry $knowledge): RedirectResponse
+    public function update(Request $request, KnowledgeEntry $knowledge, KnowledgeEntryWriter $writer): RedirectResponse
     {
-        $entry = $this->save($request, $knowledge);
+        $entry = $this->save($request, $knowledge, $writer);
 
         return redirect()
             ->route('console.knowledge.edit', $entry)
@@ -105,6 +116,21 @@ class KnowledgeController extends Controller
      */
     public function destroy(KnowledgeEntry $knowledge): RedirectResponse
     {
+        if (User::query()->where('operator_entry_id', $knowledge->id)->exists()) {
+            return redirect()
+                ->route('console.knowledge.edit', $knowledge)
+                ->withErrors(['delete' => 'Detach or replace the operator binding before deleting this person.']);
+        }
+
+        if (KnowledgeEntryRedirect::query()
+            ->where('from_entry_id', $knowledge->id)
+            ->orWhere('to_entry_id', $knowledge->id)
+            ->exists()) {
+            return redirect()
+                ->route('console.knowledge.edit', $knowledge)
+                ->withErrors(['delete' => 'This entity is part of an identity redirect. Remove the redirect first.']);
+        }
+
         $name = $knowledge->name;
         $knowledge->delete();
 
@@ -158,6 +184,7 @@ class KnowledgeController extends Controller
             note: $validated['note'] ?? null,
             source: $validated['source'] ?? null,
             createMissing: $request->boolean('create_missing'),
+            identity: KnowledgeIdentityContext::forOwner(),
         );
 
         if (! $result->ok) {
@@ -209,6 +236,9 @@ class KnowledgeController extends Controller
             to: $link->toEntry->name,
             predicate: $link->predicate,
             op: KnowledgeObservationKind::LinkRetract,
+            identity: KnowledgeIdentityContext::forOwner(),
+            fromId: $link->from_entry_id,
+            toId: $link->to_entry_id,
         );
 
         return redirect()
@@ -224,19 +254,22 @@ class KnowledgeController extends Controller
             'predicate' => ['required', 'string', Rule::in(KnowledgePredicate::values())],
         ]);
 
-        $from = KnowledgeEntry::lookup($validated['from']);
-        $to = KnowledgeEntry::lookup($validated['to']);
-        if ($from === null || $to === null) {
+        $from = app(KnowledgeIdentityResolver::class)
+            ->resolve(KnowledgeIdentityContext::forOwner(), query: $validated['from']);
+        $to = app(KnowledgeIdentityResolver::class)
+            ->resolve(KnowledgeIdentityContext::forOwner(), query: $validated['to']);
+        $endError = $this->linkEndError($from) ?? $this->linkEndError($to);
+        if ($endError !== null || $from->entry === null || $to->entry === null) {
             return redirect()
                 ->route('console.knowledge.graph', ['focus' => $link->from_entry_id, 'link' => $link->id])
-                ->withErrors(['link' => 'Both ends must already exist to fix a link.']);
+                ->withErrors(['link' => $endError ?? 'Both ends must already exist to fix a link.']);
         }
 
         $result = $graph->retarget(
             $link,
             KnowledgePredicate::from($validated['predicate']),
-            $from,
-            $to,
+            $from->entry,
+            $to->entry,
         );
 
         if (! $result->ok) {
@@ -250,13 +283,57 @@ class KnowledgeController extends Controller
             ->with('status', 'Link fixed.');
     }
 
+    private function linkEndError(KnowledgeIdentityResult $resolved): ?string
+    {
+        if ($resolved->found()) {
+            return null;
+        }
+
+        if ($resolved->status === KnowledgeIdentityStatus::Ambiguous) {
+            return "'{$resolved->input}' matches more than one entity. Use a unique name or resolve the collision first.";
+        }
+
+        if (is_string($resolved->error) && $resolved->error !== '') {
+            return $resolved->error;
+        }
+
+        return 'Both ends must already exist to fix a link.';
+    }
+
     /**
      * The owner-side equivalent of knowledge_upsert: same field limits,
      * same versioned write, author stamped 'owner'. `expected_version`
      * (echoed by the edit form) fails instead of clobbering a change an
      * agent just wrote — same contract as the MCP tool.
      */
-    private function save(Request $request, ?KnowledgeEntry $entry): KnowledgeEntry
+    public function bindOperator(KnowledgeEntry $knowledge, KnowledgeIdentityAdmin $admin, Request $request): RedirectResponse
+    {
+        $admin->bindOperator($knowledge, $request->user());
+
+        return redirect()
+            ->route('console.knowledge.edit', $knowledge)
+            ->with('status', $knowledge->name.' is the installation operator.');
+    }
+
+    public function storeIdentifier(Request $request, KnowledgeEntry $knowledge, KnowledgeIdentityAdmin $admin): RedirectResponse
+    {
+        $validated = $request->validate([
+            'value' => ['required', 'string', 'max:200'],
+            'kind' => ['required', 'string', Rule::in(KnowledgeIdentifierKind::values())],
+        ]);
+
+        $admin->addIdentifier(
+            $knowledge,
+            $validated['value'],
+            KnowledgeIdentifierKind::from($validated['kind']),
+        );
+
+        return redirect()
+            ->route('console.knowledge.edit', $knowledge)
+            ->with('status', 'Identifier saved.');
+    }
+
+    private function save(Request $request, ?KnowledgeEntry $entry, KnowledgeEntryWriter $writer): KnowledgeEntry
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:200'],
@@ -271,11 +348,8 @@ class KnowledgeController extends Controller
         ]);
 
         $name = trim($validated['name']);
-        $nameLower = Str::lower($name);
+        $nameLower = KnowledgeName::normalize($name);
 
-        // Canonical names are unique case-insensitively (name_lower is the
-        // unique key) — point at the existing entry rather than 500ing on
-        // the constraint.
         $collision = KnowledgeEntry::query()
             ->where('name_lower', $nameLower)
             ->when($entry, fn ($q) => $q->whereKeyNot($entry->id))
@@ -286,50 +360,39 @@ class KnowledgeController extends Controller
             ]);
         }
 
-        if ($entry !== null
-            && $request->has('expected_version')
-            && $entry->version !== $request->integer('expected_version')) {
+        $result = $writer->upsert(
+            context: KnowledgeIdentityContext::forOwner(),
+            author: 'owner',
+            authorKind: KnowledgeAuthorKind::Owner,
+            entryName: $entry?->name ?? $name,
+            entryId: $entry?->id,
+            type: $validated['type'],
+            aliases: self::lines($validated['aliases'] ?? null),
+            related: self::lines($validated['related'] ?? null),
+            fields: [
+                'summary' => $validated['summary'] ?? '',
+                'state' => $validated['state'] ?? '',
+                'source' => $validated['source'] ?? '',
+            ],
+            expectedVersion: $request->filled('expected_version') ? $request->integer('expected_version') : null,
+            verified: $request->boolean('verified'),
+            allowRename: $entry !== null,
+            renameTo: $name,
+        );
+
+        if ($result->conflict) {
             throw ValidationException::withMessages([
-                'expected_version' => "The entry changed since this page loaded (now v{$entry->version}) — reload and merge your edit.",
+                'expected_version' => "The entry changed since this page loaded (now v{$result->currentVersion}) — reload and merge your edit.",
             ]);
         }
 
-        return DB::transaction(function () use ($validated, $entry, $name, $nameLower, $request): KnowledgeEntry {
-            $entry ??= new KnowledgeEntry;
+        if (! $result->ok || $result->entry === null) {
+            throw ValidationException::withMessages([
+                'name' => $result->error ?? 'Could not save the entry.',
+            ]);
+        }
 
-            $entry->name = $name;
-            $entry->name_lower = $nameLower;
-            $entry->type = $validated['type'];
-            $entry->summary = $validated['summary'] ?? '';
-            $entry->state = $validated['state'] ?? '';
-            $entry->source = $validated['source'] ?? '';
-            $entry->aliases = self::lines($validated['aliases'] ?? null);
-            $entry->related = self::lines($validated['related'] ?? null);
-
-            if ($request->boolean('verified')) {
-                $entry->verified_at = now();
-            }
-
-            $entry->updated_by = 'owner';
-            $entry->version = ($entry->version ?? 0) + 1;
-            $entry->save();
-
-            $entry->recordVersion('owner');
-
-            $graph = app(KnowledgeGraph::class);
-            foreach ($entry->related as $related) {
-                $graph->connect(
-                    author: 'owner',
-                    authorKind: KnowledgeAuthorKind::Owner,
-                    from: $entry->name,
-                    to: $related,
-                    predicate: KnowledgePredicate::RelatedTo,
-                    source: $entry->source,
-                );
-            }
-
-            return $entry;
-        });
+        return $result->entry;
     }
 
     /**

@@ -93,6 +93,9 @@
             @error('expected_version')
                 <p class="font-mono text-xs text-danger">{{ $message }}</p>
             @enderror
+            @error('delete')
+                <p class="font-mono text-xs text-danger">{{ $message }}</p>
+            @enderror
 
             <div class="flex items-center gap-3">
                 <button type="submit"
@@ -103,6 +106,50 @@
         </form>
 
         @if ($entry)
+            <div class="mt-8 border-t border-border pt-4">
+                <p class="font-mono text-xs tracking-[0.16em] text-steel">IDENTITY</p>
+                <p class="mt-1 font-mono text-xs text-steel">id {{ $entry->id }}
+                    @if ($isOperator)
+                        · installation operator
+                    @endif
+                </p>
+
+                @if ($entry->type === 'person' && ! $isOperator)
+                    <form method="POST" action="{{ route('console.knowledge.operator.store', $entry) }}" class="mt-3">
+                        @csrf
+                        <button type="submit"
+                            class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                            style="border-radius: var(--radius-console)">bind as operator person</button>
+                    </form>
+                @endif
+
+                @if (($identifiers ?? collect())->isNotEmpty())
+                    <ul class="mt-3 space-y-1 font-mono text-xs">
+                        @foreach ($identifiers as $identifier)
+                            <li class="text-cream">{{ $identifier->kind->value }} · {{ $identifier->value }}</li>
+                        @endforeach
+                    </ul>
+                @endif
+
+                <form method="POST" action="{{ route('console.knowledge.identifiers.store', $entry) }}" class="mt-3 flex flex-wrap gap-2">
+                    @csrf
+                    <input type="text" name="value" placeholder="another name" maxlength="200"
+                        class="min-w-0 flex-1 border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
+                        style="border-radius: var(--radius-console)">
+                    <select name="kind"
+                        class="border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
+                        style="border-radius: var(--radius-console)">
+                        @foreach ($identifierKinds ?? [] as $kind)
+                            <option value="{{ $kind }}">{{ $kind }}</option>
+                        @endforeach
+                    </select>
+                    <button type="submit"
+                        class="border border-border bg-void px-3 py-1 font-mono text-xs text-cream hover:border-amber"
+                        style="border-radius: var(--radius-console)">add identifier</button>
+                </form>
+                @error('value')<p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p>@enderror
+            </div>
+
             <div class="mt-8 border-t border-border pt-4">
                 <div class="flex items-center justify-between">
                     <p class="font-mono text-xs tracking-[0.16em] text-steel">VERSION HISTORY</p>

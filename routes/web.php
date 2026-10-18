@@ -12,6 +12,7 @@ use App\Http\Controllers\Console\KnowledgeController;
 use App\Http\Controllers\Console\McpClientController;
 use App\Http\Controllers\Console\McpKeyController;
 use App\Http\Controllers\Console\MessageController;
+use App\Http\Controllers\Console\SetupController;
 use App\Http\Controllers\Console\SharedSpaceController;
 use Illuminate\Support\Facades\Route;
 
@@ -32,7 +33,10 @@ Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
     ->middleware('auth')
     ->name('logout');
 
-Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group(function () {
+Route::middleware(['auth', 'owner', 'schema'])->prefix('console')->name('console.')->group(function () {
+    Route::get('setup', [SetupController::class, 'show'])->name('setup.show');
+    Route::post('setup', [SetupController::class, 'run'])->name('setup.run');
+
     Route::get('/', DashboardController::class)->name('dashboard');
 
     Route::post('mcp-key', [McpKeyController::class, 'store'])->name('mcp-key.store');
@@ -48,11 +52,15 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::post('mcp/github', [McpKeyController::class, 'storeGitHub'])->name('mcp.github.store');
     Route::post('mcp/github/publish', [McpKeyController::class, 'publishGitHub'])->name('mcp.github.publish');
     Route::put('mcp/operator-persona', [McpKeyController::class, 'storeOperatorPersona'])->name('mcp.operator-persona.store');
+    Route::put('mcp/operator-binding', [McpKeyController::class, 'storeOperatorBinding'])->name('mcp.operator-binding.store');
 
     Route::post('agents/{agent}/rotate', [AgentController::class, 'rotate'])->name('agents.rotate');
     Route::post('agents/{agent}/api-keys', [AgentController::class, 'storeApiKey'])->name('agents.api-keys.store');
     Route::delete('agents/{agent}/api-keys/{agentApiKey}', [AgentController::class, 'destroyApiKey'])
         ->name('agents.api-keys.destroy');
+    Route::post('agents/{agent}/references', [AgentController::class, 'storeReference'])->name('agents.references.store');
+    Route::delete('agents/{agent}/references/{reference}', [AgentController::class, 'destroyReference'])->name('agents.references.destroy');
+    Route::post('agents/{agent}/addressing-preferences', [AgentController::class, 'storeAddressingPreference'])->name('agents.addressing-preferences.store');
     Route::get('agents/{agent}/persona', [AgentController::class, 'editPersona'])->name('agents.persona.edit');
     Route::put('agents/{agent}/persona', [AgentController::class, 'updatePersona'])->name('agents.persona.update');
     Route::delete('agents/{agent}/memories/{index}', [AgentController::class, 'destroyMemory'])
@@ -93,6 +101,8 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::post('knowledge', [KnowledgeController::class, 'store'])->name('knowledge.store');
     Route::get('knowledge/{knowledge}/edit', [KnowledgeController::class, 'edit'])->name('knowledge.edit');
     Route::put('knowledge/{knowledge}', [KnowledgeController::class, 'update'])->name('knowledge.update');
+    Route::post('knowledge/{knowledge}/operator', [KnowledgeController::class, 'bindOperator'])->name('knowledge.operator.store');
+    Route::post('knowledge/{knowledge}/identifiers', [KnowledgeController::class, 'storeIdentifier'])->name('knowledge.identifiers.store');
     Route::delete('knowledge/{knowledge}', [KnowledgeController::class, 'destroy'])->name('knowledge.destroy');
 
     Route::get('messages', [MessageController::class, 'index'])->name('messages.index');

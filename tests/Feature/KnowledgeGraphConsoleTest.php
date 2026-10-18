@@ -2,10 +2,12 @@
 
 use App\Models\KnowledgeAuthorKind;
 use App\Models\KnowledgeEntry;
+use App\Models\KnowledgeIdentifierKind;
 use App\Models\KnowledgeLink;
 use App\Models\KnowledgePredicate;
 use App\Models\User;
 use App\Services\KnowledgeGraph;
+use App\Services\KnowledgeIdentityAdmin;
 
 beforeEach(function () {
     $this->owner = User::factory()->owner()->create();
@@ -64,6 +66,34 @@ it('does not spawn a node when an endpoint is missing', function () {
 
     expect(KnowledgeLink::query()->count())->toBe(0)
         ->and(KnowledgeEntry::query()->where('name_lower', 'no such host')->exists())->toBeFalse();
+});
+
+it('tells the owner when a link end is ambiguous rather than missing', function () {
+    $alex = KnowledgeEntry::factory()->create([
+        'name' => 'Alex', 'name_lower' => 'alex', 'type' => 'person',
+    ]);
+    $alexandra = KnowledgeEntry::factory()->create([
+        'name' => 'Alexandra', 'name_lower' => 'alexandra', 'type' => 'person',
+    ]);
+    app(KnowledgeIdentityAdmin::class)->addIdentifier($alexandra, 'Alex', KnowledgeIdentifierKind::Alias);
+
+    $this->graph->connect('grokbot', KnowledgeAuthorKind::Agent, 'Yukine', 'Botbox', KnowledgePredicate::RelatedTo);
+    $link = KnowledgeLink::query()->sole();
+
+    $this->actingAs($this->owner)
+        ->from(route('console.knowledge.graph', ['focus' => $link->from_entry_id, 'link' => $link->id]))
+        ->put(route('console.knowledge.links.update', $link), [
+            'from' => 'Yukine',
+            'to' => 'Alex',
+            'predicate' => 'runs_on',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasErrors('link');
+
+    expect(session('errors')->first('link'))->toContain('matches more than one entity')
+        ->and($link->fresh()->to_entry_id)->toBe($this->botbox->id);
+
+    expect($alex->id)->not->toBe($alexandra->id);
 });
 
 it('lets the owner confirm and then retarget a link', function () {

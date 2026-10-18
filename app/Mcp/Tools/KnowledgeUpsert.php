@@ -5,13 +5,11 @@ namespace App\Mcp\Tools;
 use App\Mcp\Concerns\ResolvesAgent;
 use App\Models\KnowledgeAuthorKind;
 use App\Models\KnowledgeEntry;
-use App\Models\KnowledgePredicate;
-use App\Services\KnowledgeGraph;
+use App\Services\KnowledgeEntryWriter;
+use App\Services\KnowledgeIdentityContext;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -20,7 +18,7 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tool;
 
 #[Name('knowledge_upsert')]
-#[Description('Create or update a canonical knowledge entry — a project, service, decision, convention, runbook, person, or concept the install should know by name. Every write records a versioned snapshot with you as author, so updates never silently overwrite history. Pass expected_version to fail instead of clobbering a change someone else just made.')]
+#[Description('Create or update a canonical knowledge entry — a project, service, decision, convention, runbook, person, or concept the install should know by name. `entry` is a target reference (canonical name, alias, persona name, or this agent\'s contextual title), not a rename: updating through an alias keeps the canonical name. Every write records a versioned snapshot with you as author. Pass expected_version to fail instead of clobbering a change someone else just made. Pass entry_id to pin the target; id and entry must agree.')]
 class KnowledgeUpsert extends Tool
 {
     use ResolvesAgent;
@@ -53,10 +51,11 @@ class KnowledgeUpsert extends Tool
     /**
      * Handle the tool request.
      */
-    public function handle(Request $request): Response
+    public function handle(Request $request, KnowledgeEntryWriter $writer): Response
     {
         $request->validate([
             'entry' => 'required|string|max:200',
+            'entry_id' => 'nullable|integer|min:1',
             'type' => ['nullable', 'string', Rule::in(KnowledgeEntry::TYPES)],
             'aliases' => 'nullable|array|max:20',
             'aliases.*' => 'string|max:200',
@@ -70,30 +69,6 @@ class KnowledgeUpsert extends Tool
         ]);
 
         $agent = $this->agent();
-
-        $name = trim($request->string('entry')->toString());
-        $entry = KnowledgeEntry::query()
-            ->where('name_lower', Str::lower($name))
-            ->first();
-
-        if ($entry === null && ! $request->filled('type')) {
-            return Response::error('New entries need a type: '.implode(', ', KnowledgeEntry::TYPES).'.');
-        }
-
-        if ($entry !== null
-            && $request->has('expected_version')
-            && $entry->version !== $request->integer('expected_version')) {
-            return $this->jsonResponse([
-                'updated' => false,
-                'conflict' => true,
-                'entry' => $entry->name,
-                'current_version' => $entry->version,
-                'hint' => 'The entry changed since you read it — re-read it with knowledge_lookup and merge before writing.',
-            ]);
-        }
-
-        $entry ??= new KnowledgeEntry(['name' => $name, 'name_lower' => Str::lower($name)]);
-
         $relatedNames = $request->has('related')
             ? array_values($request->get('related') ?? [])
             : null;
@@ -102,57 +77,58 @@ class KnowledgeUpsert extends Tool
             return $limited;
         }
 
-        DB::transaction(function () use ($request, $entry, $name, $agent, $relatedNames) {
-            $entry->name = $name;
-            $entry->name_lower = Str::lower($name);
+        $fields = [];
+        foreach (['summary', 'state', 'source'] as $field) {
+            if ($request->has($field)) {
+                $fields[$field] = $request->get($field);
+            }
+        }
 
-            foreach (['type', 'summary', 'state', 'source'] as $field) {
-                if ($request->has($field)) {
-                    $entry->{$field} = $request->get($field);
-                }
+        $result = $writer->upsert(
+            context: KnowledgeIdentityContext::forAgent($agent),
+            author: $agent->name,
+            authorKind: KnowledgeAuthorKind::Agent,
+            entryName: trim($request->string('entry')->toString()),
+            entryId: $request->filled('entry_id') ? $request->integer('entry_id') : null,
+            type: $request->filled('type') ? $request->string('type')->toString() : null,
+            aliases: $request->has('aliases') ? array_values($request->get('aliases') ?? []) : null,
+            related: $relatedNames,
+            fields: $fields,
+            expectedVersion: $request->filled('expected_version') ? $request->integer('expected_version') : null,
+            verified: $request->boolean('verified'),
+        );
+
+        if ($result->conflict) {
+            return $this->jsonResponse([
+                'updated' => false,
+                'conflict' => true,
+                'entry' => $result->entry?->name,
+                'entry_id' => $result->entry?->id,
+                'current_version' => $result->currentVersion,
+                'hint' => 'The entry changed since you read it — re-read it with knowledge_lookup and merge before writing.',
+            ]);
+        }
+
+        if (! $result->ok) {
+            if ($result->code === 'ambiguous_reference') {
+                return $this->jsonResponse([
+                    'updated' => false,
+                    'ambiguous' => true,
+                    'code' => 'ambiguous_reference',
+                    'candidates' => $result->candidates,
+                    'hint' => $result->error,
+                ]);
             }
 
-            foreach (['aliases', 'related'] as $field) {
-                if ($request->has($field)) {
-                    $entry->{$field} = array_values($request->get($field) ?? []);
-                }
-            }
-
-            if ($request->boolean('verified')) {
-                $entry->verified_at = now();
-            }
-
-            $entry->summary ??= '';
-            $entry->state ??= '';
-            $entry->aliases ??= [];
-            $entry->related ??= [];
-
-            $entry->updated_by = $agent->name;
-            $entry->version = ($entry->version ?? 0) + 1;
-            $entry->save();
-
-            $entry->recordVersion($agent->name);
-
-            if ($relatedNames !== null) {
-                $graph = app(KnowledgeGraph::class);
-                foreach ($relatedNames as $related) {
-                    $graph->connect(
-                        author: $agent->name,
-                        authorKind: KnowledgeAuthorKind::Agent,
-                        from: $entry->name,
-                        to: (string) $related,
-                        predicate: KnowledgePredicate::RelatedTo,
-                        source: $request->string('source')->toString() ?: null,
-                    );
-                }
-            }
-        });
+            return Response::error($result->error ?? 'Could not write the entry.');
+        }
 
         return $this->jsonResponse([
             'updated' => true,
-            'created' => $entry->wasRecentlyCreated,
-            'entry' => $entry->name,
-            'version' => $entry->version,
+            'created' => $result->created,
+            'entry' => $result->entry->name,
+            'entry_id' => $result->entry->id,
+            'version' => $result->entry->version,
         ]);
     }
 
@@ -164,9 +140,10 @@ class KnowledgeUpsert extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'entry' => $schema->string()->description('Canonical name of the knowledge entry — the lookup key, matched case-insensitively. (`name` stays reserved for your persona.)')->required(),
+            'entry' => $schema->string()->description('Target reference — canonical name, alias, persona name, or this agent\'s contextual title. Not a rename; the canonical name stays. (`name` stays reserved for your persona.)')->required(),
+            'entry_id' => $schema->integer()->description('Stable entity id. When supplied with entry, both must name the same canonical entity.'),
             'type' => $schema->string()->enum(KnowledgeEntry::TYPES)->description('Entry type. Required when creating.'),
-            'aliases' => $schema->array()->items($schema->string())->description('Other names this entry answers to.'),
+            'aliases' => $schema->array()->items($schema->string())->description('Other global names this entry answers to (ordinary aliases). Does not add or remove scoped agent titles or persona/handle identifiers.'),
             'summary' => $schema->string()->description('One-line "what is this" — shown in search results.'),
             'state' => $schema->string()->description('Current state and important constraints — the durable facts.'),
             'related' => $schema->array()->items($schema->string())->description('Canonical names of related entries.'),

@@ -7,6 +7,9 @@ use App\Mcp\PackageVariant;
 use App\Mcp\PluginRepo;
 use App\Models\McpFleetKey;
 use App\Services\GitHubPublisher;
+use App\Services\KnowledgeIdentityAdmin;
+use App\Services\KnowledgeIdentityContext;
+use App\Services\KnowledgeIdentityResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -131,6 +134,47 @@ class McpKeyController extends Controller
         return redirect()
             ->route('console.dashboard')
             ->with('status', 'Operator persona saved.');
+    }
+
+    /**
+     * Bind (or clear) the installation operator to an existing person
+     * entity. Does not parse operator_persona text.
+     */
+    public function storeOperatorBinding(Request $request, KnowledgeIdentityAdmin $admin, KnowledgeIdentityResolver $resolver): RedirectResponse
+    {
+        $validated = $request->validate([
+            'operator_entry' => ['nullable', 'string', 'max:200'],
+        ]);
+
+        $raw = trim((string) ($validated['operator_entry'] ?? ''));
+        $user = $request->user();
+
+        if ($raw === '') {
+            $admin->unbindOperator($user);
+
+            return redirect()
+                ->route('console.dashboard')
+                ->with('status', 'Operator person binding cleared.');
+        }
+
+        $entryId = ctype_digit($raw) ? (int) $raw : null;
+        $resolved = $resolver->resolve(
+            KnowledgeIdentityContext::forOwner(),
+            query: $entryId === null ? $raw : null,
+            entryId: $entryId,
+        );
+
+        if (! $resolved->found()) {
+            return redirect()
+                ->route('console.dashboard')
+                ->withErrors(['operator_entry' => $resolved->error ?? 'No person matches that name or id.']);
+        }
+
+        $admin->bindOperator($resolved->entry, $user);
+
+        return redirect()
+            ->route('console.dashboard')
+            ->with('status', "Operator bound to {$resolved->entry->name}.");
     }
 
     /**

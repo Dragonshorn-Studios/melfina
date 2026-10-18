@@ -9,7 +9,7 @@
     </head>
     <body class="min-h-screen bg-void text-cream antialiased">
         <div class="flex min-h-screen flex-col lg:flex-row">
-            @guest
+            @if (auth()->guest() || $bare)
                 <div class="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-12">
                     <header class="mb-10 flex items-center gap-3 border-b border-border pb-6">
                         <svg class="h-8 w-8 shrink-0 text-amber" viewBox="0 0 48 48" fill="none" aria-hidden="true">
@@ -17,6 +17,14 @@
                             <circle cx="24" cy="20" r="3" fill="currentColor"/>
                         </svg>
                         <p class="font-mono text-xs tracking-[0.2em] text-amber">MELFINA</p>
+                        @auth
+                            <form method="POST" action="{{ route('logout') }}" class="ml-auto">
+                                @csrf
+                                <button type="submit" class="font-mono text-xs text-steel underline decoration-border underline-offset-4 hover:text-amber">
+                                    logout
+                                </button>
+                            </form>
+                        @endauth
                     </header>
                     {{ $slot }}
                 </div>
@@ -123,7 +131,7 @@
 
                 {{ $slot }}
             </div>
-            @endguest
+            @endif
         </div>
 
         @auth

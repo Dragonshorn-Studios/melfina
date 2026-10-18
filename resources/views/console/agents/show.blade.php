@@ -90,6 +90,75 @@
             </div>
         </div>
 
+        <div class="mt-6 border-t border-border pt-4">
+            <p class="font-mono text-xs tracking-[0.16em] text-steel">CONTEXTUAL REFERENCES</p>
+            <p class="mt-1 font-mono text-xs text-steel">Titles this imp uses for a person. They are not global aliases and do not change instructions.</p>
+            @if (($entityReferences ?? collect())->isNotEmpty())
+                <ul class="mt-3 space-y-1 font-mono text-xs">
+                    @foreach ($entityReferences as $reference)
+                        <li class="flex items-center justify-between gap-3 border border-border/50 bg-void/60 px-3 py-1.5" style="border-radius: var(--radius-console)">
+                            <span class="text-cream">{{ $reference->value }} → {{ $reference->entry?->name }} <span class="text-steel">({{ $reference->kind->value }})</span></span>
+                            <x-confirm-form action="{{ route('console.agents.references.destroy', [$agent, $reference]) }}" method="DELETE" confirm="Remove this title for {{ $agent->name }}?">
+                                <button type="submit" class="text-steel underline decoration-border underline-offset-4 hover:text-danger">remove</button>
+                            </x-confirm-form>
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
+            <form method="POST" action="{{ route('console.agents.references.store', $agent) }}" class="mt-3 flex flex-wrap gap-2">
+                @csrf
+                <input type="text" name="value" placeholder="title this imp uses" maxlength="200"
+                    class="min-w-0 flex-1 border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
+                    style="border-radius: var(--radius-console)">
+                <select name="entry_id"
+                    class="border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
+                    style="border-radius: var(--radius-console)">
+                    @foreach ($people ?? [] as $person)
+                        <option value="{{ $person->id }}">{{ $person->name }}</option>
+                    @endforeach
+                </select>
+                <select name="kind"
+                    class="border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
+                    style="border-radius: var(--radius-console)">
+                    @foreach ($referenceKinds ?? [] as $kind)
+                        <option value="{{ $kind }}">{{ $kind }}</option>
+                    @endforeach
+                </select>
+                <button type="submit"
+                    class="border border-border bg-void px-3 py-1 font-mono text-xs text-cream hover:border-amber"
+                    style="border-radius: var(--radius-console)">bind</button>
+            </form>
+            @error('value')<p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p>@enderror
+        </div>
+
+        <div class="mt-6 border-t border-border pt-4">
+            <p class="font-mono text-xs tracking-[0.16em] text-steel">ADDRESSING PREFERENCE</p>
+            <p class="mt-1 font-mono text-xs text-steel">Fallback only when no instruction exists. Never appended as a layer; never overrides “Always address user as …”.</p>
+            @if (($addressingPreferences ?? collect())->isNotEmpty())
+                <ul class="mt-3 space-y-1 font-mono text-xs">
+                    @foreach ($addressingPreferences as $preference)
+                        <li class="text-cream">{{ $preference->person?->name }} · {{ $preference->context }} · {{ $preference->form }}</li>
+                    @endforeach
+                </ul>
+            @endif
+            <form method="POST" action="{{ route('console.agents.addressing-preferences.store', $agent) }}" class="mt-3 flex flex-wrap gap-2">
+                @csrf
+                <select name="person_entry_id"
+                    class="border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
+                    style="border-radius: var(--radius-console)">
+                    @foreach ($people ?? [] as $person)
+                        <option value="{{ $person->id }}">{{ $person->name }}</option>
+                    @endforeach
+                </select>
+                <input type="text" name="form" placeholder="form of address" maxlength="200"
+                    class="min-w-0 flex-1 border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
+                    style="border-radius: var(--radius-console)">
+                <button type="submit"
+                    class="border border-border bg-void px-3 py-1 font-mono text-xs text-cream hover:border-amber"
+                    style="border-radius: var(--radius-console)">store preference</button>
+            </form>
+        </div>
+
         <div class="mt-8 flex items-center gap-3">
             <a href="{{ route('console.agents.edit', $agent) }}"
                 class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
