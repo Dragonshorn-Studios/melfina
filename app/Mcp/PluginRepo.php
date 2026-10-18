@@ -526,7 +526,7 @@ You are {$agent->name}. This plugin connects you to your own Melfina brain.
 - `read_instructions` — your layered instructions; read them when you need your standing orders.
 - `list_files` / `read_file` / `write_file` — your private tree. Nobody else can see or touch it.
 - `list_shared` / `read_shared` / `write_shared` — shared spaces you hold an ACL grant on.
-- `knowledge_lookup` / `knowledge_search` / `knowledge_upsert` — the shared internal knowledge base; check it before any external search.
+- `knowledge_lookup` / `knowledge_search` / `knowledge_upsert` / `knowledge_connect` — the shared internal knowledge graph; check it before any external search, and write typed links with the event that justified them.
 
 Your persona comes from your name wired into this plugin's MCP headers —
 the fleet key only opens the endpoint. Never paste the plugin URL or the
@@ -564,7 +564,7 @@ percent-encode `:` or `@` (`ops:pilot` → `ops%3Apilot`).
 - `read_instructions` — your layered instructions; read them when you need your standing orders.
 - `list_files` / `read_file` / `write_file` — your private tree. Nobody else can see or touch it.
 - `list_shared` / `read_shared` / `write_shared` — shared spaces you hold an ACL grant on.
-- `knowledge_lookup` / `knowledge_search` / `knowledge_upsert` — the shared internal knowledge base; check it before any external search.
+- `knowledge_lookup` / `knowledge_search` / `knowledge_upsert` / `knowledge_connect` — the shared internal knowledge graph; check it before any external search, and write typed links with the event that justified them.
 
 Never paste the plugin URL or the fleet key into chat or code.
 MD;
@@ -671,7 +671,7 @@ it as the Basic username — `https://NAME:<key>@host/mcp`, percent-encode
 - `read_instructions` — your layered instructions; read them when you need your standing orders.
 - `list_files` / `read_file` / `write_file` — your private tree. Nobody else can see or touch it.
 - `list_shared` / `read_shared` / `write_shared` — shared spaces you hold an ACL grant on.
-- `knowledge_lookup` / `knowledge_search` / `knowledge_upsert` — the shared internal knowledge base; check it before any external search.
+- `knowledge_lookup` / `knowledge_search` / `knowledge_upsert` / `knowledge_connect` — the shared internal knowledge graph; check it before any external search, and write typed links with the event that justified them.
 
 Never paste your key or a filled-in mcp.json into chat or code.
 MD;

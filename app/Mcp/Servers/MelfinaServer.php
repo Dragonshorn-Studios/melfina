@@ -4,6 +4,7 @@ namespace App\Mcp\Servers;
 
 use App\Mcp\Methods\MailListen;
 use App\Mcp\Tools\AckMessage;
+use App\Mcp\Tools\KnowledgeConnect;
 use App\Mcp\Tools\KnowledgeLookup;
 use App\Mcp\Tools\KnowledgeSearch;
 use App\Mcp\Tools\KnowledgeUpsert;
@@ -31,7 +32,7 @@ use Laravel\Mcp\Server\Attributes\Version;
 
 #[Name('melfina')]
 #[Version('0.0.1')]
-#[Instructions('You are connected to your own private Melfina brain. Every tool is scoped to the agent whose key authenticated this request: the file and instruction tools only see and touch your own tree, and the shared tools only reach folders you hold an ACL grant on. When the connection uses a shared fleet key, pass your agent name as the `name` argument on every tool call — that is how Melfina knows which imp you are. Internal nouns first, internet second: when an unfamiliar proper noun, codename, project, service, person, or convention comes up, call knowledge_lookup before reaching for external search. Non-text files (images, PDFs, any binary bytes) go through write_file_binary and read_file_binary — or the raw PUT/GET /api/files/{path} endpoints for payloads over ~1 MB.')]
+#[Instructions('You are connected to your own private Melfina brain. Every tool is scoped to the agent whose key authenticated this request: the file and instruction tools only see and touch your own tree, and the shared tools only reach folders you hold an ACL grant on. When the connection uses a shared fleet key, pass your agent name as the `name` argument on every tool call — that is how Melfina knows which imp you are. Internal nouns first, internet second: when an unfamiliar proper noun, codename, project, service, person, or convention comes up, call knowledge_lookup before reaching for external search. Follow typed links in the lookup neighborhood to connect the dots; write new connections with knowledge_connect plus the event data that justifies them — do not overwrite wiki state with a link. Non-text files (images, PDFs, any binary bytes) go through write_file_binary and read_file_binary — or the raw PUT/GET /api/files/{path} endpoints for payloads over ~1 MB.')]
 class MelfinaServer extends Server
 {
     /**
@@ -70,6 +71,7 @@ class MelfinaServer extends Server
         KnowledgeLookup::class,
         KnowledgeSearch::class,
         KnowledgeUpsert::class,
+        KnowledgeConnect::class,
     ];
 
     protected array $tools = self::TOOLS;

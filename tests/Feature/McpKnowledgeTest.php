@@ -185,3 +185,42 @@ it('works over the fleet key when the call names the agent', function () {
     expect($found['updated'])->toBeTrue();
     expect(KnowledgeEntry::first()->updated_by)->toBe('grokbot');
 });
+
+it('connects two entities and returns the typed neighborhood on lookup', function () {
+    ($this->mcpTool)('knowledge_upsert', ['entry' => 'Yukine', 'type' => 'project', 'summary' => 'Discord bridge']);
+    ($this->mcpTool)('knowledge_upsert', ['entry' => 'Botbox', 'type' => 'service', 'summary' => 'home server']);
+
+    $connected = knowledgeResult(($this->mcpTool)('knowledge_connect', [
+        'from' => 'Yukine',
+        'to' => 'Botbox',
+        'predicate' => 'runs_on',
+        'note' => 'deploy log',
+        'data' => ['version' => '1.2'],
+    ]));
+
+    expect($connected['updated'])->toBeTrue()
+        ->and($connected['predicate'])->toBe('runs_on')
+        ->and($connected['confidence'])->toBe(220);
+
+    $found = knowledgeResult(($this->mcpTool)('knowledge_lookup', ['query' => 'Yukine']));
+    expect($found['links']['outgoing'])->toHaveCount(1)
+        ->and($found['links']['outgoing'][0]['predicate'])->toBe('runs_on')
+        ->and($found['links']['outgoing'][0]['name'])->toBe('Botbox')
+        ->and($found['links']['outgoing'][0]['confidence'])->toBe(220);
+
+    $inverse = knowledgeResult(($this->mcpTool)('knowledge_lookup', ['query' => 'Botbox']));
+    expect($inverse['links']['incoming'][0]['predicate'])->toBe('hosts');
+});
+
+it('refuses to connect an unknown endpoint without create_missing', function () {
+    ($this->mcpTool)('knowledge_upsert', ['entry' => 'Yukine', 'type' => 'project']);
+
+    $miss = knowledgeResult(($this->mcpTool)('knowledge_connect', [
+        'from' => 'Yukine',
+        'to' => 'ghost-host',
+        'predicate' => 'runs_on',
+    ]));
+
+    expect($miss['updated'])->toBeFalse()
+        ->and($miss['unresolved']['to'])->toBe('ghost-host');
+});

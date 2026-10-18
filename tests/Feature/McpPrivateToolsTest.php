@@ -54,7 +54,7 @@ it('lists the private and shared tools', function () {
         ->pluck('name')->sort()->values();
 
     expect($names->all())->toBe([
-        'ack_message', 'knowledge_lookup', 'knowledge_search',
+        'ack_message', 'knowledge_connect', 'knowledge_lookup', 'knowledge_search',
         'knowledge_upsert', 'list_agents', 'list_files', 'list_inbox',
         'list_message_recipients', 'list_sent_messages', 'list_shared',
         'read_file', 'read_file_binary', 'read_instructions',
