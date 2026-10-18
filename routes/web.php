@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredOwnerController;
 use App\Http\Controllers\Console\AgentController;
+use App\Http\Controllers\Console\AgentGroupController;
 use App\Http\Controllers\Console\DashboardController;
 use App\Http\Controllers\Console\EnrollKeyController;
 use App\Http\Controllers\Console\EnrollmentController;
@@ -58,6 +59,7 @@ Route::middleware(['auth', 'owner', 'schema'])->prefix('console')->name('console
     Route::post('agents/{agent}/api-keys', [AgentController::class, 'storeApiKey'])->name('agents.api-keys.store');
     Route::delete('agents/{agent}/api-keys/{agentApiKey}', [AgentController::class, 'destroyApiKey'])
         ->name('agents.api-keys.destroy');
+    Route::put('agents/{agent}/main-person', [AgentController::class, 'storeMainPerson'])->name('agents.main-person.store');
     Route::post('agents/{agent}/references', [AgentController::class, 'storeReference'])->name('agents.references.store');
     Route::delete('agents/{agent}/references/{reference}', [AgentController::class, 'destroyReference'])->name('agents.references.destroy');
     Route::post('agents/{agent}/addressing-preferences', [AgentController::class, 'storeAddressingPreference'])->name('agents.addressing-preferences.store');
@@ -70,6 +72,7 @@ Route::middleware(['auth', 'owner', 'schema'])->prefix('console')->name('console
     Route::get('agents/{agent}/connect', [AgentController::class, 'connect'])->name('agents.connect');
     Route::get('agents/{agent}/plugin.zip', [AgentController::class, 'pluginZip'])->name('agents.plugin');
     Route::resource('agents', AgentController::class)->except(['destroy']);
+    Route::resource('groups', AgentGroupController::class)->except(['show']);
 
     Route::get('instructions', [InstructionController::class, 'index'])->name('instructions.index');
     Route::get('agents/{agent}/instructions', [InstructionController::class, 'edit'])->name('agents.instructions.edit');
@@ -104,6 +107,9 @@ Route::middleware(['auth', 'owner', 'schema'])->prefix('console')->name('console
     Route::post('knowledge/{knowledge}/operator', [KnowledgeController::class, 'bindOperator'])->name('knowledge.operator.store');
     Route::post('knowledge/{knowledge}/identifiers', [KnowledgeController::class, 'storeIdentifier'])->name('knowledge.identifiers.store');
     Route::delete('knowledge/{knowledge}/identifiers/{identifier}', [KnowledgeController::class, 'destroyIdentifier'])->name('knowledge.identifiers.destroy');
+    Route::post('knowledge/{knowledge}/personas', [KnowledgeController::class, 'storePersona'])->name('knowledge.personas.store');
+    Route::delete('knowledge/{knowledge}/personas/{persona}', [KnowledgeController::class, 'destroyPersona'])->name('knowledge.personas.destroy');
+    Route::put('knowledge/{knowledge}/instruction-copy', [KnowledgeController::class, 'storeInstructionCopy'])->name('knowledge.instruction-copy.store');
     Route::delete('knowledge/{knowledge}', [KnowledgeController::class, 'destroy'])->name('knowledge.destroy');
 
     Route::get('messages', [MessageController::class, 'index'])->name('messages.index');

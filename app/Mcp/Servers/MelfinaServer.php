@@ -4,7 +4,9 @@ namespace App\Mcp\Servers;
 
 use App\Mcp\Methods\MailListen;
 use App\Mcp\Tools\AckMessage;
+use App\Mcp\Tools\KnowledgeAddAlias;
 use App\Mcp\Tools\KnowledgeConnect;
+use App\Mcp\Tools\KnowledgeLinkPersona;
 use App\Mcp\Tools\KnowledgeLookup;
 use App\Mcp\Tools\KnowledgeSearch;
 use App\Mcp\Tools\KnowledgeUpsert;
@@ -72,6 +74,8 @@ class MelfinaServer extends Server
         KnowledgeSearch::class,
         KnowledgeUpsert::class,
         KnowledgeConnect::class,
+        KnowledgeAddAlias::class,
+        KnowledgeLinkPersona::class,
     ];
 
     protected array $tools = self::TOOLS;

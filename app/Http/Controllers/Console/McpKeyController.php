@@ -128,12 +128,19 @@ class McpKeyController extends Controller
         ]);
 
         $user = $request->user();
-        $user->operator_persona = $validated['operator_persona'] ?: null;
+        $copy = $validated['operator_persona'] ?: null;
+        $user->operator_persona = $copy;
         $user->save();
+
+        $person = $user->operatorEntry;
+        if ($person !== null) {
+            $person->instruction_copy = $copy;
+            $person->save();
+        }
 
         return redirect()
             ->route('console.dashboard')
-            ->with('status', 'Operator persona saved.');
+            ->with('status', 'Instruction copy saved.');
     }
 
     /**

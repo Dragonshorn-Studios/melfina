@@ -346,11 +346,11 @@ it('lets the owner remove an identifier from the operator person', function () {
     $this->actingAs($this->owner)
         ->get(route('console.dashboard'))
         ->assertOk()
-        ->assertSee('OPERATOR NAMES', false)
+        ->assertSee('ALIASES', false)
         ->assertSee('Rug', false)
-        ->assertSee('A global nickname anyone can look up', false)
-        ->assertSee('A public or account handle that names this person', false)
-        ->assertSee('A human persona name of this person', false);
+        ->assertSee('Other names for this same person', false)
+        ->assertDontSee('e.g. grokbot', false)
+        ->assertDontSee('e.g. minimax', false);
 
     $this->actingAs($this->owner)
         ->from(route('console.dashboard'))
@@ -372,9 +372,8 @@ it('lets the owner remove an identifier from the knowledge edit page', function 
         ->get(route('console.knowledge.edit', $person))
         ->assertOk()
         ->assertSee('Ruge', false)
-        ->assertSee('A global nickname anyone can look up', false)
-        ->assertSee('A public or account handle that names this person', false)
-        ->assertSee('A human persona name of this person', false);
+        ->assertSee('Another name for this same entity', false)
+        ->assertDontSee('name="aliases"', false);
 
     $this->actingAs($this->owner)
         ->from(route('console.knowledge.edit', $person))

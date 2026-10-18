@@ -25,7 +25,7 @@
                     @foreach ($spaces as $space)
                         <tr class="border-b border-border/50">
                             <td class="py-2 pr-4 text-cream">{{ $space->name }}</td>
-                            <td class="py-2 pr-4 text-steel">{{ $space->acl_entries_count }}</td>
+                            <td class="py-2 pr-4 text-steel">{{ $space->acl_entries_count + $space->group_acl_entries_count }}</td>
                             <td class="py-2 pr-4 text-steel">{{ $space->files_count }}</td>
                             <td class="py-2 text-right">
                                 <a href="{{ route('console.shared.show', $space) }}" class="mr-3 text-amber underline decoration-border underline-offset-4">browse</a>

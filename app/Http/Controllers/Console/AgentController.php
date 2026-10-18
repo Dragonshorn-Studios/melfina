@@ -14,6 +14,7 @@ use App\Models\AgentApiKey;
 use App\Models\AgentEnrollment;
 use App\Models\AgentEntityReference;
 use App\Models\AgentEntityReferenceKind;
+use App\Models\AgentGroup;
 use App\Models\KnowledgeEntry;
 use App\Rules\UnreservedAgentName;
 use App\Services\KnowledgeIdentityAdmin;
@@ -24,6 +25,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Laravel\Mcp\Server\Attributes\Instructions;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -92,7 +94,34 @@ class AgentController extends Controller
             'addressingPreferences' => $agent->addressingPreferences()->with('person')->orderBy('id')->get(),
             'people' => KnowledgeEntry::query()->where('type', 'person')->orderBy('name_lower')->get(['id', 'name']),
             'referenceKinds' => AgentEntityReferenceKind::values(),
+            'groups' => AgentGroup::query()->orderBy('name')->get(),
         ]);
+    }
+
+    public function storeMainPerson(Request $request, Agent $agent): RedirectResponse
+    {
+        $this->authorize('update', $agent);
+
+        $validated = $request->validate([
+            'main_person_entry_id' => ['nullable', 'integer', 'exists:knowledge_entries,id'],
+            'groups' => ['nullable', 'array'],
+            'groups.*' => ['integer', 'exists:agent_groups,id'],
+        ]);
+
+        $personId = $validated['main_person_entry_id'] ?? null;
+        if ($personId !== null && KnowledgeEntry::query()->whereKey($personId)->where('type', 'person')->doesntExist()) {
+            throw ValidationException::withMessages([
+                'main_person_entry_id' => 'The main person must be a person entry.',
+            ]);
+        }
+
+        $agent->main_person_entry_id = $personId;
+        $agent->save();
+        $agent->groups()->sync($validated['groups'] ?? []);
+
+        return redirect()
+            ->route('console.agents.show', $agent)
+            ->with('status', 'Main person saved.');
     }
 
     /**

@@ -4,9 +4,7 @@ namespace App\Mcp\Tools;
 
 use App\Mcp\Concerns\ResolvesAgent;
 use App\Models\Agent;
-use App\Models\KnowledgeIdentityStatus;
-use App\Models\User;
-use App\Services\KnowledgeIdentityResolver;
+use App\Services\PersonaLinks;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Laravel\Mcp\Request;
@@ -34,29 +32,22 @@ class ReadInstructions extends Tool
      * with the console preview so the owner sees the same thing the imp
      * does.
      *
-     * @return array{content: string, layers: array<int, string>, operator: string, persona_hint: string, identity_context: array{operator_entry_id: int|null}}
+     * @return array{content: string, layers: list<string>, operator: string, persona_hint: string, identity_context: array{operator_entry_id: int|null, operator_name: string|null, main_person_entry_id: int|null, main_person_name: string|null, same_being: bool}}
      */
     public static function payload(Agent $agent): array
     {
         $instruction = $agent->instruction;
-
-        // The owner's shared operator persona rides on every read — agents
-        // always know who the human behind the console is.
-        $operator = User::operatorPersona();
-
-        $binding = app(KnowledgeIdentityResolver::class)->operatorBinding();
-        $operatorEntryId = $binding['status'] === KnowledgeIdentityStatus::Resolved
-            ? $binding['entry']?->id
-            : null;
+        $presentation = app(PersonaLinks::class);
 
         return [
             'content' => $instruction?->content ?? '',
-            'layers' => $instruction?->layersList() ?? [],
-            'operator' => $operator ?? '',
+            'layers' => array_values([
+                ...$presentation->preambles($agent),
+                ...($instruction?->layersList() ?? []),
+            ]),
+            'operator' => $presentation->instructionCopy($agent),
             'persona_hint' => 'Your persona and memories live in your brain — read them with read_persona, maintain them with update_persona.',
-            'identity_context' => [
-                'operator_entry_id' => $operatorEntryId,
-            ],
+            'identity_context' => $presentation->identityContext($agent),
         ];
     }
 

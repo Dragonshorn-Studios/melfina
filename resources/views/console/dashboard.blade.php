@@ -51,7 +51,7 @@
             <div class="flex items-center justify-between">
                 <p class="font-mono text-xs tracking-[0.16em] text-steel">MCP ACCESS</p>
             </div>
-            <x-confirm-form action="{{ route('console.mcp-key.store') }}" class="mt-3 flex gap-2" confirm="Issue a fleet key under this name? An existing live key with the same name is revoked."><input type="text" name="name" placeholder="key name (e.g. grokbot)" maxlength="64"
+            <x-confirm-form action="{{ route('console.mcp-key.store') }}" class="mt-3 flex gap-2" confirm="Issue a fleet key under this name? An existing live key with the same name is revoked."><input type="text" name="name" placeholder="key name" maxlength="64"
                     class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream placeholder:text-steel/60"
                     style="border-radius: var(--radius-console)">
                 <button type="submit"
@@ -105,7 +105,7 @@
 
         <section class="mt-8">
             <p class="font-mono text-xs tracking-[0.16em] text-steel">ENROLLMENT KEYS</p>
-            <x-confirm-form action="{{ route('console.enroll-keys.store') }}" class="mt-3 flex gap-2" confirm="Issue an enroll key under this name? An existing live key with the same name is revoked."><input type="text" name="enroll_name" placeholder="key name (e.g. minimax)" maxlength="64"
+            <x-confirm-form action="{{ route('console.enroll-keys.store') }}" class="mt-3 flex gap-2" confirm="Issue an enroll key under this name? An existing live key with the same name is revoked."><input type="text" name="enroll_name" placeholder="key name" maxlength="64"
                     class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream placeholder:text-steel/60"
                     style="border-radius: var(--radius-console)">
                 <button type="submit"
@@ -142,29 +142,10 @@
         </section>
 
         <section class="mt-8">
-            <p class="font-mono text-xs tracking-[0.16em] text-steel">OPERATOR PERSONA</p>
+            <p class="font-mono text-xs tracking-[0.16em] text-steel">OPERATOR PERSON</p>
             <p class="mt-1 text-sm text-steel">
-                Who you are, appended to every agent's <code>read_instructions</code> — how the
-                fleet should address its human. Leave empty to send nothing.
-            </p>
-            <form method="POST" action="{{ route('console.mcp.operator-persona.store') }}" class="mt-3">
-                @csrf
-                @method('PUT')
-                <textarea name="operator_persona" rows="3"
-                    placeholder="The user is Antoni — address them as Antoni; they run Dragonshorn and prefer terse replies."
-                    class="w-full border border-border bg-void/60 px-3 py-2 font-mono text-xs text-cream placeholder:text-steel/60"
-                    style="border-radius: var(--radius-console)">{{ old('operator_persona', $operatorPersona) }}</textarea>
-                @error('operator_persona') <p class="mt-1 font-mono text-xs text-red-400">{{ $message }}</p> @enderror
-                <button type="submit"
-                    class="mt-2 border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
-                    style="border-radius: var(--radius-console)">save persona</button>
-            </form>
-
-            <p class="mt-6 font-mono text-xs tracking-[0.16em] text-steel">OPERATOR PERSON</p>
-            <p class="mt-1 text-sm text-steel">
-                Canonical <code>person</code> in the knowledge graph this install's operator is.
-                Separate from the persona text above — titles like a private form of address
-                are bound per imp, not here.
+                The person entry this install’s operator is. Other presentations of the same being
+                are persona links on that person. An agent or a group can choose a different one as its main person.
             </p>
             <form method="POST" action="{{ route('console.mcp.operator-binding.store') }}" class="mt-3">
                 @csrf
@@ -187,34 +168,51 @@
             </form>
 
             @if ($operatorEntry)
-                <p class="mt-6 font-mono text-xs tracking-[0.16em] text-steel">OPERATOR NAMES</p>
+                <p class="mt-6 font-mono text-xs tracking-[0.16em] text-steel">INSTRUCTION COPY</p>
                 <p class="mt-1 text-sm text-steel">
-                    Global names this operator person answers to — alias, handle, or persona.
-                    Remove one if lookup should stop matching it. Per-imp titles like Szefowa live on the agent page.
+                    Paragraph appended to <code>read_instructions</code> for agents whose main person is
+                    {{ $operatorEntry->name }}. An agent with a different main person reads that person’s copy instead.
+                </p>
+                <form method="POST" action="{{ route('console.mcp.operator-persona.store') }}" class="mt-3">
+                    @csrf
+                    @method('PUT')
+                    <textarea name="operator_persona" rows="3"
+                        placeholder="How agents should handle this person."
+                        class="w-full border border-border bg-void/60 px-3 py-2 font-mono text-xs text-cream placeholder:text-steel/60"
+                        style="border-radius: var(--radius-console)">{{ old('operator_persona', $operatorEntry->instruction_copy ?: $operatorPersona) }}</textarea>
+                    @error('operator_persona') <p class="mt-1 font-mono text-xs text-red-400">{{ $message }}</p> @enderror
+                    <button type="submit"
+                        class="mt-2 border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                        style="border-radius: var(--radius-console)">save copy</button>
+                </form>
+
+                <p class="mt-6 font-mono text-xs tracking-[0.16em] text-steel">ALIASES</p>
+                <p class="mt-1 text-sm text-steel">
+                    Other names for this same person. Lookup returns this entry.
                 </p>
                 @if ($operatorEntry->identifiers->isNotEmpty())
                     <ul class="mt-3 space-y-1 font-mono text-xs">
                         @foreach ($operatorEntry->identifiers as $identifier)
                             <li class="flex items-center justify-between gap-3 border border-border/50 bg-void/60 px-3 py-1.5" style="border-radius: var(--radius-console)">
-                                <span class="text-cream" title="{{ $identifier->kind->hint() }}">{{ $identifier->kind->value }} · {{ $identifier->value }}</span>
-                                <x-confirm-form action="{{ route('console.knowledge.identifiers.destroy', [$operatorEntry, $identifier]) }}" method="DELETE" confirm="Remove {{ $identifier->kind->value }} '{{ $identifier->value }}' from {{ $operatorEntry->name }}?">
+                                <span class="text-cream">{{ $identifier->kind->value }} · {{ $identifier->value }}</span>
+                                <x-confirm-form action="{{ route('console.knowledge.identifiers.destroy', [$operatorEntry, $identifier]) }}" method="DELETE" confirm="Remove '{{ $identifier->value }}' from {{ $operatorEntry->name }}?">
                                     <button type="submit" class="text-steel underline decoration-border underline-offset-4 hover:text-danger">remove</button>
                                 </x-confirm-form>
                             </li>
                         @endforeach
                     </ul>
                 @else
-                    <p class="mt-3 font-mono text-xs text-steel">No extra names yet — the canonical name still resolves.</p>
+                    <p class="mt-3 font-mono text-xs text-steel">No aliases yet — the canonical name still resolves.</p>
                 @endif
                 <form method="POST" action="{{ route('console.knowledge.identifiers.store', $operatorEntry) }}" class="mt-3 flex flex-wrap items-start gap-2">
                     @csrf
+                    <input type="hidden" name="kind" value="alias">
                     <input type="text" name="value" placeholder="another name" maxlength="200"
                         class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream"
                         style="border-radius: var(--radius-console)">
-                    <x-described-select name="kind" :options="$identifierKinds ?? []" :selected="old('kind', 'alias')" />
                     <button type="submit"
                         class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
-                        style="border-radius: var(--radius-console)">add name</button>
+                        style="border-radius: var(--radius-console)">add alias</button>
                 </form>
                 @error('value') <p class="mt-1 font-mono text-xs text-red-400">{{ $message }}</p> @enderror
             @endif
