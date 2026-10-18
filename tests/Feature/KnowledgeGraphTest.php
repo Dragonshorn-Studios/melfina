@@ -128,6 +128,40 @@ it('lets the owner retract a permanent link', function () {
         ->and($gone->link->permanent)->toBeFalse();
 });
 
+it('does not create a ghost link when retracting a triple that was never asserted', function () {
+    $result = $this->graph->connect(
+        author: 'grokbot',
+        authorKind: KnowledgeAuthorKind::Agent,
+        from: 'Yukine',
+        to: 'Botbox',
+        predicate: KnowledgePredicate::RunsOn,
+        op: KnowledgeObservationKind::LinkRetract,
+    );
+
+    expect($result->ok)->toBeFalse()
+        ->and($result->error)->toContain('No such link')
+        ->and(KnowledgeLink::query()->count())->toBe(0);
+});
+
+it('marks a link retracted when its last asserter withdraws', function () {
+    $this->graph->connect('grokbot', KnowledgeAuthorKind::Agent, 'Yukine', 'Botbox', KnowledgePredicate::RunsOn);
+    $gone = $this->graph->connect(
+        author: 'grokbot',
+        authorKind: KnowledgeAuthorKind::Agent,
+        from: 'Yukine',
+        to: 'Botbox',
+        predicate: KnowledgePredicate::RunsOn,
+        op: KnowledgeObservationKind::LinkRetract,
+    );
+
+    expect($gone->ok)->toBeTrue()
+        ->and($gone->link->status)->toBe(KnowledgeLinkStatus::Retracted)
+        ->and($gone->link->confidence)->toBe(0);
+
+    $snap = $this->graph->constellation();
+    expect($snap['links'])->toHaveCount(0);
+});
+
 it('does not write a link when an endpoint is missing', function () {
     $result = $this->graph->connect(
         'grokbot',
@@ -215,6 +249,24 @@ it('migrates existing related names into related_to links', function () {
     $related = $shiori->fresh()->resolvedRelated();
     expect($related['entries'])->toHaveCount(1)
         ->and($related['entries'][0]['name'])->toBe('Melfina')
+        ->and($related['unresolved'])->toBe(['Gone Project']);
+});
+
+it('still resolves leftover related names that exist but have no graph edge', function () {
+    KnowledgeEntry::factory()->create([
+        'name' => 'Melfina', 'name_lower' => 'melfina', 'summary' => 'Imp brain',
+    ]);
+    $shiori = KnowledgeEntry::factory()->create([
+        'name' => 'Shiori', 'name_lower' => 'shiori',
+        'related' => ['Melfina', 'Yukine', 'Gone Project'],
+    ]);
+
+    $this->graph->connect('grokbot', KnowledgeAuthorKind::Agent, 'Shiori', 'Botbox', KnowledgePredicate::RelatedTo);
+
+    $related = $shiori->fresh()->resolvedRelated();
+    $names = collect($related['entries'])->pluck('name')->sort()->values()->all();
+
+    expect($names)->toBe(['Botbox', 'Melfina', 'Yukine'])
         ->and($related['unresolved'])->toBe(['Gone Project']);
 });
 

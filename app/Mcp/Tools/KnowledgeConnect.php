@@ -10,7 +10,6 @@ use App\Services\KnowledgeGraph;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\Rule;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -43,10 +42,10 @@ class KnowledgeConnect extends Tool
         ]);
 
         $agent = $this->agent();
-        $rateKey = 'mcp-knowledge:'.$agent->id;
+        $eventCost = $request->filled('event') ? 2 : 0;
 
-        if (RateLimiter::tooManyAttempts($rateKey, KnowledgeUpsert::WRITE_LIMIT_PER_MINUTE)) {
-            return Response::error('Knowledge write rate limit exceeded. Try again in '.RateLimiter::availableIn($rateKey).' seconds.');
+        if ($limited = KnowledgeUpsert::consumeWriteQuota($agent->id, 1 + $eventCost)) {
+            return $limited;
         }
 
         $data = $request->get('data');
@@ -76,8 +75,6 @@ class KnowledgeConnect extends Tool
             createMissing: $request->boolean('create_missing'),
             eventName: $request->filled('event') ? $request->string('event')->toString() : null,
         );
-
-        RateLimiter::hit($rateKey, 60);
 
         if (! $result->ok) {
             $payload = [

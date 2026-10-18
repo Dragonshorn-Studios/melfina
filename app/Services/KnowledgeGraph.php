@@ -103,8 +103,14 @@ class KnowledgeGraph
 
             $created = ! $link->exists;
 
+            if ($op === KnowledgeObservationKind::LinkRetract && $created) {
+                return new KnowledgeConnectResult(
+                    ok: false,
+                    error: 'No such link to retract.',
+                );
+            }
+
             if ($op === KnowledgeObservationKind::LinkRetract
-                && $link->exists
                 && $link->permanent
                 && $authorKind === KnowledgeAuthorKind::Agent) {
                 return new KnowledgeConnectResult(
@@ -483,9 +489,10 @@ class KnowledgeGraph
             $confidence = max($confidence, self::CONFIDENCE_OWNER_FLOOR);
         }
 
-        $link->status = KnowledgeLinkStatus::Active;
-        $link->confidence = $confidence;
-        $link->disputed = $disputed;
+        $active = $anyonePositive || $ownerConfirmed || $permanent;
+        $link->status = $active ? KnowledgeLinkStatus::Active : KnowledgeLinkStatus::Retracted;
+        $link->confidence = $active ? $confidence : 0;
+        $link->disputed = $active && $disputed;
         $link->save();
 
         return $link;

@@ -163,35 +163,35 @@ class KnowledgeEntry extends Model
 
         $fromGraph = $fromLinks->concat($fromIncoming)->unique('name')->values();
 
-        $related = collect($this->related ?? []);
+        $related = collect($this->related ?? [])
+            ->map(fn (string $n) => trim($n))
+            ->filter()
+            ->unique()
+            ->values();
 
-        if ($fromGraph->isNotEmpty()) {
-            $foundNames = $fromGraph->pluck('name')->map(fn (string $n) => Str::lower($n));
+        $inGraph = $fromGraph->pluck('name')->map(fn (string $n) => Str::lower($n));
+        $leftover = $related
+            ->reject(fn (string $n) => $inGraph->contains(Str::lower($n)))
+            ->values();
 
-            return [
-                'entries' => $fromGraph,
-                'unresolved' => $related
-                    ->reject(fn (string $n) => $foundNames->contains(Str::lower($n)))
-                    ->values()
-                    ->all(),
-            ];
-        }
+        $found = $leftover->isEmpty()
+            ? collect()
+            : static::query()
+                ->whereIn('name_lower', $leftover->map(fn (string $n) => Str::lower($n)))
+                ->get(['name', 'summary']);
 
-        if ($related->isEmpty()) {
-            return ['entries' => collect(), 'unresolved' => []];
-        }
-
-        $found = static::query()
-            ->whereIn('name_lower', $related->map(fn (string $n) => Str::lower($n)))
-            ->pluck('summary', 'name');
+        $foundLower = $found->pluck('name')->map(fn (string $n) => Str::lower($n));
 
         return [
-            'entries' => $found->map(fn (string $summary, string $name) => [
-                'name' => $name,
-                'summary' => $summary,
-            ])->values(),
-            'unresolved' => $related
-                ->reject(fn (string $n) => $found->keys()->contains(fn (string $k) => Str::lower($k) === Str::lower($n)))
+            'entries' => $fromGraph
+                ->concat($found->map(fn (self $entry) => [
+                    'name' => $entry->name,
+                    'summary' => $entry->summary,
+                ]))
+                ->unique('name')
+                ->values(),
+            'unresolved' => $leftover
+                ->reject(fn (string $n) => $foundLower->contains(Str::lower($n)))
                 ->values()
                 ->all(),
         ];
