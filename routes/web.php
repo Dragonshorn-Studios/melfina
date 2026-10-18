@@ -83,6 +83,12 @@ Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group
     Route::resource('shared', SharedSpaceController::class)->except(['destroy']);
 
     Route::get('knowledge', [KnowledgeController::class, 'index'])->name('knowledge.index');
+    Route::get('knowledge/graph', [KnowledgeController::class, 'graph'])->name('knowledge.graph');
+    Route::post('knowledge/links', [KnowledgeController::class, 'storeLink'])->name('knowledge.links.store');
+    Route::put('knowledge/links/{link}/confirm', [KnowledgeController::class, 'confirmLink'])->name('knowledge.links.confirm');
+    Route::put('knowledge/links/{link}/permanent', [KnowledgeController::class, 'permanentLink'])->name('knowledge.links.permanent');
+    Route::put('knowledge/links/{link}', [KnowledgeController::class, 'updateLink'])->name('knowledge.links.update');
+    Route::delete('knowledge/links/{link}', [KnowledgeController::class, 'retractLink'])->name('knowledge.links.destroy');
     Route::get('knowledge/create', [KnowledgeController::class, 'create'])->name('knowledge.create');
     Route::post('knowledge', [KnowledgeController::class, 'store'])->name('knowledge.store');
     Route::get('knowledge/{knowledge}/edit', [KnowledgeController::class, 'edit'])->name('knowledge.edit');

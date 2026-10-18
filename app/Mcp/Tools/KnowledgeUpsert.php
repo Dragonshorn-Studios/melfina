@@ -3,7 +3,10 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Concerns\ResolvesAgent;
+use App\Models\KnowledgeAuthorKind;
 use App\Models\KnowledgeEntry;
+use App\Models\KnowledgePredicate;
+use App\Services\KnowledgeGraph;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Facades\DB;
@@ -23,9 +26,29 @@ class KnowledgeUpsert extends Tool
     use ResolvesAgent;
 
     /**
-     * Updates allowed per minute per agent.
+     * Updates allowed per minute per agent. Each knowledge_upsert, each
+     * dual-written related link, and each knowledge_connect (plus its
+     * named-event side links) counts as one unit.
      */
     public const WRITE_LIMIT_PER_MINUTE = 30;
+
+    /**
+     * Reserve `$cost` units of the shared knowledge write budget, or
+     * return an error response when the agent is out of quota.
+     */
+    public static function consumeWriteQuota(int $agentId, int $cost): ?Response
+    {
+        $cost = max(1, $cost);
+        $key = 'mcp-knowledge:'.$agentId;
+
+        if (RateLimiter::remaining($key, self::WRITE_LIMIT_PER_MINUTE) < $cost) {
+            return Response::error('Knowledge write rate limit exceeded. Try again in '.RateLimiter::availableIn($key).' seconds.');
+        }
+
+        RateLimiter::increment($key, 60, $cost);
+
+        return null;
+    }
 
     /**
      * Handle the tool request.
@@ -47,12 +70,6 @@ class KnowledgeUpsert extends Tool
         ]);
 
         $agent = $this->agent();
-
-        $rateKey = 'mcp-knowledge:'.$agent->id;
-
-        if (RateLimiter::tooManyAttempts($rateKey, self::WRITE_LIMIT_PER_MINUTE)) {
-            return Response::error('Knowledge write rate limit exceeded. Try again in '.RateLimiter::availableIn($rateKey).' seconds.');
-        }
 
         $name = trim($request->string('entry')->toString());
         $entry = KnowledgeEntry::query()
@@ -77,7 +94,15 @@ class KnowledgeUpsert extends Tool
 
         $entry ??= new KnowledgeEntry(['name' => $name, 'name_lower' => Str::lower($name)]);
 
-        DB::transaction(function () use ($request, $entry, $name, $agent) {
+        $relatedNames = $request->has('related')
+            ? array_values($request->get('related') ?? [])
+            : null;
+
+        if ($limited = self::consumeWriteQuota($agent->id, 1 + count($relatedNames ?? []))) {
+            return $limited;
+        }
+
+        DB::transaction(function () use ($request, $entry, $name, $agent, $relatedNames) {
             $entry->name = $name;
             $entry->name_lower = Str::lower($name);
 
@@ -107,9 +132,21 @@ class KnowledgeUpsert extends Tool
             $entry->save();
 
             $entry->recordVersion($agent->name);
-        });
 
-        RateLimiter::hit($rateKey, 60);
+            if ($relatedNames !== null) {
+                $graph = app(KnowledgeGraph::class);
+                foreach ($relatedNames as $related) {
+                    $graph->connect(
+                        author: $agent->name,
+                        authorKind: KnowledgeAuthorKind::Agent,
+                        from: $entry->name,
+                        to: (string) $related,
+                        predicate: KnowledgePredicate::RelatedTo,
+                        source: $request->string('source')->toString() ?: null,
+                    );
+                }
+            }
+        });
 
         return $this->jsonResponse([
             'updated' => true,

@@ -1,10 +1,13 @@
 <x-console-layout :title="'Knowledge'">
     <x-console-panel>
-        <x-page-header eyebrow="KNOWLEDGE" title="Canonical entries, one shared base">
+        <x-page-header eyebrow="KNOWLEDGE" title="Canonical entities, typed links">
             <x-slot:actions>
-<a href="{{ route('console.knowledge.create') }}"
-                class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"
-                style="border-radius: var(--radius-console)">new entry</a>
+                <a href="{{ route('console.knowledge.graph') }}"
+                    class="border border-border px-3 py-1.5 font-mono text-xs text-cream hover:border-amber hover:text-amber"
+                    style="border-radius: var(--radius-console)">graph</a>
+                <a href="{{ route('console.knowledge.create') }}"
+                    class="border border-amber bg-amber px-3 py-1.5 font-mono text-xs font-semibold text-void hover:bg-amber-dim"
+                    style="border-radius: var(--radius-console)">new entry</a>
             </x-slot:actions>
         </x-page-header>
 
@@ -54,6 +57,7 @@
                             <td class="py-2 pr-4 text-steel">{{ $entry->version }}</td>
                             <td class="py-2 pr-4 text-steel">{{ $entry->updated_by }} · {{ $entry->updated_at->diffForHumans(short: true) }}</td>
                             <td class="py-2 text-right">
+                                <a href="{{ route('console.knowledge.graph', ['focus' => $entry->id]) }}" class="mr-3 text-steel underline decoration-border underline-offset-4 hover:text-amber">graph</a>
                                 <a href="{{ route('console.knowledge.edit', $entry) }}" class="text-amber underline decoration-border underline-offset-4">edit</a>
                             </td>
                         </tr>

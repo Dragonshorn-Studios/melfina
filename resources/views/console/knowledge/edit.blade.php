@@ -3,6 +3,11 @@
         <x-page-header eyebrow="KNOWLEDGE" title="{{ $entry ? $entry->name : 'New entry' }}">
             @if ($entry)
                 <x-slot:subtitle>v{{ $entry->version }} · last write by {{ $entry->updated_by }} {{ $entry->updated_at->diffForHumans(short: true) }}</x-slot:subtitle>
+                <x-slot:actions>
+                    <a href="{{ route('console.knowledge.graph', ['focus' => $entry->id]) }}"
+                        class="border border-border px-3 py-1.5 font-mono text-xs text-cream hover:border-amber hover:text-amber"
+                        style="border-radius: var(--radius-console)">graph</a>
+                </x-slot:actions>
             @endif
         </x-page-header>
 

@@ -23,7 +23,7 @@ use Illuminate\Support\Str;
  * @property array<int, string> $aliases
  * @property string $summary Short one-liner.
  * @property string $state Current state and important constraints.
- * @property array<int, string> $related Canonical names of related entries.
+ * @property array<int, string> $related Canonical names of related entries (legacy; graph links are source of truth).
  * @property string|null $source Where the knowledge came from.
  * @property Carbon|null $verified_at
  * @property string $updated_by Agent name (or 'owner') of the last writer.
@@ -43,6 +43,7 @@ class KnowledgeEntry extends Model
         'runbook',
         'person',
         'concept',
+        'event',
     ];
 
     protected function casts(): array
@@ -57,6 +58,21 @@ class KnowledgeEntry extends Model
     public function versions(): HasMany
     {
         return $this->hasMany(KnowledgeEntryVersion::class);
+    }
+
+    public function outgoingLinks(): HasMany
+    {
+        return $this->hasMany(KnowledgeLink::class, 'from_entry_id');
+    }
+
+    public function incomingLinks(): HasMany
+    {
+        return $this->hasMany(KnowledgeLink::class, 'to_entry_id');
+    }
+
+    public function observations(): HasMany
+    {
+        return $this->hasMany(KnowledgeObservation::class, 'entry_id');
     }
 
     /**
@@ -127,23 +143,55 @@ class KnowledgeEntry extends Model
      */
     public function resolvedRelated(): array
     {
-        $related = collect($this->related ?? []);
+        $fromLinks = $this->outgoingLinks()
+            ->where('status', KnowledgeLinkStatus::Active)
+            ->with('toEntry')
+            ->get()
+            ->map(fn (KnowledgeLink $link) => [
+                'name' => $link->toEntry->name,
+                'summary' => $link->toEntry->summary,
+            ]);
 
-        if ($related->isEmpty()) {
-            return ['entries' => collect(), 'unresolved' => []];
-        }
+        $fromIncoming = $this->incomingLinks()
+            ->where('status', KnowledgeLinkStatus::Active)
+            ->with('fromEntry')
+            ->get()
+            ->map(fn (KnowledgeLink $link) => [
+                'name' => $link->fromEntry->name,
+                'summary' => $link->fromEntry->summary,
+            ]);
 
-        $found = static::query()
-            ->whereIn('name_lower', $related->map(fn (string $n) => Str::lower($n)))
-            ->pluck('summary', 'name');
+        $fromGraph = $fromLinks->concat($fromIncoming)->unique('name')->values();
+
+        $related = collect($this->related ?? [])
+            ->map(fn (string $n) => trim($n))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $inGraph = $fromGraph->pluck('name')->map(fn (string $n) => Str::lower($n));
+        $leftover = $related
+            ->reject(fn (string $n) => $inGraph->contains(Str::lower($n)))
+            ->values();
+
+        $found = $leftover->isEmpty()
+            ? collect()
+            : static::query()
+                ->whereIn('name_lower', $leftover->map(fn (string $n) => Str::lower($n)))
+                ->get(['name', 'summary']);
+
+        $foundLower = $found->pluck('name')->map(fn (string $n) => Str::lower($n));
 
         return [
-            'entries' => $found->map(fn (string $summary, string $name) => [
-                'name' => $name,
-                'summary' => $summary,
-            ])->values(),
-            'unresolved' => $related
-                ->reject(fn (string $n) => $found->keys()->contains(fn (string $k) => Str::lower($k) === Str::lower($n)))
+            'entries' => $fromGraph
+                ->concat($found->map(fn (self $entry) => [
+                    'name' => $entry->name,
+                    'summary' => $entry->summary,
+                ]))
+                ->unique('name')
+                ->values(),
+            'unresolved' => $leftover
+                ->reject(fn (string $n) => $foundLower->contains(Str::lower($n)))
                 ->values()
                 ->all(),
         ];

@@ -1,8 +1,11 @@
 <?php
 
+use App\Mcp\Tools\KnowledgeUpsert;
 use App\Models\Agent;
 use App\Models\KnowledgeEntry;
+use App\Models\KnowledgeLink;
 use App\Models\User;
+use Illuminate\Support\Facades\RateLimiter;
 
 function knowledgeResult(array $result): array
 {
@@ -184,4 +187,77 @@ it('works over the fleet key when the call names the agent', function () {
     // the knowledge entry's canonical name — they must not collide.
     expect($found['updated'])->toBeTrue();
     expect(KnowledgeEntry::first()->updated_by)->toBe('grokbot');
+});
+
+it('connects two entities and returns the typed neighborhood on lookup', function () {
+    ($this->mcpTool)('knowledge_upsert', ['entry' => 'Yukine', 'type' => 'project', 'summary' => 'Discord bridge']);
+    ($this->mcpTool)('knowledge_upsert', ['entry' => 'Botbox', 'type' => 'service', 'summary' => 'home server']);
+
+    $connected = knowledgeResult(($this->mcpTool)('knowledge_connect', [
+        'from' => 'Yukine',
+        'to' => 'Botbox',
+        'predicate' => 'runs_on',
+        'note' => 'deploy log',
+        'data' => ['version' => '1.2'],
+    ]));
+
+    expect($connected['updated'])->toBeTrue()
+        ->and($connected['predicate'])->toBe('runs_on')
+        ->and($connected['confidence'])->toBe(220);
+
+    $found = knowledgeResult(($this->mcpTool)('knowledge_lookup', ['query' => 'Yukine']));
+    expect($found['links']['outgoing'])->toHaveCount(1)
+        ->and($found['links']['outgoing'][0]['predicate'])->toBe('runs_on')
+        ->and($found['links']['outgoing'][0]['name'])->toBe('Botbox')
+        ->and($found['links']['outgoing'][0]['confidence'])->toBe(220);
+
+    $inverse = knowledgeResult(($this->mcpTool)('knowledge_lookup', ['query' => 'Botbox']));
+    expect($inverse['links']['incoming'][0]['predicate'])->toBe('hosts');
+});
+
+it('refuses to connect an unknown endpoint without create_missing', function () {
+    ($this->mcpTool)('knowledge_upsert', ['entry' => 'Yukine', 'type' => 'project']);
+
+    $miss = knowledgeResult(($this->mcpTool)('knowledge_connect', [
+        'from' => 'Yukine',
+        'to' => 'ghost-host',
+        'predicate' => 'runs_on',
+    ]));
+
+    expect($miss['updated'])->toBeFalse()
+        ->and($miss['unresolved']['to'])->toBe('ghost-host');
+});
+
+it('charges related dual-writes against the knowledge write budget', function () {
+    KnowledgeEntry::factory()->create(['name' => 'Melfina', 'name_lower' => 'melfina']);
+    RateLimiter::increment('mcp-knowledge:'.$this->agent->id, 60, KnowledgeUpsert::WRITE_LIMIT_PER_MINUTE - 1);
+
+    $blocked = ($this->mcpTool)('knowledge_upsert', [
+        'entry' => 'Shiori',
+        'type' => 'project',
+        'related' => ['Melfina'],
+    ]);
+
+    expect($blocked['isError'] ?? false)->toBeTrue()
+        ->and($blocked['content'][0]['text'])->toContain('rate limit');
+    expect(KnowledgeEntry::query()->where('name_lower', 'shiori')->exists())->toBeFalse()
+        ->and(KnowledgeLink::query()->count())->toBe(0);
+});
+
+it('charges named-event side links against the knowledge write budget', function () {
+    KnowledgeEntry::factory()->create(['name' => 'Yukine', 'name_lower' => 'yukine', 'type' => 'project']);
+    KnowledgeEntry::factory()->create(['name' => 'Botbox', 'name_lower' => 'botbox', 'type' => 'service']);
+    RateLimiter::increment('mcp-knowledge:'.$this->agent->id, 60, KnowledgeUpsert::WRITE_LIMIT_PER_MINUTE - 2);
+
+    $blocked = ($this->mcpTool)('knowledge_connect', [
+        'from' => 'Yukine',
+        'to' => 'Botbox',
+        'predicate' => 'runs_on',
+        'event' => 'Yukine deploy 1.2',
+    ]);
+
+    expect($blocked['isError'] ?? false)->toBeTrue()
+        ->and($blocked['content'][0]['text'])->toContain('rate limit');
+    expect(KnowledgeLink::query()->count())->toBe(0)
+        ->and(KnowledgeEntry::query()->where('name_lower', 'yukine deploy 1.2')->exists())->toBeFalse();
 });

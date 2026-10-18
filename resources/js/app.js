@@ -1,3 +1,5 @@
+import './knowledge-graph.js';
+
 // Styled confirmation for destructive console forms: any <form> with a
 // data-confirm="…" attribute is intercepted and gated behind the shared
 // <dialog id="melfina-confirm"> rendered by the console layout. The flag
