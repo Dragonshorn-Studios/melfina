@@ -12,7 +12,7 @@ class KnowledgeIdentityWriteException extends RuntimeException
      */
     public function __construct(
         string $message,
-        public string $code = 'identity_write',
+        public string $identityCode = 'identity_write',
         public array $candidates = [],
         public ?array $unresolved = null,
     ) {

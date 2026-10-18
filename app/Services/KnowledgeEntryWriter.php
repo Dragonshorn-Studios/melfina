@@ -8,6 +8,7 @@ use App\Models\KnowledgeIdentifierKind;
 use App\Models\KnowledgeObservation;
 use App\Models\KnowledgeObservationKind;
 use App\Models\KnowledgePredicate;
+use App\Models\User;
 use App\Support\KnowledgeName;
 use Illuminate\Support\Facades\DB;
 
@@ -151,7 +152,7 @@ class KnowledgeEntryWriter
             return new KnowledgeWriteResult(
                 ok: false,
                 error: $e->getMessage(),
-                code: $e->code,
+                code: $e->identityCode,
                 candidates: $e->candidates,
                 unresolved: $e->unresolved,
             );
@@ -241,7 +242,15 @@ class KnowledgeEntryWriter
             'updated_at' => now(),
         ];
 
-        if ($type !== null) {
+        if ($type !== null && $type !== $entry->type) {
+            if ($authorKind === KnowledgeAuthorKind::Agent
+                && User::query()->where('operator_entry_id', $entry->id)->exists()) {
+                throw new KnowledgeIdentityWriteException(
+                    'The installation operator is a person and cannot change type through an agent write.',
+                    'operator_type_locked',
+                );
+            }
+
             $payload['type'] = $type;
         }
 
@@ -350,17 +359,7 @@ class KnowledgeEntryWriter
             ]);
         }
 
-        $projected = $entry->identifiers()
-            ->where('kind', KnowledgeIdentifierKind::Alias)
-            ->orderBy('id')
-            ->pluck('value')
-            ->values()
-            ->all();
-
-        KnowledgeEntry::query()->whereKey($entry->id)->update([
-            'aliases' => json_encode($projected),
-        ]);
-        $entry->aliases = $projected;
+        $entry->syncAliasProjection();
     }
 
     /**

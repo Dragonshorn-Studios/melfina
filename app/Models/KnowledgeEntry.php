@@ -82,6 +82,26 @@ class KnowledgeEntry extends Model
         return $this->hasMany(KnowledgeIdentifier::class, 'entry_id');
     }
 
+    /**
+     * JSON `aliases` is a compatibility projection of kind=alias
+     * identifier rows. Keep the column in lockstep whenever those rows
+     * change so the console form and legacy readers do not drop them.
+     */
+    public function syncAliasProjection(): void
+    {
+        $projected = $this->identifiers()
+            ->where('kind', KnowledgeIdentifierKind::Alias)
+            ->orderBy('id')
+            ->pluck('value')
+            ->values()
+            ->all();
+
+        static::query()->whereKey($this->id)->update([
+            'aliases' => json_encode($projected),
+        ]);
+        $this->aliases = $projected;
+    }
+
     public function entityReferences(): HasMany
     {
         return $this->hasMany(AgentEntityReference::class, 'entry_id');

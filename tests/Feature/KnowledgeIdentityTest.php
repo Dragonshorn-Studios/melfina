@@ -315,6 +315,71 @@ it('keeps scoped references when aliases are replaced, and vice versa', function
     expect(knowledgeIdentityResult(($this->mcpTool)('knowledge_lookup', ['query' => 'Runako']))['entry_id'])->toBe($person->id);
 });
 
+it('projects a new alias identifier onto JSON so the next owner save keeps it', function () {
+    $person = bindRughaltWorld($this->agent);
+    app(KnowledgeIdentityAdmin::class)->addIdentifier($person, 'Rug', KnowledgeIdentifierKind::Alias);
+
+    $person->refresh();
+    expect($person->aliases)->toBe(['Rug']);
+    expect(knowledgeIdentityResult(($this->mcpTool)('knowledge_lookup', ['query' => 'Rug']))['entry_id'])->toBe($person->id);
+
+    $this->actingAs($this->owner)
+        ->put(route('console.knowledge.update', $person), [
+            'name' => 'Rughalt',
+            'type' => 'person',
+            'aliases' => implode("\n", $person->aliases ?? []),
+            'summary' => $person->summary,
+            'state' => $person->state,
+            'expected_version' => $person->version,
+        ])
+        ->assertRedirect();
+
+    expect($person->fresh()->identifiers()->where('normalized_value', 'rug')->exists())->toBeTrue()
+        ->and($person->fresh()->aliases)->toContain('Rug');
+});
+
+it('copies a colliding source identifier once when repairing duplicates', function () {
+    $canonical = KnowledgeEntry::factory()->create([
+        'name' => 'Rughalt', 'name_lower' => 'rughalt', 'type' => 'person',
+    ]);
+    $first = KnowledgeEntry::factory()->create([
+        'name' => 'Rughalt A', 'name_lower' => 'rughalt a', 'type' => 'person',
+    ]);
+    $second = KnowledgeEntry::factory()->create([
+        'name' => 'Rughalt B', 'name_lower' => 'rughalt b', 'type' => 'person',
+    ]);
+    $admin = app(KnowledgeIdentityAdmin::class);
+    $admin->addIdentifier($first, 'Runako', KnowledgeIdentifierKind::Persona);
+    $admin->addIdentifier($second, 'Runako', KnowledgeIdentifierKind::Persona);
+
+    $report = $admin->repairDuplicates([
+        'canonical_id' => $canonical->id,
+        'source_ids' => [$first->id, $second->id],
+    ], dryRun: false);
+
+    expect($canonical->fresh()->identifiers()->where('normalized_value', 'runako')->count())->toBe(1)
+        ->and(collect($report['identifier_copies'])->pluck('value')->all())->toBe(['Runako'])
+        ->and(collect($report['identifier_collisions'])->pluck('from')->all())->toBe([$second->id]);
+});
+
+it('does not let an agent retype the operator person', function () {
+    $person = bindRughaltWorld($this->agent);
+
+    $result = ($this->mcpTool)('knowledge_upsert', [
+        'entry' => 'Rughalt',
+        'entry_id' => $person->id,
+        'type' => 'concept',
+    ]);
+    expect($result['isError'] ?? false)->toBeTrue();
+
+    $person->refresh();
+    expect($person->type)->toBe('person');
+
+    $lookup = knowledgeIdentityResult(($this->mcpTool)('knowledge_lookup', ['query' => 'operator']));
+    expect($lookup['found'])->toBeTrue()
+        ->and($lookup['entry_id'])->toBe($person->id);
+});
+
 it('does not let an agent change the operator or another agents references', function () {
     $person = bindRughaltWorld($this->agent);
     $stranger = KnowledgeEntry::factory()->create([

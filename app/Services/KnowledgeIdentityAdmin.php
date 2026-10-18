@@ -103,12 +103,18 @@ class KnowledgeIdentityAdmin
             ]);
         }
 
-        return $entry->identifiers()->create([
+        $identifier = $entry->identifiers()->create([
             'value' => $value,
             'normalized_value' => $normalized,
             'kind' => $kind,
             'author' => $author,
         ]);
+
+        if ($kind === KnowledgeIdentifierKind::Alias) {
+            $entry->syncAliasProjection();
+        }
+
+        return $identifier;
     }
 
     /**
@@ -323,7 +329,8 @@ class KnowledgeIdentityAdmin
             'operator' => null,
         ];
 
-        $sources = KnowledgeEntry::query()->whereIn('id', $sourceIds)->get()->keyBy('id');
+        $sources = KnowledgeEntry::query()->whereIn('id', $sourceIds)->with('identifiers')->get()->keyBy('id');
+        $queuedIdentifiers = [];
 
         foreach ($sourceIds as $sourceId) {
             if (! $sources->has($sourceId)) {
@@ -370,10 +377,11 @@ class KnowledgeIdentityAdmin
 
         foreach ($sources as $source) {
             foreach ($source->identifiers as $identifier) {
+                $normalized = $identifier->normalized_value;
                 $exists = $canonical->identifiers()
-                    ->where('normalized_value', $identifier->normalized_value)
+                    ->where('normalized_value', $normalized)
                     ->exists();
-                if ($exists || $identifier->normalized_value === $canonical->name_lower) {
+                if ($exists || $normalized === $canonical->name_lower || isset($queuedIdentifiers[$normalized])) {
                     $report['identifier_collisions'][] = [
                         'value' => $identifier->value,
                         'from' => $source->id,
@@ -381,6 +389,7 @@ class KnowledgeIdentityAdmin
 
                     continue;
                 }
+                $queuedIdentifiers[$normalized] = true;
                 $report['identifier_copies'][] = [
                     'value' => $identifier->value,
                     'kind' => $identifier->kind->value,

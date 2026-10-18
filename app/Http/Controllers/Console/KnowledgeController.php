@@ -7,6 +7,7 @@ use App\Models\KnowledgeAuthorKind;
 use App\Models\KnowledgeEntry;
 use App\Models\KnowledgeEntryRedirect;
 use App\Models\KnowledgeIdentifierKind;
+use App\Models\KnowledgeIdentityStatus;
 use App\Models\KnowledgeLink;
 use App\Models\KnowledgeObservationKind;
 use App\Models\KnowledgePredicate;
@@ -16,6 +17,7 @@ use App\Services\KnowledgeGraph;
 use App\Services\KnowledgeIdentityAdmin;
 use App\Services\KnowledgeIdentityContext;
 use App\Services\KnowledgeIdentityResolver;
+use App\Services\KnowledgeIdentityResult;
 use App\Support\KnowledgeName;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -253,20 +255,21 @@ class KnowledgeController extends Controller
         ]);
 
         $from = app(KnowledgeIdentityResolver::class)
-            ->resolve(KnowledgeIdentityContext::forOwner(), query: $validated['from'])->entry;
+            ->resolve(KnowledgeIdentityContext::forOwner(), query: $validated['from']);
         $to = app(KnowledgeIdentityResolver::class)
-            ->resolve(KnowledgeIdentityContext::forOwner(), query: $validated['to'])->entry;
-        if ($from === null || $to === null) {
+            ->resolve(KnowledgeIdentityContext::forOwner(), query: $validated['to']);
+        $endError = $this->linkEndError($from) ?? $this->linkEndError($to);
+        if ($endError !== null || $from->entry === null || $to->entry === null) {
             return redirect()
                 ->route('console.knowledge.graph', ['focus' => $link->from_entry_id, 'link' => $link->id])
-                ->withErrors(['link' => 'Both ends must already exist to fix a link.']);
+                ->withErrors(['link' => $endError ?? 'Both ends must already exist to fix a link.']);
         }
 
         $result = $graph->retarget(
             $link,
             KnowledgePredicate::from($validated['predicate']),
-            $from,
-            $to,
+            $from->entry,
+            $to->entry,
         );
 
         if (! $result->ok) {
@@ -278,6 +281,23 @@ class KnowledgeController extends Controller
         return redirect()
             ->route('console.knowledge.graph', ['focus' => $result->link->from_entry_id, 'link' => $result->link->id])
             ->with('status', 'Link fixed.');
+    }
+
+    private function linkEndError(KnowledgeIdentityResult $resolved): ?string
+    {
+        if ($resolved->found()) {
+            return null;
+        }
+
+        if ($resolved->status === KnowledgeIdentityStatus::Ambiguous) {
+            return "'{$resolved->input}' matches more than one entity. Use a unique name or resolve the collision first.";
+        }
+
+        if (is_string($resolved->error) && $resolved->error !== '') {
+            return $resolved->error;
+        }
+
+        return 'Both ends must already exist to fix a link.';
     }
 
     /**
