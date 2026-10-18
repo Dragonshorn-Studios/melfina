@@ -27,7 +27,7 @@
             <span data-described-select-label>{{ $selectedLabel }}</span>
             <span class="text-steel group-open:rotate-180">▾</span>
         </summary>
-        <div class="absolute left-0 z-20 mt-1 w-[min(22rem,calc(100vw-3rem))] border border-border bg-panel p-1 shadow-[0_8px_24px_rgba(11,18,32,0.6)]" style="border-radius: var(--radius-console)">
+        <div class="absolute bottom-full left-0 z-20 mb-1 max-h-[min(20rem,50vh)] w-[min(22rem,calc(100vw-3rem))] overflow-y-auto border border-border bg-panel p-1 shadow-[0_8px_24px_rgba(11,18,32,0.6)]" style="border-radius: var(--radius-console); bottom: 100%">
             @foreach ($cases as $option)
                 @php
                     $value = $option instanceof \BackedEnum ? $option->value : (string) $option;
