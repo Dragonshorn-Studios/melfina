@@ -23,7 +23,7 @@ use Illuminate\Support\Str;
  * @property array<int, string> $aliases
  * @property string $summary Short one-liner.
  * @property string $state Current state and important constraints.
- * @property array<int, string> $related Canonical names of related entries.
+ * @property array<int, string> $related Canonical names of related entries (legacy; graph links are source of truth).
  * @property string|null $source Where the knowledge came from.
  * @property Carbon|null $verified_at
  * @property string $updated_by Agent name (or 'owner') of the last writer.
@@ -43,6 +43,7 @@ class KnowledgeEntry extends Model
         'runbook',
         'person',
         'concept',
+        'event',
     ];
 
     protected function casts(): array
@@ -57,6 +58,21 @@ class KnowledgeEntry extends Model
     public function versions(): HasMany
     {
         return $this->hasMany(KnowledgeEntryVersion::class);
+    }
+
+    public function outgoingLinks(): HasMany
+    {
+        return $this->hasMany(KnowledgeLink::class, 'from_entry_id');
+    }
+
+    public function incomingLinks(): HasMany
+    {
+        return $this->hasMany(KnowledgeLink::class, 'to_entry_id');
+    }
+
+    public function observations(): HasMany
+    {
+        return $this->hasMany(KnowledgeObservation::class, 'entry_id');
     }
 
     /**
@@ -127,7 +143,39 @@ class KnowledgeEntry extends Model
      */
     public function resolvedRelated(): array
     {
+        $fromLinks = $this->outgoingLinks()
+            ->where('status', KnowledgeLinkStatus::Active)
+            ->with('toEntry')
+            ->get()
+            ->map(fn (KnowledgeLink $link) => [
+                'name' => $link->toEntry->name,
+                'summary' => $link->toEntry->summary,
+            ]);
+
+        $fromIncoming = $this->incomingLinks()
+            ->where('status', KnowledgeLinkStatus::Active)
+            ->with('fromEntry')
+            ->get()
+            ->map(fn (KnowledgeLink $link) => [
+                'name' => $link->fromEntry->name,
+                'summary' => $link->fromEntry->summary,
+            ]);
+
+        $fromGraph = $fromLinks->concat($fromIncoming)->unique('name')->values();
+
         $related = collect($this->related ?? []);
+
+        if ($fromGraph->isNotEmpty()) {
+            $foundNames = $fromGraph->pluck('name')->map(fn (string $n) => Str::lower($n));
+
+            return [
+                'entries' => $fromGraph,
+                'unresolved' => $related
+                    ->reject(fn (string $n) => $foundNames->contains(Str::lower($n)))
+                    ->values()
+                    ->all(),
+            ];
+        }
 
         if ($related->isEmpty()) {
             return ['entries' => collect(), 'unresolved' => []];

@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Console;
 
 use App\Http\Controllers\Controller;
+use App\Models\KnowledgeAuthorKind;
 use App\Models\KnowledgeEntry;
+use App\Models\KnowledgePredicate;
+use App\Services\KnowledgeGraph;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -167,6 +170,18 @@ class KnowledgeController extends Controller
             $entry->save();
 
             $entry->recordVersion('owner');
+
+            $graph = app(KnowledgeGraph::class);
+            foreach ($entry->related as $related) {
+                $graph->connect(
+                    author: 'owner',
+                    authorKind: KnowledgeAuthorKind::Owner,
+                    from: $entry->name,
+                    to: $related,
+                    predicate: KnowledgePredicate::RelatedTo,
+                    source: $entry->source,
+                );
+            }
 
             return $entry;
         });

@@ -3,7 +3,10 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Concerns\ResolvesAgent;
+use App\Models\KnowledgeAuthorKind;
 use App\Models\KnowledgeEntry;
+use App\Models\KnowledgePredicate;
+use App\Services\KnowledgeGraph;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Facades\DB;
@@ -77,7 +80,11 @@ class KnowledgeUpsert extends Tool
 
         $entry ??= new KnowledgeEntry(['name' => $name, 'name_lower' => Str::lower($name)]);
 
-        DB::transaction(function () use ($request, $entry, $name, $agent) {
+        $relatedNames = $request->has('related')
+            ? array_values($request->get('related') ?? [])
+            : null;
+
+        DB::transaction(function () use ($request, $entry, $name, $agent, $relatedNames) {
             $entry->name = $name;
             $entry->name_lower = Str::lower($name);
 
@@ -107,6 +114,20 @@ class KnowledgeUpsert extends Tool
             $entry->save();
 
             $entry->recordVersion($agent->name);
+
+            if ($relatedNames !== null) {
+                $graph = app(KnowledgeGraph::class);
+                foreach ($relatedNames as $related) {
+                    $graph->connect(
+                        author: $agent->name,
+                        authorKind: KnowledgeAuthorKind::Agent,
+                        from: $entry->name,
+                        to: (string) $related,
+                        predicate: KnowledgePredicate::RelatedTo,
+                        source: $request->string('source')->toString() ?: null,
+                    );
+                }
+            }
         });
 
         RateLimiter::hit($rateKey, 60);
