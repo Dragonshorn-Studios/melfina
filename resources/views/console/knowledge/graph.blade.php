@@ -17,11 +17,11 @@
             <p class="border-b border-border px-6 py-2 font-mono text-xs text-danger">{{ $message }}</p>
         @enderror
 
-        <div class="grid lg:grid-cols-[minmax(0,1fr)_20rem]">
-            <div id="knowledge-graph" class="kg-stage relative min-h-[28rem] lg:min-h-[32rem]"
+        <div class="grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+            <div id="knowledge-graph" class="kg-stage relative min-h-[32rem] lg:min-h-[36rem] lg:h-[min(72vh,40rem)]"
                 data-focus="{{ $focusId ?? '' }}"
                 data-link="{{ request('link') }}">
-                <svg class="kg-svg h-full w-full" viewBox="0 0 720 480" role="img" aria-label="Knowledge constellation"></svg>
+                <svg class="kg-svg absolute inset-0 h-full w-full" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Knowledge constellation"></svg>
                 @if ($snapshot['nodes'] === [])
                     <p class="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-xs text-steel">No entities yet — create one here, or wait for an agent to upsert.</p>
                 @endif

@@ -16,8 +16,8 @@ if (root) {
     let focusId = root.dataset.focus || (nodes[0] ? String(nodes[0].id) : '');
     let selectedLinkId = root.dataset.link || '';
 
-    const width = 720;
-    const height = 480;
+    const width = 800;
+    const height = 800;
     const cx = width / 2;
     const cy = height / 2;
 
@@ -46,7 +46,7 @@ if (root) {
         const ring1 = neighborsOf(focusId);
         ring1.forEach((id, index) => {
             const angle = (index / Math.max(ring1.length, 1)) * Math.PI * 2 - Math.PI / 2;
-            pos[id] = { x: cx + Math.cos(angle) * 150, y: cy + Math.sin(angle) * 118 };
+            pos[id] = { x: cx + Math.cos(angle) * 220, y: cy + Math.sin(angle) * 220 };
         });
 
         const placed = new Set([focusId, ...ring1]);
@@ -60,14 +60,14 @@ if (root) {
             }
         }
         ring2.forEach((id, index) => {
-            const angle = (index / Math.max(ring2.length, 1)) * Math.PI * 2 - Math.PI / 2;
-            pos[id] = { x: cx + Math.cos(angle) * 270, y: cy + Math.sin(angle) * 200 };
+            const angle = (index / Math.max(ring2.length, 1)) * Math.PI * 2 - Math.PI / 2 + 0.2;
+            pos[id] = { x: cx + Math.cos(angle) * 330, y: cy + Math.sin(angle) * 330 };
         });
 
         const rest = nodes.map((node) => String(node.id)).filter((id) => !placed.has(id));
         rest.forEach((id, index) => {
-            const angle = (index / Math.max(rest.length, 1)) * Math.PI * 2;
-            pos[id] = { x: cx + Math.cos(angle) * 320, y: cy + Math.sin(angle) * 230 };
+            const angle = (index / Math.max(rest.length, 1)) * Math.PI * 2 + 0.4;
+            pos[id] = { x: cx + Math.cos(angle) * 370, y: cy + Math.sin(angle) * 370 };
         });
 
         return pos;
@@ -189,11 +189,11 @@ if (root) {
             stroke: '#E8A838', 'stroke-width': '0.5',
         }));
         compass.appendChild(el('circle', {
-            cx: String(cx), cy: String(cy), r: '150',
+            cx: String(cx), cy: String(cy), r: '220',
             fill: 'none', stroke: '#2A3A52', 'stroke-width': '0.75',
         }));
         compass.appendChild(el('circle', {
-            cx: String(cx), cy: String(cy), r: '270',
+            cx: String(cx), cy: String(cy), r: '330',
             fill: 'none', stroke: '#2A3A52', 'stroke-width': '0.5',
             'stroke-dasharray': '2 6',
         }));
@@ -207,6 +207,27 @@ if (root) {
                 continue;
             }
             const style = strokeFor(link);
+            const select = (event) => {
+                event.stopPropagation();
+                selectedLinkId = String(link.id);
+                showLink(link);
+                draw();
+            };
+
+            const hit = el('line', {
+                x1: String(a.x),
+                y1: String(a.y),
+                x2: String(b.x),
+                y2: String(b.y),
+                stroke: 'transparent',
+                'stroke-width': '18',
+                'data-link-id': String(link.id),
+                class: 'kg-edge-hit',
+            });
+            hit.style.cursor = 'pointer';
+            hit.addEventListener('click', select);
+            edgeLayer.appendChild(hit);
+
             const line = el('line', {
                 x1: String(a.x),
                 y1: String(a.y),
@@ -217,13 +238,7 @@ if (root) {
                 'stroke-dasharray': style.dash,
                 'data-link-id': String(link.id),
                 class: 'kg-edge',
-            });
-            line.style.cursor = 'pointer';
-            line.addEventListener('click', (event) => {
-                event.stopPropagation();
-                selectedLinkId = String(link.id);
-                showLink(link);
-                draw();
+                'pointer-events': 'none',
             });
             edgeLayer.appendChild(line);
 
@@ -231,13 +246,16 @@ if (root) {
             const my = (a.y + b.y) / 2;
             const label = el('text', {
                 x: String(mx),
-                y: String(my - 6),
+                y: String(my - 8),
                 fill: link.permanent ? '#E8A838' : '#8A9BB0',
-                'font-size': '9',
+                'font-size': '11',
                 'font-family': 'IBM Plex Mono, ui-monospace, monospace',
                 'text-anchor': 'middle',
+                class: 'kg-edge-label',
             });
             label.textContent = link.predicate;
+            label.style.cursor = 'pointer';
+            label.addEventListener('click', select);
             edgeLayer.appendChild(label);
         }
         svg.appendChild(edgeLayer);
@@ -254,16 +272,22 @@ if (root) {
             g.appendChild(el('circle', {
                 cx: String(p.x),
                 cy: String(p.y),
-                r: focused ? '7' : '5',
+                r: '16',
+                fill: 'transparent',
+            }));
+            g.appendChild(el('circle', {
+                cx: String(p.x),
+                cy: String(p.y),
+                r: focused ? '8' : '6',
                 fill: focused ? '#E8A838' : '#152238',
                 stroke: focused ? '#E8A838' : '#E8E4D8',
                 'stroke-width': focused ? '2' : '1.25',
             }));
             const name = el('text', {
                 x: String(p.x),
-                y: String(p.y + 18),
+                y: String(p.y + 22),
                 fill: '#E8E4D8',
-                'font-size': '11',
+                'font-size': '12',
                 'font-family': 'IBM Plex Mono, ui-monospace, monospace',
                 'text-anchor': 'middle',
             });
