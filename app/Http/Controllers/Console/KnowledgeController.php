@@ -37,7 +37,7 @@ class KnowledgeController extends Controller
      */
     public function index(Request $request): View
     {
-        $tokens = collect(preg_split('/\s+/', Str::lower(trim($request->string('q')->toString()))))
+        $tokens = collect(preg_split('/\s+/', KnowledgeName::normalize($request->string('q')->toString())))
             ->filter()->unique()->values();
 
         $entries = KnowledgeEntry::query()
