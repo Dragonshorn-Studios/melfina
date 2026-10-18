@@ -123,26 +123,28 @@
                     </form>
                 @endif
 
+                <p class="mt-3 font-mono text-xs text-steel">
+                    Global names this entity answers to. Distinct from a per-imp title (Szefowa) and from the operator persona text on the dashboard.
+                </p>
                 @if (($identifiers ?? collect())->isNotEmpty())
                     <ul class="mt-3 space-y-1 font-mono text-xs">
                         @foreach ($identifiers as $identifier)
-                            <li class="text-cream">{{ $identifier->kind->value }} · {{ $identifier->value }}</li>
+                            <li class="flex items-center justify-between gap-3 border border-border/50 bg-void/60 px-3 py-1.5" style="border-radius: var(--radius-console)">
+                                <span class="text-cream" title="{{ $identifier->kind->hint() }}">{{ $identifier->kind->value }} · {{ $identifier->value }}</span>
+                                <x-confirm-form action="{{ route('console.knowledge.identifiers.destroy', [$entry, $identifier]) }}" method="DELETE" confirm="Remove {{ $identifier->kind->value }} '{{ $identifier->value }}'? Lookup will stop matching it.">
+                                    <button type="submit" class="text-steel underline decoration-border underline-offset-4 hover:text-danger">remove</button>
+                                </x-confirm-form>
+                            </li>
                         @endforeach
                     </ul>
                 @endif
 
-                <form method="POST" action="{{ route('console.knowledge.identifiers.store', $entry) }}" class="mt-3 flex flex-wrap gap-2">
+                <form method="POST" action="{{ route('console.knowledge.identifiers.store', $entry) }}" class="mt-3 flex flex-wrap items-start gap-2">
                     @csrf
                     <input type="text" name="value" placeholder="another name" maxlength="200"
                         class="min-w-0 flex-1 border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
                         style="border-radius: var(--radius-console)">
-                    <select name="kind"
-                        class="border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
-                        style="border-radius: var(--radius-console)">
-                        @foreach ($identifierKinds ?? [] as $kind)
-                            <option value="{{ $kind }}">{{ $kind }}</option>
-                        @endforeach
-                    </select>
+                    <x-described-select name="kind" :options="$identifierKinds ?? []" :selected="old('kind', 'alias')" />
                     <button type="submit"
                         class="border border-border bg-void px-3 py-1 font-mono text-xs text-cream hover:border-amber"
                         style="border-radius: var(--radius-console)">add identifier</button>

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\KnowledgeAuthorKind;
 use App\Models\KnowledgeEntry;
 use App\Models\KnowledgeEntryRedirect;
+use App\Models\KnowledgeIdentifier;
 use App\Models\KnowledgeIdentifierKind;
 use App\Models\KnowledgeIdentityStatus;
 use App\Models\KnowledgeLink;
@@ -98,7 +99,7 @@ class KnowledgeController extends Controller
             'versions' => $knowledge->versions()->orderByDesc('version')->get(),
             'identifiers' => $knowledge->identifiers()->orderBy('kind')->orderBy('id')->get(),
             'isOperator' => User::query()->where('operator_entry_id', $knowledge->id)->exists(),
-            'identifierKinds' => KnowledgeIdentifierKind::values(),
+            'identifierKinds' => KnowledgeIdentifierKind::cases(),
         ]);
     }
 
@@ -329,8 +330,22 @@ class KnowledgeController extends Controller
         );
 
         return redirect()
-            ->route('console.knowledge.edit', $knowledge)
+            ->back(fallback: route('console.knowledge.edit', $knowledge))
             ->with('status', 'Identifier saved.');
+    }
+
+    public function destroyIdentifier(
+        KnowledgeEntry $knowledge,
+        KnowledgeIdentifier $identifier,
+        KnowledgeIdentityAdmin $admin,
+    ): RedirectResponse {
+        abort_unless($identifier->entry_id === $knowledge->id, 404);
+
+        $admin->removeIdentifier($identifier);
+
+        return redirect()
+            ->back(fallback: route('console.knowledge.edit', $knowledge))
+            ->with('status', 'Identifier removed.');
     }
 
     private function save(Request $request, ?KnowledgeEntry $entry, KnowledgeEntryWriter $writer): KnowledgeEntry

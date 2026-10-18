@@ -117,6 +117,17 @@ class KnowledgeIdentityAdmin
         return $identifier;
     }
 
+    public function removeIdentifier(KnowledgeIdentifier $identifier): void
+    {
+        $entry = $identifier->entry;
+        $kind = $identifier->kind;
+        $identifier->delete();
+
+        if ($kind === KnowledgeIdentifierKind::Alias && $entry !== null) {
+            $entry->syncAliasProjection();
+        }
+    }
+
     /**
      * Bind a contextual title for one or more agents. Rejects a registration
      * that would conceal a different unambiguous global person under the

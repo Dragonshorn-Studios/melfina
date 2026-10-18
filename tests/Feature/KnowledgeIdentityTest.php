@@ -338,6 +338,66 @@ it('projects a new alias identifier onto JSON so the next owner save keeps it', 
         ->and($person->fresh()->aliases)->toContain('Rug');
 });
 
+it('lets the owner remove an identifier from the operator person', function () {
+    $person = bindRughaltWorld($this->agent);
+    $alias = app(KnowledgeIdentityAdmin::class)->addIdentifier($person, 'Rug', KnowledgeIdentifierKind::Alias);
+    $this->owner->refresh();
+
+    $this->actingAs($this->owner)
+        ->get(route('console.dashboard'))
+        ->assertOk()
+        ->assertSee('OPERATOR NAMES', false)
+        ->assertSee('Rug', false)
+        ->assertSee('A global nickname anyone can look up', false)
+        ->assertSee('A public or account handle that names this person', false)
+        ->assertSee('A human persona name of this person', false);
+
+    $this->actingAs($this->owner)
+        ->from(route('console.dashboard'))
+        ->delete(route('console.knowledge.identifiers.destroy', [$person, $alias]))
+        ->assertRedirect(route('console.dashboard'));
+
+    expect($person->fresh()->identifiers()->where('normalized_value', 'rug')->exists())->toBeFalse()
+        ->and($person->fresh()->aliases)->not->toContain('Rug');
+
+    $lookup = knowledgeIdentityResult(($this->mcpTool)('knowledge_lookup', ['query' => 'Rug']));
+    expect($lookup['found'] ?? true)->toBeFalse();
+});
+
+it('lets the owner remove an identifier from the knowledge edit page', function () {
+    $person = bindRughaltWorld($this->agent);
+    $handle = app(KnowledgeIdentityAdmin::class)->addIdentifier($person, 'Ruge', KnowledgeIdentifierKind::Handle);
+
+    $this->actingAs($this->owner)
+        ->get(route('console.knowledge.edit', $person))
+        ->assertOk()
+        ->assertSee('Ruge', false)
+        ->assertSee('A global nickname anyone can look up', false)
+        ->assertSee('A public or account handle that names this person', false)
+        ->assertSee('A human persona name of this person', false);
+
+    $this->actingAs($this->owner)
+        ->from(route('console.knowledge.edit', $person))
+        ->delete(route('console.knowledge.identifiers.destroy', [$person, $handle]))
+        ->assertRedirect(route('console.knowledge.edit', $person));
+
+    expect($person->fresh()->identifiers()->where('normalized_value', 'ruge')->exists())->toBeFalse();
+});
+
+it('does not remove an identifier from another entry', function () {
+    $person = bindRughaltWorld($this->agent);
+    $other = KnowledgeEntry::factory()->create([
+        'name' => 'Stranger', 'name_lower' => 'stranger', 'type' => 'person',
+    ]);
+    $foreign = app(KnowledgeIdentityAdmin::class)->addIdentifier($other, 'Nomad', KnowledgeIdentifierKind::Alias);
+
+    $this->actingAs($this->owner)
+        ->delete(route('console.knowledge.identifiers.destroy', [$person, $foreign]))
+        ->assertNotFound();
+
+    expect($other->fresh()->identifiers()->where('normalized_value', 'nomad')->exists())->toBeTrue();
+});
+
 it('copies a colliding source identifier once when repairing duplicates', function () {
     $canonical = KnowledgeEntry::factory()->create([
         'name' => 'Rughalt', 'name_lower' => 'rughalt', 'type' => 'person',
