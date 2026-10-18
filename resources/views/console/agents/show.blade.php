@@ -6,6 +6,10 @@
             </x-slot:actions>
         </x-page-header>
 
+        @if (session('status'))
+            <p class="mt-3 font-mono text-xs text-amber">{{ session('status') }}</p>
+        @endif
+
         <dl class="mt-6 space-y-2 font-mono text-xs">
             <div class="flex gap-4">
                 <dt class="w-28 text-steel">description</dt>
@@ -91,8 +95,41 @@
         </div>
 
         <div class="mt-6 border-t border-border pt-4">
+            <p class="font-mono text-xs tracking-[0.16em] text-steel">MAIN PERSON</p>
+            <p class="mt-1 font-mono text-xs text-steel">The person entry this agent handles. Leave empty to inherit a single group choice, then the installation operator. Lookup still reports when that person and the operator are the same being.</p>
+            <form method="POST" action="{{ route('console.agents.main-person.store', $agent) }}" class="mt-3 space-y-3">
+                @csrf
+                @method('PUT')
+                <select name="main_person_entry_id"
+                    class="w-full border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
+                    style="border-radius: var(--radius-console)">
+                    <option value="">inherit</option>
+                    @foreach ($people ?? [] as $person)
+                        <option value="{{ $person->id }}" @selected((string) old('main_person_entry_id', $agent->main_person_entry_id) === (string) $person->id)>{{ $person->name }}</option>
+                    @endforeach
+                </select>
+                @if (($groups ?? collect())->isNotEmpty())
+                    <div class="space-y-1 font-mono text-xs text-cream">
+                        @foreach ($groups as $group)
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" name="groups[]" value="{{ $group->id }}" class="accent-amber" @checked(collect(old('groups', $agent->groups->pluck('id')->all()))->contains($group->id))>
+                                {{ $group->name }}
+                            </label>
+                        @endforeach
+                    </div>
+                @else
+                    <p class="font-mono text-xs text-steel">No groups yet. <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.groups.create') }}">Create one</a> to share a preamble and a main person.</p>
+                @endif
+                <button type="submit"
+                    class="border border-border bg-void px-3 py-1 font-mono text-xs text-cream hover:border-amber"
+                    style="border-radius: var(--radius-console)">save main person</button>
+            </form>
+            @error('main_person_entry_id')<p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p>@enderror
+        </div>
+
+        <div class="mt-6 border-t border-border pt-4">
             <p class="font-mono text-xs tracking-[0.16em] text-steel">CONTEXTUAL REFERENCES</p>
-            <p class="mt-1 font-mono text-xs text-steel">Titles this imp uses for a person. They are not global aliases and do not change instructions.</p>
+            <p class="mt-1 font-mono text-xs text-steel">A title only this agent uses. It resolves to one entity and does not change instruction text.</p>
             @if (($entityReferences ?? collect())->isNotEmpty())
                 <ul class="mt-3 space-y-1 font-mono text-xs">
                     @foreach ($entityReferences as $reference)
@@ -174,7 +211,7 @@
             <div>
                 <label class="font-mono text-xs text-steel">
                     name
-                    <input type="text" name="key_name" required maxlength="60" placeholder="cloud-minimax" value="{{ old('key_name') }}"
+                    <input type="text" name="key_name" required maxlength="60" placeholder="scoped key" value="{{ old('key_name') }}"
                         class="mt-1 block w-full border border-border bg-void px-2 py-1 font-mono text-xs text-cream" style="border-radius: var(--radius-console)">
                 </label>
                 @error('key_name')

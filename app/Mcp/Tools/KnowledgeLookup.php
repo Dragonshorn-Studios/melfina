@@ -7,6 +7,7 @@ use App\Models\KnowledgeIdentityStatus;
 use App\Services\KnowledgeGraph;
 use App\Services\KnowledgeIdentityContext;
 use App\Services\KnowledgeIdentityResolver;
+use App\Services\PersonaLinks;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Laravel\Mcp\Request;
@@ -100,6 +101,11 @@ class KnowledgeLookup extends Tool
             'updated_at' => $entry->updated_at->toIso8601String(),
             'resolution' => $resolved->resolutionPayload(),
         ];
+
+        $being = app(PersonaLinks::class)->beingPayload($entry, $this->agent());
+        if ($being !== null) {
+            $payload['being'] = $being;
+        }
 
         if ($hops === 2) {
             $payload['walk'] = $graph->walk($entry, hops: 2, minConfidence: $minConfidence);

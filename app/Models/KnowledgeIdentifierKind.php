@@ -17,14 +17,37 @@ enum KnowledgeIdentifierKind: string
     }
 
     /**
-     * Short owner-console hint shown next to the kind in the picker.
+     * Owner-facing name of this kind, distinct from the stored token.
+     */
+    public function label(): string
+    {
+        return match ($this) {
+            self::Alias => 'another name for this same entity',
+            self::Handle => 'account name stored on this same entity',
+            self::Persona => 'string name stored on this same entity',
+        };
+    }
+
+    /**
+     * Closed-control label in the kind picker.
+     */
+    public function pickerLabel(): string
+    {
+        return $this->value.' — '.$this->label();
+    }
+
+    /**
+     * Hint for a stored identifier kind. Alias is the kind owners and
+     * agents add. Handle and persona strings are older rows that still
+     * resolve to this same entity. A different presentation of a person
+     * is a persona link, not one of these strings.
      */
     public function hint(): string
     {
         return match ($this) {
-            self::Alias => 'A global nickname anyone can look up. Written into the aliases field. Not a private per-imp title like Szefowa.',
-            self::Handle => 'A public or account handle that names this person for the whole install, not one imp.',
-            self::Persona => 'A human persona name of this person (Runako). Not the operator persona text, not an imp self-description, and not a scoped title.',
+            self::Alias => 'Another name for this same entity. Lookup returns this entry.',
+            self::Handle => 'An account name already stored on this entity. Lookup returns this entry.',
+            self::Persona => 'A name string already stored on this entity. Lookup returns this entry. A different presentation is a persona link to another person.',
         };
     }
 }

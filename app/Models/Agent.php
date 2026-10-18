@@ -6,6 +6,8 @@ use Database\Factories\AgentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
@@ -16,11 +18,12 @@ use Illuminate\Support\Str;
  * @property string $status
  * @property string|null $description
  * @property string|null $persona
+ * @property int|null $main_person_entry_id
  * @property array<int, array{at: string, text: string}>|null $memories
  * @property string|null $key_hash
  * @property Carbon|null $key_issued_at
  */
-#[Fillable(['name', 'status', 'description', 'persona', 'memories', 'key_hash', 'key_issued_at'])]
+#[Fillable(['name', 'status', 'description', 'persona', 'main_person_entry_id', 'memories', 'key_hash', 'key_issued_at'])]
 class Agent extends Model
 {
     /** @use HasFactory<AgentFactory> */
@@ -41,6 +44,16 @@ class Agent extends Model
     public function instruction(): HasOne
     {
         return $this->hasOne(Instruction::class);
+    }
+
+    public function mainPerson(): BelongsTo
+    {
+        return $this->belongsTo(KnowledgeEntry::class, 'main_person_entry_id');
+    }
+
+    public function groups(): BelongsToMany
+    {
+        return $this->belongsToMany(AgentGroup::class, 'agent_group_agent')->withTimestamps();
     }
 
     public function files(): HasMany

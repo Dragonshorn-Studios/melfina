@@ -59,6 +59,8 @@ class ToolCatalog
         'knowledge_search' => 'knowledge:read',
         'knowledge_upsert' => 'knowledge:write',
         'knowledge_connect' => 'knowledge:write',
+        'knowledge_add_alias' => 'knowledge:write',
+        'knowledge_link_persona' => 'knowledge:write',
     ];
 
     /**
@@ -73,7 +75,9 @@ class ToolCatalog
      */
     private const JSON_TOOLS = [
         'ack_message',
+        'knowledge_add_alias',
         'knowledge_connect',
+        'knowledge_link_persona',
         'knowledge_lookup',
         'knowledge_search',
         'knowledge_upsert',
