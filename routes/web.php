@@ -103,6 +103,7 @@ Route::middleware(['auth', 'owner', 'schema'])->prefix('console')->name('console
     Route::put('knowledge/{knowledge}', [KnowledgeController::class, 'update'])->name('knowledge.update');
     Route::post('knowledge/{knowledge}/operator', [KnowledgeController::class, 'bindOperator'])->name('knowledge.operator.store');
     Route::post('knowledge/{knowledge}/identifiers', [KnowledgeController::class, 'storeIdentifier'])->name('knowledge.identifiers.store');
+    Route::delete('knowledge/{knowledge}/identifiers/{identifier}', [KnowledgeController::class, 'destroyIdentifier'])->name('knowledge.identifiers.destroy');
     Route::delete('knowledge/{knowledge}', [KnowledgeController::class, 'destroy'])->name('knowledge.destroy');
 
     Route::get('messages', [MessageController::class, 'index'])->name('messages.index');

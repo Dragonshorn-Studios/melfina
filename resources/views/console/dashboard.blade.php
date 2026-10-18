@@ -176,12 +176,48 @@
                     style="border-radius: var(--radius-console)">
                 @error('operator_entry') <p class="mt-1 font-mono text-xs text-red-400">{{ $message }}</p> @enderror
                 @if ($operatorEntry)
-                    <p class="mt-1 font-mono text-xs text-steel">currently {{ $operatorEntry->name }} (id {{ $operatorEntry->id }})</p>
+                    <p class="mt-1 font-mono text-xs text-steel">
+                        currently {{ $operatorEntry->name }} (id {{ $operatorEntry->id }})
+                        · <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.knowledge.edit', $operatorEntry) }}">edit person →</a>
+                    </p>
                 @endif
                 <button type="submit"
                     class="mt-2 border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
                     style="border-radius: var(--radius-console)">save operator person</button>
             </form>
+
+            @if ($operatorEntry)
+                <p class="mt-6 font-mono text-xs tracking-[0.16em] text-steel">OPERATOR NAMES</p>
+                <p class="mt-1 text-sm text-steel">
+                    Global names this operator person answers to — alias, handle, or persona.
+                    Remove one if lookup should stop matching it. Per-imp titles like Szefowa live on the agent page.
+                </p>
+                @if ($operatorEntry->identifiers->isNotEmpty())
+                    <ul class="mt-3 space-y-1 font-mono text-xs">
+                        @foreach ($operatorEntry->identifiers as $identifier)
+                            <li class="flex items-center justify-between gap-3 border border-border/50 bg-void/60 px-3 py-1.5" style="border-radius: var(--radius-console)">
+                                <span class="text-cream" title="{{ $identifier->kind->hint() }}">{{ $identifier->kind->value }} · {{ $identifier->value }}</span>
+                                <x-confirm-form action="{{ route('console.knowledge.identifiers.destroy', [$operatorEntry, $identifier]) }}" method="DELETE" confirm="Remove {{ $identifier->kind->value }} '{{ $identifier->value }}' from {{ $operatorEntry->name }}?">
+                                    <button type="submit" class="text-steel underline decoration-border underline-offset-4 hover:text-danger">remove</button>
+                                </x-confirm-form>
+                            </li>
+                        @endforeach
+                    </ul>
+                @else
+                    <p class="mt-3 font-mono text-xs text-steel">No extra names yet — the canonical name still resolves.</p>
+                @endif
+                <form method="POST" action="{{ route('console.knowledge.identifiers.store', $operatorEntry) }}" class="mt-3 flex flex-wrap items-start gap-2">
+                    @csrf
+                    <input type="text" name="value" placeholder="another name" maxlength="200"
+                        class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream"
+                        style="border-radius: var(--radius-console)">
+                    <x-described-select name="kind" :options="$identifierKinds ?? []" :selected="old('kind', 'alias')" />
+                    <button type="submit"
+                        class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                        style="border-radius: var(--radius-console)">add name</button>
+                </form>
+                @error('value') <p class="mt-1 font-mono text-xs text-red-400">{{ $message }}</p> @enderror
+            @endif
         </section>
 
         <section class="mt-8 flex items-center gap-6 border-t border-border pt-4 font-mono text-xs">

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Console;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agent;
+use App\Models\KnowledgeIdentifierKind;
 use App\Models\SharedSpace;
 use App\Models\VfsFile;
 use Illuminate\Http\Request;
@@ -18,7 +19,10 @@ class DashboardController extends Controller
             'fleetKeys' => $request->user()->mcpFleetKeys()->latest()->get(),
             'enrollKeys' => $request->user()->agentEnrollKeys()->latest()->get(),
             'operatorPersona' => $request->user()->operator_persona,
-            'operatorEntry' => $request->user()->operatorEntry,
+            'operatorEntry' => $request->user()->operatorEntry?->load([
+                'identifiers' => fn ($query) => $query->orderBy('kind')->orderBy('id'),
+            ]),
+            'identifierKinds' => KnowledgeIdentifierKind::cases(),
             'stats' => [
                 'agents' => Agent::count(),
                 'active' => Agent::where('status', Agent::STATUS_ACTIVE)->count(),
