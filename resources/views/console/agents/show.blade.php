@@ -108,23 +108,50 @@
                         <option value="{{ $person->id }}" @selected((string) old('main_person_entry_id', $agent->main_person_entry_id) === (string) $person->id)>{{ $person->name }}</option>
                     @endforeach
                 </select>
-                @if (($groups ?? collect())->isNotEmpty())
-                    <div class="space-y-1 font-mono text-xs text-cream">
-                        @foreach ($groups as $group)
-                            <label class="flex items-center gap-2">
-                                <input type="checkbox" name="groups[]" value="{{ $group->id }}" class="accent-amber" @checked(collect(old('groups', $agent->groups->pluck('id')->all()))->contains($group->id))>
-                                {{ $group->name }}
-                            </label>
-                        @endforeach
-                    </div>
-                @else
-                    <p class="font-mono text-xs text-steel">No groups yet. <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.groups.create') }}">Create one</a> to share a preamble and a main person.</p>
-                @endif
                 <button type="submit"
                     class="border border-border bg-void px-3 py-1 font-mono text-xs text-cream hover:border-amber"
                     style="border-radius: var(--radius-console)">save main person</button>
             </form>
             @error('main_person_entry_id')<p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p>@enderror
+        </div>
+
+        <div class="mt-6 border-t border-border pt-4">
+            <div class="flex items-center justify-between gap-3">
+                <p class="font-mono text-xs tracking-[0.16em] text-steel">GROUPS</p>
+                <a href="{{ route('console.groups.index') }}" class="font-mono text-xs text-amber underline decoration-border underline-offset-4">manage groups →</a>
+            </div>
+            <p class="mt-1 font-mono text-xs text-steel">Shared preamble and, when this agent has not chosen a main person, the group’s main person. A group grant covers a shared space and its files.</p>
+            @if (($groups ?? collect())->isEmpty())
+                <p class="mt-3 font-mono text-xs text-steel">No groups yet. <a class="text-amber underline decoration-border underline-offset-4" href="{{ route('console.groups.create') }}">Create one</a>.</p>
+            @else
+                @php($memberIds = collect(old('groups', $agent->groups->pluck('id')->all())))
+                <form method="POST" action="{{ route('console.agents.main-person.store', $agent) }}" class="mt-3 space-y-3">
+                    @csrf
+                    @method('PUT')
+                    <input type="hidden" name="membership" value="1">
+                    <ul class="space-y-1 font-mono text-xs">
+                        @foreach ($groups as $group)
+                            <li class="flex items-start justify-between gap-3 border border-border/50 bg-void/60 px-3 py-2" style="border-radius: var(--radius-console)">
+                                <label class="flex min-w-0 items-start gap-2">
+                                    <input type="checkbox" name="groups[]" value="{{ $group->id }}" class="mt-0.5 accent-amber" @checked($memberIds->contains($group->id))>
+                                    <span class="min-w-0">
+                                        <span class="text-cream">{{ $group->name }}</span>
+                                        <span class="mt-0.5 block text-steel">
+                                            {{ $group->preamble ? Str::limit(trim($group->preamble), 90) : 'no preamble' }}
+                                            · {{ $group->mainPerson?->name ?? 'no shared main person' }}
+                                        </span>
+                                    </span>
+                                </label>
+                                <a href="{{ route('console.groups.edit', $group) }}" class="shrink-0 text-steel underline decoration-border underline-offset-4 hover:text-cream">open</a>
+                            </li>
+                        @endforeach
+                    </ul>
+                    <button type="submit"
+                        class="border border-border bg-void px-3 py-1 font-mono text-xs text-cream hover:border-amber"
+                        style="border-radius: var(--radius-console)">save groups</button>
+                </form>
+                @error('groups')<p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p>@enderror
+            @endif
         </div>
 
         <div class="mt-6 border-t border-border pt-4">

@@ -64,6 +64,14 @@ it('lets the owner create a group and put an agent in it', function () {
         ->assertDontSee('Szefowa');
 
     $this->actingAs($this->owner)
+        ->get(route('console.agents.show', $this->agent))
+        ->assertOk()
+        ->assertSee('GROUPS')
+        ->assertSee('fleet')
+        ->assertSee('Address this person as Presentation.')
+        ->assertSee('Presentation');
+
+    $this->actingAs($this->owner)
         ->put(route('console.agents.main-person.store', $this->agent), [
             'main_person_entry_id' => '',
             'groups' => [$group->id],
@@ -71,6 +79,15 @@ it('lets the owner create a group and put an agent in it', function () {
         ->assertRedirect(route('console.agents.show', $this->agent));
 
     expect($this->agent->fresh()->groups()->pluck('agent_groups.id')->all())->toBe([$group->id]);
+
+    $this->actingAs($this->owner)
+        ->put(route('console.agents.main-person.store', $this->agent), [
+            'main_person_entry_id' => $person->id,
+        ])
+        ->assertRedirect(route('console.agents.show', $this->agent));
+
+    expect($this->agent->fresh()->main_person_entry_id)->toBe($person->id)
+        ->and($this->agent->fresh()->groups()->pluck('agent_groups.id')->all())->toBe([$group->id]);
 });
 
 it('grants a group read or write on a space and its files', function () {

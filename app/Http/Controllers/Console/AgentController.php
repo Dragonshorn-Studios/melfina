@@ -94,7 +94,7 @@ class AgentController extends Controller
             'addressingPreferences' => $agent->addressingPreferences()->with('person')->orderBy('id')->get(),
             'people' => KnowledgeEntry::query()->where('type', 'person')->orderBy('name_lower')->get(['id', 'name']),
             'referenceKinds' => AgentEntityReferenceKind::values(),
-            'groups' => AgentGroup::query()->orderBy('name')->get(),
+            'groups' => AgentGroup::query()->with('mainPerson')->orderBy('name')->get(),
         ]);
     }
 
@@ -103,25 +103,35 @@ class AgentController extends Controller
         $this->authorize('update', $agent);
 
         $validated = $request->validate([
-            'main_person_entry_id' => ['nullable', 'integer', 'exists:knowledge_entries,id'],
-            'groups' => ['nullable', 'array'],
+            'main_person_entry_id' => ['sometimes', 'nullable', 'integer', 'exists:knowledge_entries,id'],
+            'groups' => ['sometimes', 'array'],
             'groups.*' => ['integer', 'exists:agent_groups,id'],
+            'membership' => ['sometimes', 'boolean'],
         ]);
 
-        $personId = $validated['main_person_entry_id'] ?? null;
-        if ($personId !== null && KnowledgeEntry::query()->whereKey($personId)->where('type', 'person')->doesntExist()) {
-            throw ValidationException::withMessages([
-                'main_person_entry_id' => 'The main person must be a person entry.',
-            ]);
+        $notes = [];
+
+        if ($request->exists('main_person_entry_id')) {
+            $personId = $validated['main_person_entry_id'] ?? null;
+            if ($personId !== null && KnowledgeEntry::query()->whereKey($personId)->where('type', 'person')->doesntExist()) {
+                throw ValidationException::withMessages([
+                    'main_person_entry_id' => 'The main person must be a person entry.',
+                ]);
+            }
+
+            $agent->main_person_entry_id = $personId;
+            $agent->save();
+            $notes[] = 'Main person saved.';
         }
 
-        $agent->main_person_entry_id = $personId;
-        $agent->save();
-        $agent->groups()->sync($validated['groups'] ?? []);
+        if ($request->exists('groups') || $request->boolean('membership')) {
+            $agent->groups()->sync($validated['groups'] ?? []);
+            $notes[] = 'Groups saved.';
+        }
 
         return redirect()
             ->route('console.agents.show', $agent)
-            ->with('status', 'Main person saved.');
+            ->with('status', implode(' ', $notes) ?: 'Saved.');
     }
 
     /**
