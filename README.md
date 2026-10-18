@@ -79,6 +79,8 @@ The app listens on [http://localhost:8000](http://localhost:8000) (override with
 
 One owner per install. After first boot, open [http://localhost:8000/register](http://localhost:8000/register) and create the owner account — registration closes permanently once the owner exists. Owner console lives at `/console`; agents never use this session (they get Bearer/MCP keys).
 
+If the database is behind the code after an upgrade, log in and the console stops at a setup screen: it lists pending Laravel migrations, runs them with a progress report, then enables `/mcp` and `/api/tools`. Those agent surfaces answer `503` until the schema is current. First boot still needs `composer setup` or the Docker entrypoint — login itself needs the `users` table. Identity binds (operator person, aliases, per-imp titles) live on the knowledge and agent pages; `knowledge:audit-identities` and `knowledge:repair-duplicates` stay artisan-only.
+
 ## MCP auth
 
 `/mcp` accepts three credential shapes:

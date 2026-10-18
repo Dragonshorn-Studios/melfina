@@ -396,6 +396,8 @@ If those layers point at **different** people, the result is `ambiguous_referenc
 
 ### Owner configuration (not hardcoded)
 
+The knowledge edit page and the agent page in the owner console bind the operator person, add global identifiers, and store per-imp titles. These artisan commands are the CLI equivalent; `knowledge:audit-identities` and `knowledge:repair-duplicates` stay CLI-only.
+
 ```
 php artisan knowledge:bind-operator Rughalt
 php artisan knowledge:add-identifier Rughalt Runako --kind=persona

@@ -12,6 +12,7 @@ use App\Http\Controllers\Console\KnowledgeController;
 use App\Http\Controllers\Console\McpClientController;
 use App\Http\Controllers\Console\McpKeyController;
 use App\Http\Controllers\Console\MessageController;
+use App\Http\Controllers\Console\SetupController;
 use App\Http\Controllers\Console\SharedSpaceController;
 use Illuminate\Support\Facades\Route;
 
@@ -32,7 +33,10 @@ Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
     ->middleware('auth')
     ->name('logout');
 
-Route::middleware(['auth', 'owner'])->prefix('console')->name('console.')->group(function () {
+Route::middleware(['auth', 'owner', 'schema'])->prefix('console')->name('console.')->group(function () {
+    Route::get('setup', [SetupController::class, 'show'])->name('setup.show');
+    Route::post('setup', [SetupController::class, 'run'])->name('setup.run');
+
     Route::get('/', DashboardController::class)->name('dashboard');
 
     Route::post('mcp-key', [McpKeyController::class, 'store'])->name('mcp-key.store');

@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Mcp\PluginRepoController;
 use App\Http\Controllers\Mcp\RevokeOAuthTokenController;
 use App\Http\Controllers\Mcp\ToolCallController;
+use App\Http\Middleware\EnsureSchemaIsCurrent;
 use App\Http\Middleware\MergeMcpRedirectDomains;
 use App\Http\Middleware\ResolveAgent;
 use App\Http\Middleware\ResolveApiAgent;
@@ -24,7 +25,7 @@ Route::post('oauth/register', OAuthRegisterController::class)
 
 Route::post('oauth/revoke', RevokeOAuthTokenController::class)->name('oauth.revoke');
 
-Mcp::web('/mcp', MelfinaServer::class)->middleware(ResolveAgent::class);
+Mcp::web('/mcp', MelfinaServer::class)->middleware([EnsureSchemaIsCurrent::class, ResolveAgent::class]);
 
 // The MCP-first HTTP fallback: every catalogued tool is also callable as
 // plain JSON for runtimes that can't install an MCP server. The request
@@ -32,10 +33,10 @@ Mcp::web('/mcp', MelfinaServer::class)->middleware(ResolveAgent::class);
 // tools/call params.arguments); GET lists the surface. Dedicated agent
 // keys, scoped API keys (melfs_…), and fleet keys all authenticate.
 Route::get('api/tools', [ToolCallController::class, 'index'])
-    ->middleware(['throttle:60,1', ResolveApiAgent::class])
+    ->middleware(['throttle:60,1', EnsureSchemaIsCurrent::class, ResolveApiAgent::class])
     ->name('api.tools.index');
 Route::post('api/tools/{tool}', ToolCallController::class)
-    ->middleware(['throttle:60,1', ResolveApiAgent::class])
+    ->middleware(['throttle:60,1', EnsureSchemaIsCurrent::class, ResolveApiAgent::class])
     ->where('tool', '[a-zA-Z0-9_-]+')
     ->name('api.tools.call');
 
@@ -45,19 +46,19 @@ Route::post('api/tools/{tool}', ToolCallController::class)
 // as the matching tools. UTF-8 text stays text; everything else stores as
 // a blob with a sniffed mime.
 Route::put('api/files/{path}', [FileController::class, 'update'])
-    ->middleware(['throttle:60,1', ResolveApiAgent::class])
+    ->middleware(['throttle:60,1', EnsureSchemaIsCurrent::class, ResolveApiAgent::class])
     ->where('path', '.*')
     ->name('api.files.update');
 Route::get('api/files/{path}', [FileController::class, 'show'])
-    ->middleware(['throttle:60,1', ResolveApiAgent::class])
+    ->middleware(['throttle:60,1', EnsureSchemaIsCurrent::class, ResolveApiAgent::class])
     ->where('path', '.*')
     ->name('api.files.show');
 Route::put('api/shared/{space}/files/{path}', [FileController::class, 'updateShared'])
-    ->middleware(['throttle:60,1', ResolveApiAgent::class])
+    ->middleware(['throttle:60,1', EnsureSchemaIsCurrent::class, ResolveApiAgent::class])
     ->where(['space' => '[^/]+', 'path' => '.*'])
     ->name('api.shared.files.update');
 Route::get('api/shared/{space}/files/{path}', [FileController::class, 'showShared'])
-    ->middleware(['throttle:60,1', ResolveApiAgent::class])
+    ->middleware(['throttle:60,1', EnsureSchemaIsCurrent::class, ResolveApiAgent::class])
     ->where(['space' => '[^/]+', 'path' => '.*'])
     ->name('api.shared.files.show');
 
@@ -66,7 +67,7 @@ Route::get('api/shared/{space}/files/{path}', [FileController::class, 'showShare
 // accepts in the console; every subsequent accepted call mints a fresh
 // 24h scoped key. Tightly throttled — the endpoint is unauthenticated.
 Route::post('api/enroll', EnrollController::class)
-    ->middleware('throttle:10,1')
+    ->middleware(['throttle:10,1', EnsureSchemaIsCurrent::class])
     ->name('api.enroll');
 
 // Per-agent plugin repositories, cloneable over git's dumb HTTP protocol.
@@ -76,7 +77,7 @@ Route::post('api/enroll', EnrollController::class)
 // serves the persona-free fleet package (~ can never appear in an agent
 // slug, so it can't collide).
 Route::get('plugins/{repo}/{path?}', [PluginRepoController::class, 'show'])
-    ->middleware('throttle:60,1')
+    ->middleware(['throttle:60,1', EnsureSchemaIsCurrent::class])
     ->where([
         'repo' => '[^/]+\.git',
         'path' => '.*',

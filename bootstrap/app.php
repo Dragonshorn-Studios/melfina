@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureSchemaIsCurrent;
 use App\Http\Middleware\EnsureUserIsOwner;
 use App\Http\Middleware\PersistMcpConsent;
 use Illuminate\Foundation\Application;
@@ -27,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->alias([
             'owner' => EnsureUserIsOwner::class,
+            'schema' => EnsureSchemaIsCurrent::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

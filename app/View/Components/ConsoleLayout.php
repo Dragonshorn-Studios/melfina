@@ -20,9 +20,12 @@ class ConsoleLayout extends Component
     public function __construct(
         public ?string $title = null,
         public ?Agent $agent = null,
+        public bool $bare = false,
     ) {
-        // Guest pages share this layout but render only a bare header.
-        $this->agents = auth()->check()
+        // Guest pages and the schema setup screen share this layout but
+        // render only a bare header — setup must not query tables that
+        // pending migrations may still be adding.
+        $this->agents = (! $this->bare && auth()->check())
             ? Agent::query()->withCount('files')->orderBy('name')->get()
             : collect();
     }
