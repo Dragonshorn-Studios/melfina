@@ -127,6 +127,14 @@ class KnowledgeController extends Controller
             'types' => KnowledgeEntry::TYPES,
             'predicates' => KnowledgePredicate::values(),
             'entries' => KnowledgeEntry::query()->orderBy('name_lower')->get(['id', 'name', 'type']),
+            'routes' => [
+                'edit' => url('/console/knowledge'),
+                'confirm' => route('console.knowledge.links.confirm', ['link' => 0]),
+                'permanent' => route('console.knowledge.links.permanent', ['link' => 0]),
+                'update' => route('console.knowledge.links.update', ['link' => 0]),
+                'destroy' => route('console.knowledge.links.destroy', ['link' => 0]),
+                'graph' => route('console.knowledge.graph'),
+            ],
         ]);
     }
 

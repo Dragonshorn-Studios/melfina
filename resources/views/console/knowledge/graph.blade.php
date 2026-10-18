@@ -179,13 +179,6 @@
         </datalist>
 
         <script type="application/json" id="kg-data">@json($snapshot)</script>
-        <script type="application/json" id="kg-routes">@json([
-            'edit' => url('/console/knowledge'),
-            'confirm' => route('console.knowledge.links.confirm', ['link' => 0]),
-            'permanent' => route('console.knowledge.links.permanent', ['link' => 0]),
-            'update' => route('console.knowledge.links.update', ['link' => 0]),
-            'destroy' => route('console.knowledge.links.destroy', ['link' => 0]),
-            'graph' => route('console.knowledge.graph'),
-        ])</script>
+        <script type="application/json" id="kg-routes">@json($routes)</script>
     </x-console-panel>
 </x-console-layout>
