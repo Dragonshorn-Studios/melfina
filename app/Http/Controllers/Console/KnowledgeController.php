@@ -19,6 +19,7 @@ use App\Services\KnowledgeIdentityAdmin;
 use App\Services\KnowledgeIdentityContext;
 use App\Services\KnowledgeIdentityResolver;
 use App\Services\KnowledgeIdentityResult;
+use App\Services\PersonaLinks;
 use App\Support\KnowledgeName;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -100,6 +101,10 @@ class KnowledgeController extends Controller
             'identifiers' => $knowledge->identifiers()->orderBy('kind')->orderBy('id')->get(),
             'isOperator' => User::query()->where('operator_entry_id', $knowledge->id)->exists(),
             'identifierKinds' => KnowledgeIdentifierKind::cases(),
+            'personaLinks' => $knowledge->type === 'person'
+                ? app(PersonaLinks::class)->component($knowledge)->where('id', '!=', $knowledge->id)->values()
+                : collect(),
+            'people' => KnowledgeEntry::query()->where('type', 'person')->whereKeyNot($knowledge->id)->orderBy('name_lower')->get(['id', 'name']),
         ]);
     }
 
@@ -348,6 +353,49 @@ class KnowledgeController extends Controller
             ->with('status', 'Identifier removed.');
     }
 
+    public function storePersona(Request $request, KnowledgeEntry $knowledge, PersonaLinks $personas): RedirectResponse
+    {
+        $validated = $request->validate([
+            'persona_entry_id' => ['required', 'integer', 'exists:knowledge_entries,id'],
+        ]);
+
+        $other = KnowledgeEntry::query()->findOrFail($validated['persona_entry_id']);
+        $personas->link($knowledge, $other);
+
+        return redirect()
+            ->route('console.knowledge.edit', $knowledge)
+            ->with('status', 'Persona linked.');
+    }
+
+    public function destroyPersona(KnowledgeEntry $knowledge, KnowledgeEntry $persona, PersonaLinks $personas): RedirectResponse
+    {
+        $personas->unlink($knowledge, $persona);
+
+        return redirect()
+            ->route('console.knowledge.edit', $knowledge)
+            ->with('status', 'Persona link removed.');
+    }
+
+    public function storeInstructionCopy(Request $request, KnowledgeEntry $knowledge): RedirectResponse
+    {
+        $validated = $request->validate([
+            'instruction_copy' => ['nullable', 'string', 'max:20000'],
+        ]);
+
+        $knowledge->instruction_copy = $validated['instruction_copy'] ?: null;
+        $knowledge->save();
+
+        if (User::query()->where('operator_entry_id', $knowledge->id)->where('is_owner', true)->exists()) {
+            User::query()->where('is_owner', true)->update([
+                'operator_persona' => $knowledge->instruction_copy,
+            ]);
+        }
+
+        return redirect()
+            ->route('console.knowledge.edit', $knowledge)
+            ->with('status', 'Instruction copy saved.');
+    }
+
     private function save(Request $request, ?KnowledgeEntry $entry, KnowledgeEntryWriter $writer): KnowledgeEntry
     {
         $validated = $request->validate([
@@ -382,7 +430,7 @@ class KnowledgeController extends Controller
             entryName: $entry?->name ?? $name,
             entryId: $entry?->id,
             type: $validated['type'],
-            aliases: self::lines($validated['aliases'] ?? null),
+            aliases: $request->exists('aliases') ? self::lines($validated['aliases'] ?? null) : null,
             related: self::lines($validated['related'] ?? null),
             fields: [
                 'summary' => $validated['summary'] ?? '',

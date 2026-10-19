@@ -76,6 +76,9 @@
                 <div class="border-t border-border px-3 py-3">
                     <p class="px-1 font-mono text-[10px] tracking-[0.2em] text-steel">SECTIONS</p>
                     <div class="mt-2 flex gap-1 lg:flex-col">
+                        <a href="{{ route('console.groups.index') }}"
+                            class="border px-3 py-1.5 font-mono text-xs {{ request()->routeIs('console.groups.*') ? 'border-amber bg-void text-amber' : 'border-transparent text-steel hover:border-border hover:text-cream' }}"
+                            style="border-radius: var(--radius-console)">groups</a>
                         <a href="{{ route('console.agents.index') }}"
                             class="border px-3 py-1.5 font-mono text-xs {{ request()->routeIs('console.agents.*') && ! request()->routeIs('console.agents.instructions.*') ? 'border-amber bg-void text-amber' : 'border-transparent text-steel hover:border-border hover:text-cream' }}"
                             style="border-radius: var(--radius-console)">agents</a>

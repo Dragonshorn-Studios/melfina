@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Console;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agent;
+use App\Models\AgentGroup;
 use App\Models\SharedAcl;
 use App\Models\SharedFile;
 use App\Models\SharedSpace;
@@ -26,7 +27,7 @@ class SharedSpaceController extends Controller
         $this->authorize('viewAny', SharedSpace::class);
 
         return view('console.shared.index', [
-            'spaces' => SharedSpace::query()->withCount(['aclEntries', 'files'])->orderBy('name')->get(),
+            'spaces' => SharedSpace::query()->withCount(['aclEntries', 'groupAclEntries', 'files'])->orderBy('name')->get(),
         ]);
     }
 
@@ -204,6 +205,8 @@ class SharedSpaceController extends Controller
             'space' => $shared,
             'agents' => Agent::query()->orderBy('name')->get(),
             'grants' => $grants,
+            'groups' => AgentGroup::query()->orderBy('name')->get(),
+            'groupGrants' => $shared->groupAclEntries()->get()->keyBy('agent_group_id'),
         ]);
     }
 
@@ -215,14 +218,20 @@ class SharedSpaceController extends Controller
             'name' => ['required', 'string', 'max:255', Rule::unique('shared_spaces', 'name')->ignore($shared->id)],
             'acl' => ['nullable', 'array'],
             'acl.*' => ['nullable', Rule::in([SharedAcl::PERMISSION_READ, SharedAcl::PERMISSION_WRITE, 'none'])],
+            'group_acl' => ['nullable', 'array'],
+            'group_acl.*' => ['nullable', Rule::in([SharedAcl::PERMISSION_READ, SharedAcl::PERMISSION_WRITE, 'none'])],
         ]);
 
         $agentIds = Agent::query()->pluck('id');
         $acl = collect($validated['acl'] ?? [])
             ->only($agentIds->all())
             ->reject(fn (string $permission) => $permission === 'none');
+        $groupIds = AgentGroup::query()->pluck('id');
+        $groupAcl = collect($validated['group_acl'] ?? [])
+            ->only($groupIds->all())
+            ->reject(fn (string $permission) => $permission === 'none');
 
-        DB::transaction(function () use ($shared, $validated, $acl): void {
+        DB::transaction(function () use ($shared, $validated, $acl, $groupAcl): void {
             $shared->update(['name' => $validated['name']]);
 
             $shared->aclEntries()->whereNotIn('agent_id', $acl->keys()->all())->delete();
@@ -230,6 +239,15 @@ class SharedSpaceController extends Controller
             foreach ($acl as $agentId => $permission) {
                 $shared->aclEntries()->updateOrCreate(
                     ['agent_id' => $agentId],
+                    ['permission' => $permission],
+                );
+            }
+
+            $shared->groupAclEntries()->whereNotIn('agent_group_id', $groupAcl->keys()->all())->delete();
+
+            foreach ($groupAcl as $groupId => $permission) {
+                $shared->groupAclEntries()->updateOrCreate(
+                    ['agent_group_id' => $groupId],
                     ['permission' => $permission],
                 );
             }

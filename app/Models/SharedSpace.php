@@ -23,6 +23,11 @@ class SharedSpace extends Model
         return $this->hasMany(SharedAcl::class);
     }
 
+    public function groupAclEntries(): HasMany
+    {
+        return $this->hasMany(SharedGroupAcl::class);
+    }
+
     public function files(): HasMany
     {
         return $this->hasMany(SharedFile::class);
@@ -30,7 +35,30 @@ class SharedSpace extends Model
 
     public function permissionFor(Agent $agent): ?string
     {
-        return $this->aclEntries()->where('agent_id', $agent->id)->value('permission');
+        $direct = $this->aclEntries()->where('agent_id', $agent->id)->value('permission');
+
+        if (is_string($direct) && $direct !== '') {
+            return $direct;
+        }
+
+        $groupIds = $agent->groups()->pluck('agent_groups.id');
+        if ($groupIds->isEmpty()) {
+            return null;
+        }
+
+        $groupPermissions = $this->groupAclEntries()
+            ->whereIn('agent_group_id', $groupIds)
+            ->pluck('permission');
+
+        if ($groupPermissions->contains(SharedAcl::PERMISSION_WRITE)) {
+            return SharedAcl::PERMISSION_WRITE;
+        }
+
+        if ($groupPermissions->contains(SharedAcl::PERMISSION_READ)) {
+            return SharedAcl::PERMISSION_READ;
+        }
+
+        return null;
     }
 
     public function canRead(Agent $agent): bool
@@ -48,8 +76,16 @@ class SharedSpace extends Model
      */
     public static function readableBy(Agent $agent): Collection
     {
+        $groupIds = $agent->groups()->pluck('agent_groups.id');
+
         return static::query()
-            ->whereHas('aclEntries', fn ($q) => $q->where('agent_id', $agent->id))
+            ->where(function ($query) use ($agent, $groupIds) {
+                $query->whereHas('aclEntries', fn ($q) => $q->where('agent_id', $agent->id));
+
+                if ($groupIds->isNotEmpty()) {
+                    $query->orWhereHas('groupAclEntries', fn ($q) => $q->whereIn('agent_group_id', $groupIds));
+                }
+            })
             ->orderBy('name')
             ->pluck('name');
     }

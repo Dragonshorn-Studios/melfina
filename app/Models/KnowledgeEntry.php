@@ -25,13 +25,14 @@ use Illuminate\Support\Str;
  * @property array<int, string> $aliases
  * @property string $summary Short one-liner.
  * @property string $state Current state and important constraints.
+ * @property string|null $instruction_copy Paragraph agents read for this person.
  * @property array<int, string> $related Canonical names of related entries (legacy; graph links are source of truth).
  * @property string|null $source Where the knowledge came from.
  * @property Carbon|null $verified_at
  * @property string $updated_by Agent name (or 'owner') of the last writer.
  * @property int $version Bumped on every write; versions holds history.
  */
-#[Fillable(['name', 'name_lower', 'type', 'aliases', 'summary', 'state', 'related', 'source', 'verified_at', 'updated_by', 'version'])]
+#[Fillable(['name', 'name_lower', 'type', 'aliases', 'summary', 'state', 'instruction_copy', 'related', 'source', 'verified_at', 'updated_by', 'version'])]
 class KnowledgeEntry extends Model
 {
     /** @use HasFactory<KnowledgeEntryFactory> */

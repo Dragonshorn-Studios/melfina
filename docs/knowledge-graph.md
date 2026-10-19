@@ -360,16 +360,30 @@ Do not implement owner auth, agents CRUD, VFS, MCP plumbing, Shared ACL, or chro
 
 One installation operator is one person: a canonical `knowledge_entries` row with `type=person`. Operator is a **binding** (`users.operator_entry_id`), not a second person named Operator.
 
-Four independent concerns:
+Two name mechanisms, plus the older strings that still resolve:
 
-| Concern | Store | Example |
+| Concern | Store | Lookup |
 | --- | --- | --- |
-| Canonical person | `knowledge_entries` (`type=person`) | Rughalt |
-| Global names | `knowledge_identifiers` (`alias`, `handle`, `persona`) | Runako is a persona name of Rughalt |
-| Contextual titles | `agent_entity_references` unique per `(agent_id, normalized_value)` | Szefowa for one imp |
-| Addressing preference | `agent_addressing_preferences` | fallback form; never an instruction |
+| Alias | `knowledge_identifiers` where `kind=alias` | Another name for this same entity. Projects, places, and people use this list. Lookup returns this entry. |
+| Persona link | `knowledge_persona_links` (`entry_low_id` < `entry_high_id`) | Two person entries, the same living being, different presentations. Lookup keeps each entry’s own name and adds a `being` payload. Equality is transitive across the link component. |
+| Legacy identifier strings | `knowledge_identifiers` where `kind` is `handle` or `persona` | Still this same entity. They are not a second presentation. New aliases are `kind=alias`. |
+| Contextual title | `agent_entity_references` unique per `(agent_id, normalized_value)` | Resolves to one entity for that agent only. Never becomes a global alias. |
+| Addressing preference | `agent_addressing_preferences` | Fallback form. Never an instruction layer. |
+| Instruction copy | `knowledge_entries.instruction_copy` | Paragraph `read_instructions` returns as `operator` when this person is the agent’s main person. |
 
-JSON `aliases` remains a compatibility projection of `kind=alias` identifiers, updated in the same write. Scoped titles never become global aliases. `operator_persona` text is unchanged presentation copy and is not parsed into structured identity.
+JSON `aliases` remains a compatibility projection of `kind=alias` identifiers. The console edit form does not post that box; a save that omits `aliases` leaves the list alone. `users.operator_persona` is the fallback paragraph when the main person has no `instruction_copy`. It is not parsed into identity.
+
+### Main person and groups
+
+Effective main person: the agent’s `main_person_entry_id` when it is a person; otherwise the single person chosen by that agent’s groups, when every group that sets one agrees; otherwise the installation operator. Choosing a presentation does not hide the others.
+
+`agent_groups` holds `name`, `preamble`, and an optional `main_person_entry_id`. Membership is `agent_group_agent`. An agent may belong to several groups. Group preambles are prepended to `read_instructions` `layers`, sorted by group name. They are not written into `content`, so instruction text stays byte-for-byte.
+
+`read_instructions` also returns `identity_context`: `operator_entry_id`, `operator_name`, `main_person_entry_id`, `main_person_name`, `same_being`.
+
+### Shared grants
+
+`shared_group_acl` grants a group `read` or `write` on a shared space. The same grant covers the space and its files. A direct agent grant wins when one exists. With no direct grant, write beats read across the agent’s groups. `none` is not stored.
 
 ### Resolution
 
@@ -389,19 +403,20 @@ If those layers point at **different** people, the result is `ambiguous_referenc
 
 ### Tools
 
-- `knowledge_lookup` returns additive `entry_id` and `resolution` (`matched_by`, `scope`). `name` stays the canonical name.
+- `knowledge_lookup` returns additive `entry_id` and `resolution` (`matched_by`, `scope`). `name` stays the canonical name of the resolved entry. Person hits also include `being` (component members, operator, whether this entry is the agent’s main person, and `same_as_operator`).
 - `knowledge_upsert` treats `entry` as a target reference, not a rename. Optional `entry_id` must agree. `expected_version` is a SQLite compare-and-swap (conditional update + affected-row count).
+- `knowledge_add_alias` adds a `kind=alias` identifier. `knowledge_link_persona` links two person entries. Both spend the knowledge write quota.
 - `knowledge_search` includes this agent's titles, ranks an exact title hit first, dedupes by canonical id, and never lists another agent's titles.
 - `knowledge_connect` accepts optional `from_id` / `to_id`. Ambiguous endpoints with `create_missing` create nothing. Failed connects roll back stub entities.
 
 ### Owner configuration (not hardcoded)
 
-The knowledge edit page and the agent page in the owner console bind the operator person, add global identifiers, and store per-imp titles. These artisan commands are the CLI equivalent; `knowledge:audit-identities` and `knowledge:repair-duplicates` stay CLI-only.
+The knowledge edit page binds the operator person, adds aliases, links personas, and stores instruction copy. The agent page sets that agent’s main person and groups. The groups screen sets the shared preamble, shared main person, and members. Shared-space ACL includes a group grant. These artisan commands remain the CLI for identifiers and audit; `knowledge:audit-identities` and `knowledge:repair-duplicates` stay CLI-only.
 
 ```
-php artisan knowledge:bind-operator Rughalt
-php artisan knowledge:add-identifier Rughalt Runako --kind=persona
-php artisan knowledge:bind-reference Rughalt Szefowa --agent=grokbot
+php artisan knowledge:bind-operator Person
+php artisan knowledge:add-identifier Person Nickname --kind=alias
+php artisan knowledge:bind-reference Person Title --agent=agent-name
 php artisan knowledge:backfill-identifiers
 php artisan knowledge:audit-identities
 php artisan knowledge:repair-duplicates path/to/manifest.json
@@ -415,7 +430,7 @@ Keep the new tables. Do not `migrate:rollback` after identity data is in use. Tu
 
 ### Harness
 
-No harness change is required for the basic path: existing middleware resolves the agent, the resolver uses stored references, and the imp keeps the instruction “Always address user as Szefowa” unchanged. MCP and HTTP share `ToolCatalog`. `melfina-call.mjs` must not grow identity logic.
+No harness change is required for the basic path: existing middleware resolves the agent, the resolver uses stored references, and instruction `content` stays byte-for-byte. MCP and HTTP share `ToolCatalog`. `melfina-call.mjs` must not grow identity logic.
 
 If a harness is later extended, it may pass the existing agent identity and a trusted structured operator id. It must not parse instruction text, replace names in prose, inject preferences as overriding instructions, or equate every “user” with the installation operator in a multi-person setup. Caches must be keyed by agent. Cross-agent mail remains transport — structured references should carry `entry_id`.
 

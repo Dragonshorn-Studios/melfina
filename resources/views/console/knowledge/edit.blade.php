@@ -60,22 +60,13 @@
                 @error('state')<span class="text-danger">{{ $message }}</span>@enderror
             </label>
 
-            <div class="grid gap-4 sm:grid-cols-2">
-                <label class="block font-mono text-xs text-steel">
-                    aliases — one per line
-                    <textarea name="aliases" rows="3" maxlength="4200"
-                        class="mt-1 block w-full border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
-                        style="border-radius: var(--radius-console)">{{ old('aliases', implode("\n", $entry?->aliases ?? [])) }}</textarea>
-                    @error('aliases')<span class="text-danger">{{ $message }}</span>@enderror
-                </label>
-                <label class="block font-mono text-xs text-steel">
-                    related — canonical names, one per line
-                    <textarea name="related" rows="3" maxlength="4200"
-                        class="mt-1 block w-full border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
-                        style="border-radius: var(--radius-console)">{{ old('related', implode("\n", $entry?->related ?? [])) }}</textarea>
-                    @error('related')<span class="text-danger">{{ $message }}</span>@enderror
-                </label>
-            </div>
+            <label class="block font-mono text-xs text-steel">
+                related — canonical names, one per line
+                <textarea name="related" rows="3" maxlength="4200"
+                    class="mt-1 block w-full border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
+                    style="border-radius: var(--radius-console)">{{ old('related', implode("\n", $entry?->related ?? [])) }}</textarea>
+                @error('related')<span class="text-danger">{{ $message }}</span>@enderror
+            </label>
 
             <label class="block font-mono text-xs text-steel">
                 source — where this knowledge came from
@@ -123,33 +114,88 @@
                     </form>
                 @endif
 
-                <p class="mt-3 font-mono text-xs text-steel">
-                    Global names this entity answers to. Distinct from a per-imp title (Szefowa) and from the operator persona text on the dashboard.
+                <p class="mt-4 font-mono text-xs tracking-[0.16em] text-steel">ALIASES</p>
+                <p class="mt-1 font-mono text-xs text-steel">
+                    Another name for this same entity. Lookup returns this entry. Projects, places, and people all use this list.
                 </p>
                 @if (($identifiers ?? collect())->isNotEmpty())
                     <ul class="mt-3 space-y-1 font-mono text-xs">
                         @foreach ($identifiers as $identifier)
                             <li class="flex items-center justify-between gap-3 border border-border/50 bg-void/60 px-3 py-1.5" style="border-radius: var(--radius-console)">
-                                <span class="text-cream" title="{{ $identifier->kind->hint() }}">{{ $identifier->kind->value }} · {{ $identifier->value }}</span>
-                                <x-confirm-form action="{{ route('console.knowledge.identifiers.destroy', [$entry, $identifier]) }}" method="DELETE" confirm="Remove {{ $identifier->kind->value }} '{{ $identifier->value }}'? Lookup will stop matching it.">
+                                <span class="text-cream">{{ $identifier->kind->value }} · {{ $identifier->value }}</span>
+                                <x-confirm-form action="{{ route('console.knowledge.identifiers.destroy', [$entry, $identifier]) }}" method="DELETE" confirm="Remove alias '{{ $identifier->value }}'? Lookup will stop matching it.">
                                     <button type="submit" class="text-steel underline decoration-border underline-offset-4 hover:text-danger">remove</button>
                                 </x-confirm-form>
                             </li>
                         @endforeach
                     </ul>
+                @else
+                    <p class="mt-3 font-mono text-xs text-steel">No aliases yet.</p>
                 @endif
-
                 <form method="POST" action="{{ route('console.knowledge.identifiers.store', $entry) }}" class="mt-3 flex flex-wrap items-start gap-2">
                     @csrf
+                    <input type="hidden" name="kind" value="alias">
                     <input type="text" name="value" placeholder="another name" maxlength="200"
                         class="min-w-0 flex-1 border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
                         style="border-radius: var(--radius-console)">
-                    <x-described-select name="kind" :options="$identifierKinds ?? []" :selected="old('kind', 'alias')" />
                     <button type="submit"
                         class="border border-border bg-void px-3 py-1 font-mono text-xs text-cream hover:border-amber"
-                        style="border-radius: var(--radius-console)">add identifier</button>
+                        style="border-radius: var(--radius-console)">add alias</button>
                 </form>
                 @error('value')<p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p>@enderror
+
+                @if ($entry->type === 'person')
+                    <p class="mt-6 font-mono text-xs tracking-[0.16em] text-steel">PERSONAS</p>
+                    <p class="mt-1 font-mono text-xs text-steel">
+                        Other person entries for the same living being. Lookup keeps each name and reports that they are equal.
+                    </p>
+                    @if (($personaLinks ?? collect())->isNotEmpty())
+                        <ul class="mt-3 space-y-1 font-mono text-xs">
+                            @foreach ($personaLinks as $persona)
+                                <li class="flex items-center justify-between gap-3 border border-border/50 bg-void/60 px-3 py-1.5" style="border-radius: var(--radius-console)">
+                                    <a class="text-cream underline decoration-border underline-offset-4" href="{{ route('console.knowledge.edit', $persona) }}">{{ $persona->name }}</a>
+                                    <x-confirm-form action="{{ route('console.knowledge.personas.destroy', [$entry, $persona]) }}" method="DELETE" confirm="Unlink persona '{{ $persona->name }}'?">
+                                        <button type="submit" class="text-steel underline decoration-border underline-offset-4 hover:text-danger">unlink</button>
+                                    </x-confirm-form>
+                                </li>
+                            @endforeach
+                        </ul>
+                    @else
+                        <p class="mt-3 font-mono text-xs text-steel">No persona links yet.</p>
+                    @endif
+                    @if (($people ?? collect())->isNotEmpty())
+                        <form method="POST" action="{{ route('console.knowledge.personas.store', $entry) }}" class="mt-3 flex flex-wrap gap-2">
+                            @csrf
+                            <select name="persona_entry_id"
+                                class="min-w-0 flex-1 border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
+                                style="border-radius: var(--radius-console)">
+                                @foreach ($people as $person)
+                                    <option value="{{ $person->id }}">{{ $person->name }}</option>
+                                @endforeach
+                            </select>
+                            <button type="submit"
+                                class="border border-border bg-void px-3 py-1 font-mono text-xs text-cream hover:border-amber"
+                                style="border-radius: var(--radius-console)">link persona</button>
+                        </form>
+                    @endif
+                    @error('persona')<p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p>@enderror
+
+                    <p class="mt-6 font-mono text-xs tracking-[0.16em] text-steel">INSTRUCTION COPY</p>
+                    <p class="mt-1 font-mono text-xs text-steel">
+                        Paragraph agents read for this person when it is their main person. It does not change the agent’s own instruction text.
+                    </p>
+                    <form method="POST" action="{{ route('console.knowledge.instruction-copy.store', $entry) }}" class="mt-3">
+                        @csrf
+                        @method('PUT')
+                        <textarea name="instruction_copy" rows="3"
+                            class="w-full border border-border bg-void px-2 py-1 font-mono text-xs text-cream"
+                            style="border-radius: var(--radius-console)">{{ old('instruction_copy', $entry->instruction_copy) }}</textarea>
+                        @error('instruction_copy')<p class="mt-1 font-mono text-xs text-danger">{{ $message }}</p>@enderror
+                        <button type="submit"
+                            class="mt-2 border border-border bg-void px-3 py-1 font-mono text-xs text-cream hover:border-amber"
+                            style="border-radius: var(--radius-console)">save copy</button>
+                    </form>
+                @endif
             </div>
 
             <div class="mt-8 border-t border-border pt-4">
