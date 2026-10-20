@@ -166,6 +166,66 @@ it('creates the repo under the token login when it does not exist', function () 
         && $request['private'] === false);
 });
 
+it('publishes the first commit into an existing empty repo', function () {
+    $captured = (object) ['tree' => null, 'commit' => null, 'ref' => null];
+
+    Http::fake(function (Request $request) use ($captured) {
+        $method = $request->method();
+        $path = parse_url($request->url(), PHP_URL_PATH) ?: '';
+
+        if ($method === 'GET' && $path === '/user') {
+            return Http::response(['login' => 'octo']);
+        }
+
+        if ($method === 'GET' && $path === '/repos/octo/empty') {
+            return Http::response(['default_branch' => 'main']);
+        }
+
+        if ($method === 'GET' && str_contains($path, '/branches/')) {
+            return Http::response(['message' => 'Branch not found'], 404);
+        }
+
+        if ($method === 'POST' && str_contains($path, '/git/trees')) {
+            $captured->tree = $request->data();
+
+            return Http::response(['sha' => 'newtree']);
+        }
+
+        if ($method === 'POST' && str_contains($path, '/git/commits')) {
+            $captured->commit = $request->data();
+
+            return Http::response(['sha' => 'newcommit']);
+        }
+
+        if ($method === 'POST' && $path === '/repos/octo/empty/git/refs') {
+            $captured->ref = $request->data();
+
+            return Http::response(['ref' => 'refs/heads/main']);
+        }
+
+        return Http::response(['message' => 'unexpected '.$method.' '.$path], 500);
+    });
+
+    $owner = User::factory()->owner()->create([
+        'github_token' => 'ghp_ok',
+        'github_repo' => 'octo/empty',
+    ]);
+
+    $this->actingAs($owner)
+        ->post(route('console.mcp.github.publish'))
+        ->assertSessionHas('status', 'Published to https://github.com/octo/empty');
+
+    $paths = collect($captured->tree['tree'] ?? [])->pluck('path');
+
+    expect($captured->tree)->not->toHaveKey('base_tree')
+        ->and($captured->commit['parents'] ?? null)->toBe([])
+        ->and($captured->ref)->toMatchArray(['ref' => 'refs/heads/main', 'sha' => 'newcommit'])
+        ->and($paths)->toContain('skills/melfina-knowledge-connect/SKILL.md')
+        ->and($paths)->toContain('.minimax-plugin/plugin.json');
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'PATCH');
+});
+
 it('commits a skill file for every live tool into one tree', function () {
     $capture = githubPublishCapture();
 

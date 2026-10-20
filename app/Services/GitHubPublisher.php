@@ -76,6 +76,15 @@ class GitHubPublisher
         }
 
         $tip = $http->get("/repos/{$full}/branches/{$branch}");
+        if ($tip->notFound()) {
+            // Repo exists but has no commits — GitHub returns the default
+            // branch name and 404s the branch itself. The Contents API used
+            // to create that first commit; a root tree does the same.
+            $this->commitTree($http, $full, $branch, null, null, $files);
+
+            return "https://github.com/{$full}";
+        }
+
         if ($tip->failed()) {
             throw new RuntimeException('Could not read the default branch: '.$this->githubMessage($tip));
         }
@@ -97,9 +106,12 @@ class GitHubPublisher
      * the new package no longer ships are deleted in the same commit, so
      * the manifest and the skill files cannot drift apart.
      *
+     * A null parent is the first commit on an empty repo: no base tree,
+     * no deletions, and the branch ref is created rather than updated.
+     *
      * @param  array<string, string>  $files
      */
-    private function commitTree(PendingRequest $http, string $full, string $branch, string $parent, string $baseTree, array $files): void
+    private function commitTree(PendingRequest $http, string $full, string $branch, ?string $parent, ?string $baseTree, array $files): void
     {
         $entries = [];
 
@@ -112,34 +124,38 @@ class GitHubPublisher
             ];
         }
 
-        $stale = [];
-        foreach ($this->treeBlobs($http, $full, $branch, $baseTree) as $node) {
-            $path = $node['path'] ?? '';
+        if ($baseTree !== null) {
+            $stale = [];
+            foreach ($this->treeBlobs($http, $full, $branch, $baseTree) as $node) {
+                $path = $node['path'] ?? '';
 
-            if (($node['type'] ?? '') !== 'blob' || ! is_string($path) || $path === '') {
-                continue;
+                if (($node['type'] ?? '') !== 'blob' || ! is_string($path) || $path === '') {
+                    continue;
+                }
+
+                if (! isset($files[$path]) && self::managed($path)) {
+                    $stale[] = $path;
+                }
             }
 
-            if (! isset($files[$path]) && self::managed($path)) {
-                $stale[] = $path;
+            sort($stale);
+
+            foreach ($stale as $path) {
+                $entries[] = [
+                    'path' => $path,
+                    'mode' => '100644',
+                    'type' => 'blob',
+                    'sha' => null,
+                ];
             }
         }
 
-        sort($stale);
-
-        foreach ($stale as $path) {
-            $entries[] = [
-                'path' => $path,
-                'mode' => '100644',
-                'type' => 'blob',
-                'sha' => null,
-            ];
+        $payload = ['tree' => $entries];
+        if ($baseTree !== null) {
+            $payload['base_tree'] = $baseTree;
         }
 
-        $tree = $http->post("/repos/{$full}/git/trees", [
-            'base_tree' => $baseTree,
-            'tree' => $entries,
-        ]);
+        $tree = $http->post("/repos/{$full}/git/trees", $payload);
 
         if ($tree->failed()) {
             throw new RuntimeException('Failed writing the plugin tree: '.$this->githubMessage($tree));
@@ -159,7 +175,7 @@ class GitHubPublisher
         $commit = $http->post("/repos/{$full}/git/commits", [
             'message' => 'Update Melfina plugin package',
             'tree' => $treeSha,
-            'parents' => [$parent],
+            'parents' => $parent === null ? [] : [$parent],
         ]);
 
         if ($commit->failed()) {
@@ -171,9 +187,14 @@ class GitHubPublisher
             throw new RuntimeException('GitHub did not return a commit sha.');
         }
 
-        $ref = $http->patch("/repos/{$full}/git/refs/heads/{$branch}", [
-            'sha' => $commitSha,
-        ]);
+        $ref = $parent === null
+            ? $http->post("/repos/{$full}/git/refs", [
+                'ref' => 'refs/heads/'.$branch,
+                'sha' => $commitSha,
+            ])
+            : $http->patch("/repos/{$full}/git/refs/heads/{$branch}", [
+                'sha' => $commitSha,
+            ]);
 
         if ($ref->failed()) {
             throw new RuntimeException('Failed updating the branch: '.$this->githubMessage($ref));
