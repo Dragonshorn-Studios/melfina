@@ -1,8 +1,12 @@
 <?php
 
 use App\Mcp\PluginRepo;
+use App\Mcp\ToolCatalog;
 use App\Models\User;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Symfony\Component\Process\Process;
 
 it('saves the repo and stores the token encrypted', function () {
     $owner = User::factory()->owner()->create();
@@ -56,12 +60,7 @@ it('refuses to publish without saved credentials', function () {
 });
 
 it('pushes every package file to the chosen repo', function () {
-    Http::fake([
-        'api.github.com/user' => Http::response(['login' => 'octo']),
-        'api.github.com/repos/octo/melfina-plugin' => Http::response(['id' => 1, 'default_branch' => 'main']),
-        'api.github.com/repos/octo/melfina-plugin/contents/*' => Http::response(['content' => []], 200),
-        'api.github.com/repos/octo/melfina-plugin/git/trees/*' => Http::response(['tree' => []]),
-    ]);
+    $capture = githubPublishCapture();
 
     $owner = User::factory()->owner()->create([
         'github_token' => 'ghp_ok',
@@ -73,21 +72,19 @@ it('pushes every package file to the chosen repo', function () {
         ->assertRedirect(route('console.mcp.connect'))
         ->assertSessionHas('status', 'Published to https://github.com/octo/melfina-plugin');
 
-    // Every package file gets a contents PUT.
-    $fileCount = count(app(PluginRepo::class)->publicPackageFiles());
-    Http::assertSentCount(4 + $fileCount * 2); // /user + repo GET ×2 (publish + stale sweep) + per-file GET sha + PUT + tree GET
+    $committed = collect($capture->tree['tree'] ?? [])
+        ->filter(fn (array $entry): bool => array_key_exists('content', $entry))
+        ->mapWithKeys(fn (array $entry): array => [$entry['path'] => $entry['content']]);
+
+    expect($committed->all())->toEqual(app(PluginRepo::class)->publicPackageFiles());
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/git/commits'));
 });
 
 it('deletes files a previous layout publish left behind', function () {
-    Http::fake([
-        'api.github.com/user' => Http::response(['login' => 'octo']),
-        'api.github.com/repos/octo/melfina-plugin' => Http::response(['id' => 1, 'default_branch' => 'main']),
-        'api.github.com/repos/octo/melfina-plugin/contents/*' => Http::response(['content' => []], 200),
-        'api.github.com/repos/octo/melfina-plugin/git/trees/*' => Http::response(['tree' => [
-            ['path' => 'skills/melfina-read-file/SKILL.md', 'type' => 'blob', 'sha' => 'stalesha'],
-            ['path' => 'skills/custom-helper/SKILL.md', 'type' => 'blob', 'sha' => 'ownskill'],
-            ['path' => 'docs/human-notes.md', 'type' => 'blob', 'sha' => 'ownsha'],
-        ]]),
+    $capture = githubPublishCapture([
+        ['path' => 'skills/melfina-read-file/SKILL.md', 'type' => 'blob', 'sha' => 'stalesha'],
+        ['path' => 'skills/custom-helper/SKILL.md', 'type' => 'blob', 'sha' => 'ownskill'],
+        ['path' => 'docs/human-notes.md', 'type' => 'blob', 'sha' => 'ownsha'],
     ]);
 
     $owner = User::factory()->owner()->create([
@@ -97,27 +94,64 @@ it('deletes files a previous layout publish left behind', function () {
 
     // Publishing the single layout must sweep the per-tool skill the
     // previous multi-layout publish wrote, but never touch content the
-    // package doesn't own.
+    // package doesn't own. base_tree keeps those; only a null sha deletes.
     $this->actingAs($owner)
         ->post(route('console.mcp.github.publish'), ['variant' => 'single'])
         ->assertSessionHas('status', 'Published to https://github.com/octo/melfina-plugin');
 
-    Http::assertSent(fn ($request) => $request->method() === 'DELETE'
-        && $request->url() === 'https://api.github.com/repos/octo/melfina-plugin/contents/skills/melfina-read-file/SKILL.md'
-        && $request['sha'] === 'stalesha');
-    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'docs/human-notes.md'));
-    // …and never touches skills the package doesn't own.
-    Http::assertNotSent(fn ($request) => $request->method() === 'DELETE'
-        && str_contains($request->url(), 'skills/custom-helper'));
+    $entries = collect($capture->tree['tree'] ?? [])->keyBy('path');
+    $removed = $entries['skills/melfina-read-file/SKILL.md'];
+
+    expect($removed['sha'])->toBeNull()
+        ->and($removed)->not->toHaveKey('content')
+        ->and($entries)->not->toHaveKey('skills/custom-helper/SKILL.md')
+        ->and($entries)->not->toHaveKey('docs/human-notes.md');
 });
 
 it('creates the repo under the token login when it does not exist', function () {
-    Http::fake([
-        'api.github.com/user' => Http::response(['login' => 'octo']),
-        'api.github.com/repos/octo/newrepo' => Http::response(['message' => 'Not Found'], 404),
-        'api.github.com/user/repos' => Http::response(['full_name' => 'octo/newrepo'], 201),
-        'api.github.com/repos/octo/newrepo/contents/*' => Http::response(['content' => []], 200),
-    ]);
+    Http::fake(function (Request $request) {
+        $method = $request->method();
+        $path = parse_url($request->url(), PHP_URL_PATH) ?: '';
+
+        if ($method === 'GET' && $path === '/user') {
+            return Http::response(['login' => 'octo']);
+        }
+
+        if ($method === 'GET' && $path === '/repos/octo/newrepo') {
+            return Http::response(['message' => 'Not Found'], 404);
+        }
+
+        if ($method === 'POST' && $path === '/user/repos') {
+            return Http::response(['full_name' => 'octo/newrepo', 'default_branch' => 'main'], 201);
+        }
+
+        if ($method === 'GET' && str_contains($path, '/branches/')) {
+            return Http::response([
+                'commit' => [
+                    'sha' => 'parentsha',
+                    'commit' => ['tree' => ['sha' => 'basesha']],
+                ],
+            ]);
+        }
+
+        if ($method === 'GET' && str_contains($path, '/git/trees/')) {
+            return Http::response(['truncated' => false, 'tree' => []]);
+        }
+
+        if ($method === 'POST' && str_contains($path, '/git/trees')) {
+            return Http::response(['sha' => 'newtree']);
+        }
+
+        if ($method === 'POST' && str_contains($path, '/git/commits')) {
+            return Http::response(['sha' => 'newcommit']);
+        }
+
+        if ($method === 'PATCH' && str_contains($path, '/git/refs/')) {
+            return Http::response(['ref' => 'refs/heads/main']);
+        }
+
+        return Http::response(['message' => 'unexpected '.$method.' '.$path], 500);
+    });
 
     $owner = User::factory()->owner()->create([
         'github_token' => 'ghp_ok',
@@ -128,8 +162,82 @@ it('creates the repo under the token login when it does not exist', function () 
         ->post(route('console.mcp.github.publish'))
         ->assertSessionHas('status', 'Published to https://github.com/octo/newrepo');
 
-    Http::assertSent(fn ($request) => $request->url() === 'https://api.github.com/user/repos'
+    Http::assertSent(fn (Request $request): bool => $request->url() === 'https://api.github.com/user/repos'
         && $request['private'] === false);
+});
+
+it('commits a skill file for every live tool into one tree', function () {
+    $capture = githubPublishCapture();
+
+    $owner = User::factory()->owner()->create([
+        'github_token' => 'ghp_ok',
+        'github_repo' => 'octo/melfina-plugin',
+    ]);
+
+    $this->actingAs($owner)
+        ->post(route('console.mcp.github.publish'))
+        ->assertRedirect(route('console.mcp.connect'))
+        ->assertSessionHas('status');
+
+    $entries = collect($capture->tree['tree'] ?? [])->keyBy('path');
+    $tools = app(ToolCatalog::class)->all();
+
+    // The committed tree — not the manifest alone — carries one skill per
+    // live tool. These three are last in catalog order; a contents-API
+    // loop that dies after plugin.json is written leaves them declared
+    // and absent.
+    foreach ($tools as $tool) {
+        $path = 'skills/melfina-'.str_replace('_', '-', $tool['name']).'/SKILL.md';
+        expect($entries)->toHaveKey($path)
+            ->and($entries[$path]['content'] ?? '')->toContain($tool['description']);
+    }
+
+    $manifest = json_decode($entries['melfina-api.json']['content'] ?? '', true);
+    $plugin = json_decode($entries['.minimax-plugin/plugin.json']['content'] ?? '', true);
+    $declared = $plugin['skills'];
+    $skillPaths = $entries->keys()->filter(fn (string $path): bool => str_starts_with($path, 'skills/'))->values()->all();
+
+    expect($declared)->toHaveCount(count($tools) + 1)
+        ->and($declared)->toEqualCanonicalizing($skillPaths)
+        ->and(collect($manifest['tools'])->pluck('name')->all())->toEqualCanonicalizing(collect($tools)->pluck('name')->all())
+        ->and($entries['mcp.json']['content'])->toContain('Bearer YOUR_KEY')
+        ->and($entries['mcp.json']['content'])->not->toMatch('/melf[gs]?_[A-Za-z0-9]/');
+
+    // One commit, not one contents PUT per file. A second publish of the
+    // same bytes sends the same tree.
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/contents/'));
+    expect($capture->trees)->toHaveCount(1);
+
+    $this->actingAs($owner)->post(route('console.mcp.github.publish'));
+    expect($capture->trees[1])->toEqual($capture->trees[0]);
+
+    // The local dumb-HTTP repo agrees, and a second build is the same commit.
+    $repos = app(PluginRepo::class);
+    $dir = $repos->ensureGlobalPublic();
+    $sha = trim((new Process(['git', '--git-dir='.$dir, 'rev-parse', 'HEAD']))->mustRun()->getOutput());
+    $listed = trim((new Process(['git', '--git-dir='.$dir, 'ls-tree', '-r', '--name-only', 'HEAD']))->mustRun()->getOutput());
+    foreach ($tools as $tool) {
+        $path = 'skills/melfina-'.str_replace('_', '-', $tool['name']).'/SKILL.md';
+        expect($listed)->toContain($path);
+    }
+    $repos->ensureGlobalPublic();
+    $again = trim((new Process(['git', '--git-dir='.$dir, 'rev-parse', 'HEAD']))->mustRun()->getOutput());
+    expect($again)->toBe($sha);
+});
+
+it('surfaces a GitHub timeout as a form error', function () {
+    Http::fake(function (): never {
+        throw new ConnectionException('Operation timed out');
+    });
+
+    $owner = User::factory()->owner()->create([
+        'github_token' => 'ghp_ok',
+        'github_repo' => 'octo/melfina-plugin',
+    ]);
+
+    $this->actingAs($owner)
+        ->post(route('console.mcp.github.publish'))
+        ->assertSessionHasErrors('github_repo');
 });
 
 it('surfaces a GitHub auth failure as a form error', function () {
@@ -146,3 +254,65 @@ it('surfaces a GitHub auth failure as a form error', function () {
         ->post(route('console.mcp.github.publish'))
         ->assertSessionHasErrors('github_repo');
 });
+
+/**
+ * Stub the GitHub REST surface the publisher talks to, and keep every
+ * tree payload it posts. Contents-API calls are answered so the pre-fix
+ * per-file loop can finish — it just never fills `tree`.
+ *
+ * @param  list<array<string, mixed>>  $blobs
+ * @return object{tree: array<string, mixed>|null, trees: list<array<string, mixed>>}
+ */
+function githubPublishCapture(array $blobs = []): object
+{
+    $capture = (object) ['tree' => null, 'trees' => []];
+
+    Http::fake(function (Request $request) use ($capture, $blobs) {
+        $method = $request->method();
+        $path = parse_url($request->url(), PHP_URL_PATH) ?: '';
+
+        if ($method === 'GET' && $path === '/user') {
+            return Http::response(['login' => 'octo']);
+        }
+
+        if ($method === 'GET' && preg_match('#/repos/[^/]+/[^/]+/branches/#', $path)) {
+            return Http::response([
+                'commit' => [
+                    'sha' => 'parentsha',
+                    'commit' => ['tree' => ['sha' => 'basesha']],
+                ],
+            ]);
+        }
+
+        if ($method === 'GET' && str_contains($path, '/git/trees/')) {
+            return Http::response(['truncated' => false, 'tree' => $blobs]);
+        }
+
+        if ($method === 'POST' && str_contains($path, '/git/trees')) {
+            $capture->tree = $request->data();
+            $capture->trees[] = $request->data();
+
+            return Http::response(['sha' => 'newtree']);
+        }
+
+        if ($method === 'POST' && str_contains($path, '/git/commits')) {
+            return Http::response(['sha' => 'newcommit']);
+        }
+
+        if ($method === 'PATCH' && str_contains($path, '/git/refs/')) {
+            return Http::response(['ref' => 'refs/heads/main']);
+        }
+
+        if ($method === 'GET' && preg_match('#^/repos/[^/]+/[^/]+$#', $path)) {
+            return Http::response(['default_branch' => 'main']);
+        }
+
+        if (str_contains($path, '/contents/')) {
+            return Http::response(['sha' => 'filesha']);
+        }
+
+        return Http::response(['message' => 'unexpected '.$method.' '.$path], 500);
+    });
+
+    return $capture;
+}

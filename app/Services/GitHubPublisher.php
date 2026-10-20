@@ -4,20 +4,29 @@ namespace App\Services;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
+use Throwable;
 
 /**
  * Publishes the credential-free fleet package to a GitHub repository the
  * owner picks, so GitHub-only plugin importers (MiniMax's submit accepts
  * github.com URLs, not arbitrary git hosts) can install it.
+ *
+ * The whole package lands in one commit. Writing each file through the
+ * Contents API made a separate commit per path and ran long enough to die
+ * (HTTP timeout or the PHP execution limit) after plugin.json was already
+ * updated — the manifest then declared skills the commit never contained.
+ * A connection failure is not a RuntimeException, so that death was an
+ * HTTP 500 rather than a form error.
  */
 class GitHubPublisher
 {
     /**
-     * Push each package file to `owner/repo` on the default branch,
-     * creating the repo (public — importers won't carry credentials) under
-     * the token's account when it doesn't exist yet.
+     * Push the package to `owner/repo` on the default branch as one
+     * commit, creating the repo (public — importers won't carry
+     * credentials) under the token's account when it doesn't exist yet.
      *
      * @param  array<string, string>  $files  repo-relative path → contents
      *
@@ -25,8 +34,27 @@ class GitHubPublisher
      */
     public function publish(string $token, string $repo, array $files): string
     {
+        // The owner clicked one button. A slow GitHub response must come
+        // back as a caught error, not a fatal that aborts mid-publish.
+        set_time_limit(120);
+
+        try {
+            return $this->push($token, $repo, $files);
+        } catch (RuntimeException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            throw new RuntimeException('GitHub publish failed: '.$e->getMessage(), previous: $e);
+        }
+    }
+
+    /**
+     * @param  array<string, string>  $files
+     */
+    private function push(string $token, string $repo, array $files): string
+    {
         $http = Http::withToken($token)
             ->acceptJson()
+            ->timeout(60)
             ->baseUrl('https://api.github.com');
 
         $login = $this->authenticatedLogin($http);
@@ -35,69 +63,143 @@ class GitHubPublisher
 
         $existing = $http->get("/repos/{$full}");
         if ($existing->notFound()) {
-            $this->createRepo($http, $owner, $name, $login);
+            $created = $this->createRepo($http, $owner, $name, $login);
+            $branch = $created['default_branch'] ?? 'main';
+        } elseif ($existing->failed()) {
+            throw new RuntimeException('Could not read the repo: '.$this->githubMessage($existing));
         } else {
-            $existing->throw();
+            $branch = $existing->json('default_branch');
         }
 
-        foreach ($files as $path => $contents) {
-            $this->putFile($http, $full, $path, $contents);
+        if (! is_string($branch) || $branch === '') {
+            throw new RuntimeException('Could not resolve the default branch.');
         }
 
-        $this->deleteStale($http, $full, $files);
+        $tip = $http->get("/repos/{$full}/branches/{$branch}");
+        if ($tip->failed()) {
+            throw new RuntimeException('Could not read the default branch: '.$this->githubMessage($tip));
+        }
+
+        $parent = $tip->json('commit.sha');
+        $baseTree = $tip->json('commit.commit.tree.sha');
+        if (! is_string($parent) || $parent === '' || ! is_string($baseTree) || $baseTree === '') {
+            throw new RuntimeException('Could not resolve the branch tip.');
+        }
+
+        $this->commitTree($http, $full, $branch, $parent, $baseTree, $files);
 
         return "https://github.com/{$full}";
     }
 
     /**
-     * Remove generated files a previous publish left behind — switching
-     * package layouts must not leave dead skills/scripts registered.
-     * Only Melfina-owned paths are ever deleted: the skills/, scripts/,
-     * .minimax-plugin/, and .claude-plugin/ trees plus the known
-     * generated top-level files.
+     * One tree, one commit, one ref update. `base_tree` keeps files this
+     * package does not own (a custom skill, notes). Managed paths that
+     * the new package no longer ships are deleted in the same commit, so
+     * the manifest and the skill files cannot drift apart.
      *
-     * @param  array<string, string>  $files  the paths just published
+     * @param  array<string, string>  $files
      */
-    private function deleteStale(PendingRequest $http, string $full, array $files): void
+    private function commitTree(PendingRequest $http, string $full, string $branch, string $parent, string $baseTree, array $files): void
     {
-        // An empty or unreadable repo has nothing to clean — never block
-        // a publish on housekeeping.
-        $repo = $http->get("/repos/{$full}");
-        $branch = $repo->json('default_branch');
+        $entries = [];
 
-        if ($repo->failed() || ! is_string($branch)) {
-            return;
+        foreach ($files as $path => $contents) {
+            $entries[] = [
+                'path' => $path,
+                'mode' => '100644',
+                'type' => 'blob',
+                'content' => $contents,
+            ];
         }
 
-        $tree = $http->get("/repos/{$full}/git/trees/{$branch}", ['recursive' => '1']);
-
-        if ($tree->failed()) {
-            return;
-        }
-
-        // A truncated recursive tree can't prove the sweep is complete —
-        // refetch just the managed subtrees instead of treating a partial
-        // listing as authoritative.
-        $nodes = $tree->json('truncated')
-            ? $this->managedTreeNodes($http, $full, $branch)
-            : $tree->json('tree', []);
-
-        foreach ($nodes as $node) {
+        $stale = [];
+        foreach ($this->treeBlobs($http, $full, $branch, $baseTree) as $node) {
             $path = $node['path'] ?? '';
 
-            if (($node['type'] ?? '') !== 'blob' || isset($files[$path]) || ! self::managed($path)) {
+            if (($node['type'] ?? '') !== 'blob' || ! is_string($path) || $path === '') {
                 continue;
             }
 
-            $response = $http->delete("/repos/{$full}/contents/{$path}", [
-                'message' => "Remove {$path}",
-                'sha' => $node['sha'],
-            ]);
-
-            if ($response->failed()) {
-                throw new RuntimeException("Failed removing stale {$path}: ".($response->json('message') ?? 'GitHub error'));
+            if (! isset($files[$path]) && self::managed($path)) {
+                $stale[] = $path;
             }
         }
+
+        sort($stale);
+
+        foreach ($stale as $path) {
+            $entries[] = [
+                'path' => $path,
+                'mode' => '100644',
+                'type' => 'blob',
+                'sha' => null,
+            ];
+        }
+
+        $tree = $http->post("/repos/{$full}/git/trees", [
+            'base_tree' => $baseTree,
+            'tree' => $entries,
+        ]);
+
+        if ($tree->failed()) {
+            throw new RuntimeException('Failed writing the plugin tree: '.$this->githubMessage($tree));
+        }
+
+        $treeSha = $tree->json('sha');
+        if (! is_string($treeSha) || $treeSha === '') {
+            throw new RuntimeException('GitHub did not return a tree sha.');
+        }
+
+        // Identical bytes: the tree object is unchanged, so there is
+        // nothing to commit. A second publish stays a no-op.
+        if ($treeSha === $baseTree) {
+            return;
+        }
+
+        $commit = $http->post("/repos/{$full}/git/commits", [
+            'message' => 'Update Melfina plugin package',
+            'tree' => $treeSha,
+            'parents' => [$parent],
+        ]);
+
+        if ($commit->failed()) {
+            throw new RuntimeException('Failed creating the plugin commit: '.$this->githubMessage($commit));
+        }
+
+        $commitSha = $commit->json('sha');
+        if (! is_string($commitSha) || $commitSha === '') {
+            throw new RuntimeException('GitHub did not return a commit sha.');
+        }
+
+        $ref = $http->patch("/repos/{$full}/git/refs/heads/{$branch}", [
+            'sha' => $commitSha,
+        ]);
+
+        if ($ref->failed()) {
+            throw new RuntimeException('Failed updating the branch: '.$this->githubMessage($ref));
+        }
+    }
+
+    /**
+     * Every blob in the current tree. A truncated recursive listing falls
+     * back to the managed subtrees — those are the only paths publish is
+     * allowed to delete.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function treeBlobs(PendingRequest $http, string $full, string $branch, string $baseTree): array
+    {
+        $tree = $http->get("/repos/{$full}/git/trees/{$baseTree}", ['recursive' => '1']);
+
+        if ($tree->failed()) {
+            throw new RuntimeException('Could not read the repo tree: '.$this->githubMessage($tree));
+        }
+
+        if ($tree->json('truncated')) {
+            return $this->managedTreeNodes($http, $full, $branch);
+        }
+
+        return $tree->json('tree') ?? [];
     }
 
     /**
@@ -194,7 +296,10 @@ class GitHubPublisher
         return explode('/', $repo, 2);
     }
 
-    private function createRepo(PendingRequest $http, string $owner, string $name, string $login): void
+    /**
+     * @return array<string, mixed>
+     */
+    private function createRepo(PendingRequest $http, string $owner, string $name, string $login): array
     {
         if ($owner !== $login) {
             throw new RuntimeException("{$owner}/{$name} doesn't exist and the token belongs to {$login} — create the repo on GitHub first, or use a repo under {$login}.");
@@ -208,26 +313,27 @@ class GitHubPublisher
         ]);
 
         if ($response->failed()) {
-            throw new RuntimeException('Could not create the repo: '.($response->json('message') ?? 'GitHub error'));
+            throw new RuntimeException('Could not create the repo: '.$this->githubMessage($response));
         }
+
+        $created = $response->json();
+
+        return is_array($created) ? $created : [];
     }
 
     /**
-     * Upsert one file through the contents API (fetch the sha when it
-     * exists, then PUT the update).
+     * GitHub's `message` is usually a string. Some error bodies make it
+     * an array; concatenating that is a TypeError and used to surface as
+     * a bare 500.
      */
-    private function putFile(PendingRequest $http, string $full, string $path, string $contents): void
+    private function githubMessage(Response $response): string
     {
-        $sha = $http->get("/repos/{$full}/contents/{$path}")->json('sha');
+        $message = $response->json('message');
 
-        $response = $http->put("/repos/{$full}/contents/{$path}", array_filter([
-            'message' => "Update {$path}",
-            'content' => base64_encode($contents),
-            'sha' => is_string($sha) ? $sha : null,
-        ]));
-
-        if ($response->failed()) {
-            throw new RuntimeException("Failed writing {$path}: ".($response->json('message') ?? 'GitHub error'));
+        if (is_string($message) && $message !== '') {
+            return $message;
         }
+
+        return 'GitHub error (HTTP '.$response->status().')';
     }
 }
