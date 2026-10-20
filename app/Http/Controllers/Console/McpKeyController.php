@@ -225,8 +225,10 @@ class McpKeyController extends Controller
 
         try {
             $url = $github->publish($user->github_token, $user->github_repo, $repos->publicPackageFiles($variant));
-        } catch (\RuntimeException $e) {
-            throw ValidationException::withMessages(['github_repo' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            throw ValidationException::withMessages([
+                'github_repo' => $e->getMessage() !== '' ? $e->getMessage() : 'GitHub publish failed.',
+            ]);
         }
 
         return redirect()
