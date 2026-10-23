@@ -1,10 +1,13 @@
 <?php
 
+use App\Mcp\PluginRepo;
 use App\Models\AdminApiKey;
 use App\Models\Agent;
 use App\Models\KnowledgeEntry;
 use App\Models\User;
 use App\Models\VfsFile;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 beforeEach(function () {
     $this->owner = User::factory()->owner()->create();
@@ -48,6 +51,21 @@ it('rejects missing, wrong-family, and revoked credentials', function () {
     $revoked = ($this->adminKey)([AdminApiKey::PERMISSION_STATUS_READ]);
     $this->owner->adminApiKeys()->sole()->revoke();
     $this->getJson('/api/admin/status', ($this->withAdminKey)($revoked))
+        ->assertUnauthorized();
+});
+
+it('accepts the admin key over http basic and rejects other families there', function () {
+    $plaintext = ($this->adminKey)([AdminApiKey::PERMISSION_STATUS_READ]);
+
+    // The username is ignored — the Basic password carries the credential,
+    // for clients that can only configure a URL.
+    $this->withBasicAuth('yukihime', $plaintext)
+        ->getJson('/api/admin/status')
+        ->assertOk()
+        ->assertJson(['ok' => true]);
+
+    $this->withBasicAuth('yukihime', 'melf_not_an_admin_key')
+        ->getJson('/api/admin/status')
         ->assertUnauthorized();
 });
 
@@ -104,6 +122,25 @@ it('lists brains with counts, last activity, and knowledge attribution', functio
         ->and($idlePayload['last_activity'])->toBeNull();
 });
 
+it('reports the newer of the last file write and the last memory as last activity', function () {
+    $fileNewer = Agent::factory()->create(['name' => 'file-newer']);
+    VfsFile::factory()->create(['agent_id' => $fileNewer->id, 'updated_at' => '2026-01-02 12:00:00']);
+    $fileNewer->memories = [['at' => '2026-01-01T08:00:00+00:00', 'text' => 'older memory']];
+    $fileNewer->save();
+
+    $memoryNewer = Agent::factory()->create(['name' => 'memory-newer']);
+    VfsFile::factory()->create(['agent_id' => $memoryNewer->id, 'updated_at' => '2026-01-01 08:00:00']);
+    $memoryNewer->memories = [['at' => '2026-01-02T12:00:00+00:00', 'text' => 'newer memory']];
+    $memoryNewer->save();
+
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_READ]));
+
+    $byName = collect($this->getJson('/api/admin/agents', $bearer)->assertOk()->json('agents'))->keyBy('name');
+
+    expect(Carbon::parse($byName['file-newer']['last_activity'])->equalTo(Carbon::parse('2026-01-02 12:00:00')))->toBeTrue()
+        ->and(Carbon::parse($byName['memory-newer']['last_activity'])->equalTo(Carbon::parse('2026-01-02 12:00:00')))->toBeTrue();
+});
+
 it('shows one brain in detail and 404s unknown ids', function () {
     $agent = Agent::factory()->create(['name' => 'detail', 'description' => 'the one']);
     $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_READ]));
@@ -157,6 +194,24 @@ it('rejects missing and duplicate brain names', function () {
         ->assertUnprocessable();
 });
 
+it('rejects an agent name that slugs to the public repo name', function () {
+    $reserved = Str::beforeLast(app(PluginRepo::class)->publicRepoName(), '.git');
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_WRITE]));
+
+    $this->postJson('/api/admin/agents', ['name' => $reserved], $bearer)
+        ->assertUnprocessable();
+
+    $this->assertDatabaseMissing('agents', ['name' => $reserved]);
+});
+
+it('falls back to the agent slug for names that slug to nothing', function () {
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_WRITE]));
+
+    $this->postJson('/api/admin/agents', ['name' => '###'], $bearer)
+        ->assertCreated()
+        ->assertJsonPath('agent.slug', 'agent');
+});
+
 it('refuses to create brains without agents:write', function () {
     $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_READ]));
 
@@ -198,6 +253,32 @@ it('refuses to mint without keys:mint', function () {
     $this->postJson("/api/admin/agents/{$agent->id}/key", [], $bearer)
         ->assertForbidden()
         ->assertJson(['ok' => false, 'error' => 'This key lacks the keys:mint permission.']);
+});
+
+it('keeps the create and the shown-once key when packaging fails', function () {
+    $bearer = ($this->withAdminKey)(($this->adminKey)([
+        AdminApiKey::PERMISSION_AGENTS_WRITE,
+        AdminApiKey::PERMISSION_KEYS_MINT,
+    ]));
+
+    // Packaging is a side effect — a filesystem failure must not eat the
+    // 201 create or the shown-once plaintext. Partial mock: only the
+    // sync throws; the reserved-name rule still reads the real repo name.
+    $this->partialMock(PluginRepo::class, fn ($mock) => $mock->shouldReceive('syncForAgent')->andThrow(new RuntimeException('disk gone')));
+
+    $this->postJson('/api/admin/agents', ['name' => 'yuki-02'], $bearer)
+        ->assertCreated()
+        ->assertJsonPath('agent.name', 'yuki-02');
+    $this->assertDatabaseHas('agents', ['name' => 'yuki-02']);
+
+    $agent = Agent::where('name', 'yuki-02')->sole();
+    $key = $this->postJson("/api/admin/agents/{$agent->id}/key", [], $bearer)
+        ->assertOk()
+        ->assertJson(['ok' => true])
+        ->json('key');
+
+    expect($key)->toStartWith('melf_')
+        ->and($agent->fresh()->key_hash)->toBe(Agent::hashKey($key));
 });
 
 // ── console management ──────────────────────────────────────────────
