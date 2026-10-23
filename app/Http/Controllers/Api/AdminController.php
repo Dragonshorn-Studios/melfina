@@ -15,6 +15,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The provisioning surface (/api/admin) — machine-to-machine management
@@ -72,11 +73,18 @@ class AdminController extends Controller
             return $denied;
         }
 
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('agents', 'name'), new UnreservedAgentName],
-            'description' => ['nullable', 'string', 'max:500'],
-            'persona' => ['nullable', 'string', 'max:20000'],
-        ]);
+        // Same fold as the tools surface: the whole admin API speaks
+        // {ok, error}, so a 422 carries the envelope plus a `fields`
+        // map instead of Laravel's default {message, errors} shape.
+        try {
+            $validated = $request->validate([
+                'name' => ['required', 'string', 'max:255', Rule::unique('agents', 'name'), new UnreservedAgentName],
+                'description' => ['nullable', 'string', 'max:500'],
+                'persona' => ['nullable', 'string', 'max:20000'],
+            ]);
+        } catch (ValidationException $e) {
+            return $this->fail('Invalid input.', 422, ['fields' => $e->errors()]);
+        }
 
         $agent = Agent::query()->create([
             'name' => $validated['name'],
@@ -240,8 +248,11 @@ class AdminController extends Controller
         return null;
     }
 
-    private function fail(string $error, int $status): JsonResponse
+    /**
+     * @param  array<string, mixed>  $extra
+     */
+    private function fail(string $error, int $status, array $extra = []): JsonResponse
     {
-        return response()->json(['ok' => false, 'error' => $error], $status);
+        return response()->json(['ok' => false, 'error' => $error, ...$extra], $status);
     }
 }

@@ -299,7 +299,19 @@ class AgentController extends Controller
             'status' => ['required', 'string', 'in:'.Agent::STATUS_ACTIVE.','.Agent::STATUS_DISABLED],
         ]);
 
+        $originalName = $agent->name;
         $agent->update($validated);
+
+        // `updated_by` is the knowledge graph's only per-agent attribution
+        // and it is keyed by name — carry it across a rename so per-brain
+        // counts (admin API) don't orphan under the old name or hand the
+        // metric to a future agent that recycles it. Version history keeps
+        // the name each write actually happened under.
+        if ($agent->wasChanged('name')) {
+            KnowledgeEntry::query()
+                ->where('updated_by', $originalName)
+                ->update(['updated_by' => $agent->name]);
+        }
 
         // The name is the fleet persona, and a disabled agent shouldn't
         // leave credential-bearing artifacts at rest — both make built

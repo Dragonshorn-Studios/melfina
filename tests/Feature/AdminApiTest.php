@@ -141,6 +141,30 @@ it('reports the newer of the last file write and the last memory as last activit
         ->and(Carbon::parse($byName['memory-newer']['last_activity'])->equalTo(Carbon::parse('2026-01-02 12:00:00')))->toBeTrue();
 });
 
+it('keeps knowledge attribution across a console rename', function () {
+    $agent = Agent::factory()->create(['name' => 'old-name']);
+    KnowledgeEntry::factory()->count(2)->create(['updated_by' => 'old-name']);
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_READ]));
+
+    $before = collect($this->getJson('/api/admin/agents', $bearer)->assertOk()->json('agents'))
+        ->firstWhere('name', 'old-name');
+    expect($before['counts']['knowledge'])->toBe(2);
+
+    // The graph's only per-agent attribution is the name string — a
+    // rename must carry it, or the count orphans under the old name.
+    $this->actingAs($this->owner)
+        ->put(route('console.agents.update', $agent), [
+            'name' => 'new-name',
+            'status' => $agent->status,
+        ])
+        ->assertRedirect(route('console.agents.show', $agent));
+
+    $after = collect($this->getJson('/api/admin/agents', $bearer)->assertOk()->json('agents'))
+        ->firstWhere('name', 'new-name');
+    expect($after['counts']['knowledge'])->toBe(2)
+        ->and(KnowledgeEntry::query()->where('updated_by', 'old-name')->count())->toBe(0);
+});
+
 it('shows one brain in detail and 404s unknown ids', function () {
     $agent = Agent::factory()->create(['name' => 'detail', 'description' => 'the one']);
     $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_READ]));
@@ -183,15 +207,32 @@ it('creates a brain with a persona seed and no key', function () {
         ->and($agent->key_hash)->toBeNull();
 });
 
-it('rejects missing and duplicate brain names', function () {
+it('rejects missing and duplicate brain names with the shared error envelope', function () {
     $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_WRITE]));
     Agent::factory()->create(['name' => 'taken']);
 
     $this->postJson('/api/admin/agents', ['description' => 'no name'], $bearer)
-        ->assertUnprocessable();
+        ->assertUnprocessable()
+        ->assertJson(['ok' => false, 'error' => 'Invalid input.'])
+        ->assertJsonStructure(['fields' => ['name']]);
 
     $this->postJson('/api/admin/agents', ['name' => 'taken'], $bearer)
-        ->assertUnprocessable();
+        ->assertUnprocessable()
+        ->assertJson(['ok' => false, 'error' => 'Invalid input.']);
+});
+
+it('accepts a description up to the column-backed limit and no further', function () {
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_WRITE]));
+
+    // 500 is the contract on both surfaces; the column is widened to
+    // match, so a contract-valid blurb can't die on the INSERT.
+    $this->postJson('/api/admin/agents', ['name' => 'blurb', 'description' => str_repeat('a', 500)], $bearer)
+        ->assertCreated();
+    expect(Agent::where('name', 'blurb')->sole()->description)->toHaveLength(500);
+
+    $this->postJson('/api/admin/agents', ['name' => 'blurb-2', 'description' => str_repeat('a', 501)], $bearer)
+        ->assertUnprocessable()
+        ->assertJson(['ok' => false, 'error' => 'Invalid input.']);
 });
 
 it('rejects an agent name that slugs to the public repo name', function () {
@@ -199,7 +240,8 @@ it('rejects an agent name that slugs to the public repo name', function () {
     $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_WRITE]));
 
     $this->postJson('/api/admin/agents', ['name' => $reserved], $bearer)
-        ->assertUnprocessable();
+        ->assertUnprocessable()
+        ->assertJson(['ok' => false, 'error' => 'Invalid input.']);
 
     $this->assertDatabaseMissing('agents', ['name' => $reserved]);
 });
