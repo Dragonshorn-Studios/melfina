@@ -19,6 +19,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Version
+    |--------------------------------------------------------------------------
+    |
+    | What GET /api/admin/status reports as this install's version — a
+    | fleet system's connectivity check reads it to tell installs apart.
+    | Self-hosted installs have no release channel, so the default is a
+    | stable constant the deployer may override per environment.
+    |
+    */
+
+    'version' => env('MELFINA_VERSION', 'self-hosted'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Mail Listen Seconds
     |--------------------------------------------------------------------------
     |

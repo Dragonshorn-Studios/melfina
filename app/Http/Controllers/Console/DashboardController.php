@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Console;
 
 use App\Http\Controllers\Controller;
+use App\Models\AdminApiKey;
 use App\Models\Agent;
 use App\Models\KnowledgeIdentifierKind;
 use App\Models\SharedSpace;
@@ -18,6 +19,8 @@ class DashboardController extends Controller
             'owner' => $request->user(),
             'fleetKeys' => $request->user()->mcpFleetKeys()->latest()->get(),
             'enrollKeys' => $request->user()->agentEnrollKeys()->latest()->get(),
+            'adminKeys' => $request->user()->adminApiKeys()->latest()->get(),
+            'adminPermissions' => AdminApiKey::permissionChoices(),
             'operatorPersona' => $request->user()->operator_persona,
             'operatorEntry' => $request->user()->operatorEntry?->load([
                 'identifiers' => fn ($query) => $query->orderBy('kind')->orderBy('id'),

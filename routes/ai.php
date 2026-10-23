@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\EnrollController;
 use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Mcp\PluginRepoController;
@@ -7,6 +8,7 @@ use App\Http\Controllers\Mcp\RevokeOAuthTokenController;
 use App\Http\Controllers\Mcp\ToolCallController;
 use App\Http\Middleware\EnsureSchemaIsCurrent;
 use App\Http\Middleware\MergeMcpRedirectDomains;
+use App\Http\Middleware\ResolveAdminKey;
 use App\Http\Middleware\ResolveAgent;
 use App\Http\Middleware\ResolveApiAgent;
 use App\Mcp\Servers\MelfinaServer;
@@ -61,6 +63,23 @@ Route::get('api/shared/{space}/files/{path}', [FileController::class, 'showShare
     ->middleware(['throttle:60,1', EnsureSchemaIsCurrent::class, ResolveApiAgent::class])
     ->where(['space' => '[^/]+', 'path' => '.*'])
     ->name('api.shared.files.show');
+
+// The provisioning surface: a fleet system (Yukihime or a future
+// harness) manages brains over plain JSON with an owner-minted admin
+// key (`melfa_…`) — its own key family with its own permission set, so
+// a consumer can be least-privileged. It is never a tool-call
+// credential: agents keep authenticating to /mcp and /api/tools with
+// their own `melf_`/`melfs_` keys, and those surfaces fail closed on
+// the `melfa_` prefix.
+Route::middleware(['throttle:60,1', EnsureSchemaIsCurrent::class, ResolveAdminKey::class])
+    ->prefix('api/admin')
+    ->group(function (): void {
+        Route::get('status', [AdminController::class, 'status'])->name('api.admin.status');
+        Route::get('agents', [AdminController::class, 'index'])->name('api.admin.agents.index');
+        Route::post('agents', [AdminController::class, 'store'])->name('api.admin.agents.store');
+        Route::get('agents/{agent}', [AdminController::class, 'show'])->whereNumber('agent')->name('api.admin.agents.show');
+        Route::post('agents/{agent}/key', [AdminController::class, 'rotateKey'])->whereNumber('agent')->name('api.admin.agents.key');
+    });
 
 // Self-enrollment: a runtime with no secret storage reports in with a
 // named enroll key (`melfe_…`) plus its own id + claimed name. The owner

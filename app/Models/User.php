@@ -148,6 +148,18 @@ class User extends Authenticatable implements OAuthenticatable
     }
 
     /**
+     * Named admin API keys (`melfa_…`) — the permission-scoped credentials
+     * a fleet system presents to /api/admin to provision and inspect
+     * brains.
+     *
+     * @return HasMany<AdminApiKey, $this>
+     */
+    public function adminApiKeys(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(AdminApiKey::class);
+    }
+
+    /**
      * Whether the plaintext credential is a live fleet key — any unrevoked
      * named key, or the legacy single hash (pre-multi-key installs).
      * Fails closed.

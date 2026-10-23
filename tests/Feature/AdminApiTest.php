@@ -1,0 +1,289 @@
+<?php
+
+use App\Models\AdminApiKey;
+use App\Models\Agent;
+use App\Models\KnowledgeEntry;
+use App\Models\User;
+use App\Models\VfsFile;
+
+beforeEach(function () {
+    $this->owner = User::factory()->owner()->create();
+
+    $this->adminKey = function (array $permissions): string {
+        return AdminApiKey::issue($this->owner, 'yukihime', $permissions);
+    };
+
+    $this->withAdminKey = function (string $bearer): array {
+        return ['Authorization' => 'Bearer '.$bearer];
+    };
+});
+
+// ── status & authentication ─────────────────────────────────────────
+
+it('reports install status to a key with status:read', function () {
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_STATUS_READ]));
+
+    $this->getJson('/api/admin/status', $bearer)
+        ->assertOk()
+        ->assertJson(['ok' => true, 'product' => 'Melfina', 'status' => 'ok'])
+        ->assertJsonPath('version', config('melfina.version'));
+});
+
+it('rejects missing, wrong-family, and revoked credentials', function () {
+    $this->getJson('/api/admin/status')
+        ->assertUnauthorized()
+        ->assertJson(['ok' => false]);
+
+    // An agent key is a data-plane credential — never an admin one.
+    Agent::factory()->withKey('melf_agentkey')->create();
+    $this->getJson('/api/admin/status', ['Authorization' => 'Bearer melf_agentkey'])
+        ->assertUnauthorized();
+
+    // Nor is a fleet key.
+    $fleetKey = $this->owner->rotateMcpKey();
+    $this->getJson('/api/admin/status', ['Authorization' => 'Bearer '.$fleetKey])
+        ->assertUnauthorized();
+
+    // Revocation kills the admin credential immediately.
+    $revoked = ($this->adminKey)([AdminApiKey::PERMISSION_STATUS_READ]);
+    $this->owner->adminApiKeys()->sole()->revoke();
+    $this->getJson('/api/admin/status', ($this->withAdminKey)($revoked))
+        ->assertUnauthorized();
+});
+
+it('answers only the endpoints a key has permissions for', function () {
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_STATUS_READ]));
+
+    $this->getJson('/api/admin/agents', $bearer)
+        ->assertForbidden()
+        ->assertJson(['ok' => false, 'error' => 'This key lacks the agents:read permission.']);
+});
+
+// ── the never-tools guarantee ───────────────────────────────────────
+
+it('never lets an admin key call tools or reach the mcp endpoint', function () {
+    $bearer = ($this->withAdminKey)(($this->adminKey)(AdminApiKey::permissionChoices()));
+
+    $this->getJson('/api/tools', $bearer)->assertUnauthorized();
+    $this->postJson('/api/tools/list_files', [], $bearer)->assertUnauthorized();
+    $this->postJson('/mcp', [
+        'jsonrpc' => '2.0',
+        'id' => 1,
+        'method' => 'initialize',
+        'params' => [],
+    ], ['Accept' => 'application/json'] + $bearer)->assertUnauthorized();
+});
+
+// ── listing & inspection ────────────────────────────────────────────
+
+it('lists brains with counts, last activity, and knowledge attribution', function () {
+    $busy = Agent::factory()->create(['name' => 'busy']);
+    VfsFile::factory()->count(2)->create(['agent_id' => $busy->id]);
+    $busy->remember('first memory');
+    KnowledgeEntry::factory()->count(3)->create(['updated_by' => 'busy']);
+    $idle = Agent::factory()->disabled()->create(['name' => 'idle']);
+
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_READ]));
+
+    $response = $this->getJson('/api/admin/agents', $bearer)
+        ->assertOk()
+        ->assertJson(['ok' => true]);
+
+    $agents = collect($response->json('agents'));
+    expect($agents->pluck('name')->all())->toBe(['busy', 'idle']);
+
+    $busyPayload = $agents->firstWhere('name', 'busy');
+    expect($busyPayload['slug'])->toBe('busy')
+        ->and($busyPayload['status'])->toBe('active')
+        ->and($busyPayload['counts'])->toBe(['memories' => 1, 'files' => 2, 'knowledge' => 3])
+        ->and($busyPayload['last_activity'])->not->toBeNull();
+
+    $idlePayload = $agents->firstWhere('name', 'idle');
+    expect($idlePayload['status'])->toBe('disabled')
+        ->and($idlePayload['counts'])->toBe(['memories' => 0, 'files' => 0, 'knowledge' => 0])
+        ->and($idlePayload['last_activity'])->toBeNull();
+});
+
+it('shows one brain in detail and 404s unknown ids', function () {
+    $agent = Agent::factory()->create(['name' => 'detail', 'description' => 'the one']);
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_READ]));
+
+    $this->getJson("/api/admin/agents/{$agent->id}", $bearer)
+        ->assertOk()
+        ->assertJson(['ok' => true])
+        ->assertJsonPath('agent.name', 'detail')
+        ->assertJsonPath('agent.description', 'the one')
+        ->assertJsonPath('agent.counts.memories', 0)
+        ->assertJsonPath('agent.key_issued_at', null);
+
+    $this->getJson('/api/admin/agents/999', $bearer)
+        ->assertNotFound()
+        ->assertJson(['ok' => false, 'error' => 'Unknown agent.']);
+});
+
+// ── provisioning ────────────────────────────────────────────────────
+
+it('creates a brain with a persona seed and no key', function () {
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_WRITE]));
+
+    $this->postJson('/api/admin/agents', [
+        'name' => 'yuki-01',
+        'description' => 'provisioned brain',
+        'persona' => 'You are a fleet navigator.',
+    ], $bearer)
+        ->assertCreated()
+        ->assertJson(['ok' => true, 'agent' => [
+            'name' => 'yuki-01',
+            'slug' => 'yuki-01',
+            'status' => 'active',
+        ]])
+        ->assertJsonPath('agent.id', Agent::where('name', 'yuki-01')->sole()->id);
+
+    $agent = Agent::where('name', 'yuki-01')->sole();
+    expect($agent->description)->toBe('provisioned brain')
+        ->and($agent->persona)->toBe('You are a fleet navigator.')
+        // minting stays behind keys:mint — a write-only consumer can't mint
+        ->and($agent->key_hash)->toBeNull();
+});
+
+it('rejects missing and duplicate brain names', function () {
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_WRITE]));
+    Agent::factory()->create(['name' => 'taken']);
+
+    $this->postJson('/api/admin/agents', ['description' => 'no name'], $bearer)
+        ->assertUnprocessable();
+
+    $this->postJson('/api/admin/agents', ['name' => 'taken'], $bearer)
+        ->assertUnprocessable();
+});
+
+it('refuses to create brains without agents:write', function () {
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_READ]));
+
+    $this->postJson('/api/admin/agents', ['name' => 'nope'], $bearer)
+        ->assertForbidden()
+        ->assertJson(['ok' => false, 'error' => 'This key lacks the agents:write permission.']);
+});
+
+it('mints and rotates the agent key, storing only the hash', function () {
+    $agent = Agent::factory()->create(['name' => 'keyless']);
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_KEYS_MINT]));
+
+    $first = $this->postJson("/api/admin/agents/{$agent->id}/key", [], $bearer)
+        ->assertOk()
+        ->assertJson(['ok' => true])
+        ->json('key');
+
+    expect($first)->toStartWith('melf_')
+        ->and($agent->fresh()->key_hash)->toBe(Agent::hashKey($first))
+        ->and($agent->fresh()->key_hash)->not->toBe($first);
+
+    // A second mint is a rotation — the old credential stops resolving.
+    $second = $this->postJson("/api/admin/agents/{$agent->id}/key", [], $bearer)->json('key');
+
+    expect($second)->toStartWith('melf_')
+        ->and($second)->not->toBe($first)
+        ->and(Agent::forKey($first))->toBeNull()
+        ->and(Agent::forKey($second)?->id)->toBe($agent->id);
+
+    $this->postJson('/api/admin/agents/999/key', [], $bearer)
+        ->assertNotFound()
+        ->assertJson(['ok' => false, 'error' => 'Unknown agent.']);
+});
+
+it('refuses to mint without keys:mint', function () {
+    $agent = Agent::factory()->create();
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_WRITE]));
+
+    $this->postJson("/api/admin/agents/{$agent->id}/key", [], $bearer)
+        ->assertForbidden()
+        ->assertJson(['ok' => false, 'error' => 'This key lacks the keys:mint permission.']);
+});
+
+// ── console management ──────────────────────────────────────────────
+
+it('issues an admin key from the console and flashes it once', function () {
+    $response = $this->actingAs($this->owner)
+        ->post(route('console.admin-keys.store'), [
+            'admin_name' => 'yukihime',
+            'permissions' => ['agents:read', 'keys:mint'],
+        ])
+        ->assertRedirect(route('console.dashboard'));
+
+    $response->assertSessionHas('plaintext_admin_key');
+    $plaintext = session('plaintext_admin_key');
+
+    $key = $this->owner->adminApiKeys()->sole();
+    expect($key->name)->toBe('yukihime')
+        ->and($key->permissions)->toBe(['agents:read', 'keys:mint'])
+        ->and($key->revoked_at)->toBeNull()
+        ->and($plaintext)->toStartWith('melfa_')
+        // only the hash persists — the plaintext is never stored
+        ->and($key->key_hash)->toBe(Agent::hashKey($plaintext));
+});
+
+it('rolls same-name keys from the console', function () {
+    $first = AdminApiKey::issue($this->owner, 'yukihime', [AdminApiKey::PERMISSION_STATUS_READ]);
+
+    $this->actingAs($this->owner)
+        ->post(route('console.admin-keys.store'), [
+            'admin_name' => 'yukihime',
+            'permissions' => [AdminApiKey::PERMISSION_STATUS_READ],
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect($this->owner->adminApiKeys()->whereNull('revoked_at')->sole()->name)->toBe('yukihime')
+        ->and($this->owner->adminApiKeys()->whereNotNull('revoked_at')->count())->toBe(1)
+        ->and(AdminApiKey::forKey($first))->toBeNull();
+});
+
+it('defaults the console key name', function () {
+    $this->actingAs($this->owner)
+        ->post(route('console.admin-keys.store'), ['permissions' => [AdminApiKey::PERMISSION_STATUS_READ]])
+        ->assertSessionHasNoErrors();
+
+    expect($this->owner->adminApiKeys()->sole()->name)->toBe('default');
+});
+
+it('revokes an admin key from the console and kills its api access', function () {
+    $plaintext = AdminApiKey::issue($this->owner, 'yukihime', AdminApiKey::permissionChoices());
+    $key = $this->owner->adminApiKeys()->sole();
+
+    $this->actingAs($this->owner)
+        ->delete(route('console.admin-keys.destroy', $key))
+        ->assertRedirect(route('console.dashboard'));
+
+    $this->getJson('/api/admin/status', ($this->withAdminKey)($plaintext))
+        ->assertUnauthorized();
+});
+
+it('offers the admin key section on the dashboard', function () {
+    AdminApiKey::issue($this->owner, 'yukihime', [AdminApiKey::PERMISSION_AGENTS_READ]);
+
+    $this->actingAs($this->owner)
+        ->get(route('console.dashboard'))
+        ->assertOk()
+        ->assertSee('ADMIN API KEYS')
+        ->assertSee('value="agents:read"', false)
+        ->assertSee('value="keys:mint"', false)
+        ->assertSee('yukihime');
+});
+
+it('keeps the console owner-only', function () {
+    $this->post(route('console.admin-keys.store'), ['permissions' => ['status:read']])
+        ->assertRedirect(route('login'));
+
+    $this->actingAs(User::factory()->create(['is_owner' => false]))
+        ->post(route('console.admin-keys.store'), ['permissions' => ['status:read']])
+        ->assertForbidden();
+});
+
+it('requires at least one known permission', function () {
+    $this->actingAs($this->owner)
+        ->post(route('console.admin-keys.store'), ['permissions' => []])
+        ->assertSessionHasErrors('permissions');
+
+    $this->actingAs($this->owner)
+        ->post(route('console.admin-keys.store'), ['permissions' => ['nonsense']])
+        ->assertSessionHasErrors('permissions.0');
+});
