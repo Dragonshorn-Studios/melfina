@@ -19,6 +19,7 @@
 /.phpunit.cache
 /.pi
 /.vscode
+/.zcode
 /.zed
 /.mcp.json
 /auth.json

@@ -7,7 +7,9 @@ on:
 
 jobs:
   tests:
-    runs-on: [self-hosted, Linux, X64]
+    # GitHub-hosted on purpose: self-hosted runners must not pick up
+    # pull_request jobs from a public repo — fork PRs run arbitrary code.
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
