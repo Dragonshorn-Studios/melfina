@@ -8,4 +8,4 @@ Melfina is a self-hosted Imp brain. Product locks live in [`docs/`](docs/README.
 4. Do not implement owner auth / agents / VFS / MCP / Shared ACL unless the ticket says so.
 5. Tests are Pest. Run `php artisan test`. Use `php artisan make:test --pest` for new tests. After `composer update`, Boost refreshes guidelines via `boost:update`.
 
-Chrome later: Agents · Files · Shared · Instructions.
+Console chrome (Agents · Files · Shared · Instructions · messages screen) is implemented — extend it in place; keep the modular monolith.

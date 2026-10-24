@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64" role="img" aria-label="Melfina mark">
+  <rect width="64" height="64" rx="8" fill="#0B1220"/>
+  <rect x="0.5" y="0.5" width="63" height="63" rx="7.5" fill="none" stroke="#2A3A52"/>
+  <g transform="translate(8 8)">
+    <path d="M24 4 L28 16 L44 20 L28 24 L24 44 L20 24 L4 20 L20 16 Z" fill="none" stroke="#E8A838" stroke-width="2"/>
+    <circle cx="24" cy="20" r="3" fill="#E8A838"/>
+  </g>
+</svg>

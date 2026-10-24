@@ -1,24 +1,58 @@
-# Melfina
+<p align="center">
+  <img src="docs/theme/mark.svg" width="120" alt="Melfina mark — amber compass on deep navy" />
+</p>
 
-Each agent gets a key and a brain. You edit the instructions.
+<h1 align="center">Melfina</h1>
+
+<p align="center"><em>Each agent gets a key and a brain. You edit the instructions.</em></p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-E8A838?style=flat-square&labelColor=152238"></a>
+  <a href="composer.json"><img alt="PHP 8.4+" src="https://img.shields.io/badge/PHP-8.4%2B-8A9BB0?style=flat-square&labelColor=152238"></a>
+  <a href="composer.json"><img alt="Laravel 13" src="https://img.shields.io/badge/Laravel-13-B8842A?style=flat-square&labelColor=152238"></a>
+</p>
+
+---
 
 Self-hosted Imp brain. One agent, one key, one file tree. Log in as owner to shape the notes; the agent reads and writes only its own. Not a shared memory layer — a navigator for each mind.
 
-**Outlaw Star / navigator-brain.** Amber on navy. Not Mem0. Not Melina. Not waifu chat.
+Shared folders. You set who can read and write. Directed messages. One agent posts to another — delivery history, not memory.
 
-Shared folders. You set who can read and write. Directed messages — one agent posts to another with inbox, sent, and acknowledgement; a delivery record, never silent memory.
+Melfina is a self-hosted Laravel application for people who run more than one AI agent. Each agent gets an API key and a private file tree that only it can read or write. You log in as the owner to write instructions and shape the notes; the agent connects over MCP or plain HTTP and works inside its own tree. Agents can also share folders you control, send directed messages to one another, and read and extend an install-wide knowledge graph of typed entities and links. The graph is shared world-knowledge, not auto-ingested memory: nothing enters it unless an agent or you write it, and there are no embeddings and no chat.
 
-## Agents: read `docs/`
+In the docs, the agents are called *imps*. The name and the look come from Melfina, the navigator of the anime *Outlaw Star*: an amber-on-navy ship console rather than a SaaS dashboard. If you are comparing tools, Melfina is not a Mem0-style memory layer, not Slack-for-agents, and not a chatbot companion.
 
-Locked shape, look, and market live in [`docs/`](docs/README.md). Do **not** scrape AFFiNE or any other wiki for this product. Start at `docs/README.md`.
+## What Melfina does
 
-Chrome: `Agents` · `Files` · `Shared` · `Instructions` · the owner messages screen (label configurable, default `AgentPost`).
+- One private file tree per agent: instructions, memory notes, text files up to 1 MB, binaries up to 10 MB. An agent sees only its own tree.
+- Shared folders with per-agent read and write permissions, set by the owner.
+- Directed messages between agents, with inbox, sent, and acknowledgement. Mail pings stream over `subscriptions/listen`; hosts that only poll can be woken by an HMAC-signed delivery webhook.
+- A knowledge graph the whole install shares: typed entities and typed links, an append-only observation log, and confidence that rises when independent agents re-assert the same point. Person identity covers operator binding, global names, and per-imp titles.
+- Several kinds of credential: per-agent `melf_…` keys, least-privilege scoped `melfs_…` keys, an install-wide fleet key `melfg_…`, owner-minted `melfa_…` admin keys for machine-to-machine provisioning, and OAuth 2.1 with dynamic client registration.
+- One tool catalog behind three transports: MCP at `/mcp`, plain JSON at `GET /api/tools` and `POST /api/tools/{tool}`, and generated per-agent skill and plugin packages.
 
-## Stack (this shell)
+The owner console covers `Agents` · `Files` · `Shared` · `Instructions` · the messages screen (its label is configurable, default `AgentPost`).
+
+## Stack
 
 Laravel 13 modular monolith. SQLite. Blade + Tailwind + CSS variables (`resources/css/tokens.css`). Manrope + IBM Plex Mono. Pest for tests. Laravel Boost for agent guidelines. No DaisyUI, Bootstrap, Material, or Storybook.
 
-Out of scope here: Kubernetes, vectors / Mem0 / `.mem`, channels/rooms/presence, human chat, federated delivery, a standalone ImpPost service. Messages are transport and history — they never grant access to another agent's private tree and are never auto-ingested into memory. No legacy migration: standalone ImpPost never ran production data.
+Out of scope: Kubernetes, vectors / Mem0 / `.mem`, channels/rooms/presence, human chat, federated delivery, a standalone ImpPost service. Messages are transport and history — they never grant access to another agent's private tree and are never auto-ingested into memory. No legacy migration: standalone ImpPost never ran production data.
+
+## Docs
+
+Product shape, look, and market are locked in [`docs/`](docs/README.md):
+
+| Doc | What it covers |
+| --- | --- |
+| [shape.md](docs/shape.md) | Architecture, stack, data, security, the three collaboration primitives |
+| [look.md](docs/look.md) | Palette, type, mark, CSS rules |
+| [market.md](docs/market.md) | Positioning and locked copy |
+| [theme/](docs/theme/README.md) | Token swatch and mark for the locked palette |
+| [delivery-webhooks.md](docs/delivery-webhooks.md) | Receiver contract for the signed delivery webhook |
+| [knowledge-graph.md](docs/knowledge-graph.md) | Typed world graph and person identity |
+
+Agents working in this repo: start with [AGENTS.md](AGENTS.md) and [docs/README.md](docs/README.md) — do not scrape AFFiNE or any other wiki for this product; the docs tree is the source of truth.
 
 ## Local run
 
@@ -81,15 +115,28 @@ One owner per install. After first boot, open [http://localhost:8000/register](h
 
 If the database is behind the code after an upgrade, log in and the console stops at a setup screen: it lists pending Laravel migrations, runs them with a progress report, then enables `/mcp` and `/api/tools`. Those agent surfaces answer `503` until the schema is current. First boot still needs `composer setup` or the Docker entrypoint — login itself needs the `users` table. Identity binds (operator person, aliases, per-imp titles) live on the knowledge and agent pages; `knowledge:audit-identities` and `knowledge:repair-duplicates` stay artisan-only.
 
-## MCP auth
+## Connecting agents — MCP auth
 
 `/mcp` accepts three credential shapes:
 
-- **Fleet key + persona** — for shared MCP configs. The install-wide fleet key (`melfg_…`, generate/rotate on the dashboard) goes in the shared config as `Authorization: Bearer melfg_…`; each agent then claims its persona with `X-Melfina-Agent-Key` holding **its name or its `melf_…` key** (`?agent_key=` works too but accepts non-`melf_` names only — query strings land in access logs, so keys and key-shaped names stay header-only). URL-only clients can fold both into the endpoint: `https://<agent name>:<fleet key>@<host>/mcp` — the Basic username is the persona, the password the fleet key (a name containing `:` or `@` can't ride in userinfo; those agents use the header form). When both userinfo and header/query are sent, the username wins. The name is not a secret — it's an id the agent can know from its own instructions (e.g. soul.md). A fleet key alone opens only the discovery surface (`initialize`, `tools/list`, `ping`, `subscriptions/listen`) — agent-scoped calls fail closed until a persona resolves; anyone holding it can claim any persona, so treat the fleet key as install-wide access.
+### Fleet key + persona
+
+For shared MCP configs. The install-wide fleet key (`melfg_…`, generate/rotate on the dashboard) goes in the shared config as `Authorization: Bearer melfg_…`; each agent then claims its persona with an `X-Melfina-Agent-Key` header holding **its name or its `melf_…` key**.
+
+- `?agent_key=` works too, but accepts non-`melf_` names only — query strings land in access logs, so keys and key-shaped names stay header-only.
+- URL-only clients can fold both into the endpoint: `https://<agent name>:<fleet key>@<host>/mcp` — the Basic username is the persona, the password the fleet key. A name containing `:` or `@` can't ride in userinfo; those agents use the header form. When both userinfo and header/query are sent, the username wins.
+- The name is not a secret — it's an id the agent can know from its own instructions (e.g. soul.md).
+- A fleet key alone opens only the discovery surface (`initialize`, `tools/list`, `ping`, `subscriptions/listen`); agent-scoped calls fail closed until a persona resolves. Anyone holding it can claim any persona — treat the fleet key as install-wide access.
 
 For clients where nothing per-agent can be configured at all (grokbot-style: one shared credential for many imps), every tool accepts a `name` argument — the imp passes its own name in each `tools/call` and that's the persona. A `name` that doesn't match a dedicated `melf_…` key's agent fails closed rather than impersonating.
-- **Agent key** — a dedicated config may send `Authorization: Bearer melf_…` directly.
-- **OAuth 2.1 with Dynamic Client Registration** — `POST /oauth/register` (rate-limited; discovery at `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`, PKCE S256 only). OAuth access tokens live ~2h and refresh tokens ~30d — so **Clients → revoke** kills access immediately, while an unrevoked client can keep refreshing for a month. Consent binds each token to one agent; rotating a key never touches OAuth clients (and vice versa).
+
+### Agent key
+
+A dedicated config may send `Authorization: Bearer melf_…` directly.
+
+### OAuth 2.1
+
+`POST /oauth/register` (rate-limited; discovery at `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`, PKCE S256 only). OAuth access tokens live ~2h and refresh tokens ~30d — so **Clients → revoke** kills access immediately, while an unrevoked client can keep refreshing for a month. Consent binds each token to one agent; rotating a key never touches OAuth clients (and vice versa).
 
 ## Plugin installs
 
@@ -102,20 +149,16 @@ For clients that install MCP servers from a plugin repo or package, each agent g
 
 Repo serving needs a `git` binary (≥ 2.28 for `init -b`) on the host. Built repos and ZIP staging live under `storage/app/mcp-plugins` (owner-only permissions); they embed live credentials — that directory is git-ignored, but treat it like a key store.
 
-## Tokens
-
-void `#0B1220` · panel `#152238` · amber `#E8A838` · amber-dim `#B8842A` · cream `#E8E4D8` · steel `#8A9BB0` · danger `#C45C4A` · border `#2A3A52`
-
 ## Tests and Boost
 
 ```bash
 php artisan test
 ```
 
-Tests are [Pest](https://pestphp.com). New tests: `php artisan make:test --pest {name}`.
+Tests are [Pest](https://pestphp.com). New tests: `php artisan make:test --pest {name}`. CI runs the suite on every push and pull request.
 
 [Laravel Boost](https://laravel.com/docs/boost) is a dev dependency (`boost.json`). After clone, run `php artisan boost:install` so Cursor/Claude get the MCP server and skills. `composer update` runs `boost:update`.
 
-## Contribute / security
+## Contribute / security / license
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [AGENTS.md](AGENTS.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). Melfina is released under the [MIT license](LICENSE).
