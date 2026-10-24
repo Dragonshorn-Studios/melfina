@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredOwnerController;
+use App\Http\Controllers\Console\AdminKeyController;
 use App\Http\Controllers\Console\AgentController;
 use App\Http\Controllers\Console\AgentGroupController;
 use App\Http\Controllers\Console\DashboardController;
@@ -43,6 +44,8 @@ Route::middleware(['auth', 'owner', 'schema'])->prefix('console')->name('console
     Route::post('mcp-key', [McpKeyController::class, 'store'])->name('mcp-key.store');
     Route::post('enroll-keys', [EnrollKeyController::class, 'store'])->name('enroll-keys.store');
     Route::delete('enroll-keys/{enrollKey}', [EnrollKeyController::class, 'destroy'])->name('enroll-keys.destroy');
+    Route::post('admin-keys', [AdminKeyController::class, 'store'])->name('admin-keys.store');
+    Route::delete('admin-keys/{adminKey}', [AdminKeyController::class, 'destroy'])->name('admin-keys.destroy');
     Route::post('enrollments/{enrollment}/accept', [EnrollmentController::class, 'accept'])->name('enrollments.accept');
     Route::post('enrollments/{enrollment}/revoke', [EnrollmentController::class, 'revoke'])->name('enrollments.revoke');
     Route::delete('mcp-keys/{fleetKey}', [McpKeyController::class, 'destroy'])->name('mcp-key.destroy');

@@ -9,9 +9,10 @@ use Illuminate\Support\Str;
 use Illuminate\Translation\PotentiallyTranslatedString;
 
 /**
- * Reject agent names whose plugin-repo slug would collide with a
- * reserved repo path — the public fleet package's derived name shadows
- * any per-agent clone URL that maps to it.
+ * Reject agent names that would collide with a reserved value: the
+ * public fleet package's derived repo name, and `owner` — the magic
+ * author stamp the knowledge graph writes for the operator's own edits,
+ * which an agent name must never shadow or absorb.
  */
 class UnreservedAgentName implements ValidationRule
 {
@@ -24,6 +25,10 @@ class UnreservedAgentName implements ValidationRule
     {
         if (Str::slug((string) $value).'.git' === app(PluginRepo::class)->publicRepoName()) {
             $fail('This name is reserved by the fleet plugin repo.');
+        }
+
+        if (Str::lower(trim((string) $value)) === 'owner') {
+            $fail('This name is reserved for the operator.');
         }
     }
 }

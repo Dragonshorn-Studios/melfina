@@ -5,11 +5,17 @@
         </x-key-banner>
     @endif
 
-    @if (session('plaintext_enroll_key'))
-        <x-key-banner id="plaintext-enroll-key" label="ENROLL KEY — SHOWN ONCE" :value="session('plaintext_enroll_key')">
-            <x-slot:hint>Copy it now. Only the hash is stored; we cannot show it again. Agents send it as <code>secret</code> to POST /api/enroll.</x-slot:hint>
-        </x-key-banner>
-    @endif
+@if (session('plaintext_enroll_key'))
+    <x-key-banner id="plaintext-enroll-key" label="ENROLL KEY — SHOWN ONCE" :value="session('plaintext_enroll_key')">
+        <x-slot:hint>Copy it now. Only the hash is stored; we cannot show it again. Agents send it as <code>secret</code> to POST /api/enroll.</x-slot:hint>
+    </x-key-banner>
+@endif
+
+@if (session('plaintext_admin_key'))
+    <x-key-banner id="plaintext-admin-key" label="ADMIN KEY — SHOWN ONCE" :value="session('plaintext_admin_key')">
+        <x-slot:hint>Copy it now. Only the hash is stored; we cannot show it again. A fleet system sends it as the Bearer credential to /api/admin.</x-slot:hint>
+    </x-key-banner>
+@endif
 
     <x-console-panel>
         <x-page-header eyebrow="DASHBOARD" title="Fleet at a glance">
@@ -131,6 +137,61 @@
                                 <span class="text-steel">{{ $key->isLive() ? 'issued '.$key->created_at->diffForHumans(short: true) : 'revoked '.$key->revoked_at->diffForHumans(short: true) }}</span>
                                 @if ($key->isLive())
                                     <x-confirm-form action="{{ route('console.enroll-keys.destroy', $key) }}" method="DELETE" confirm="Revoke enroll key '{{ $key->name }}'? Runtimes using it can no longer report in or mint.">
+                                        <button type="submit" class="font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">REVOKE</button>
+                                    </x-confirm-form>
+                                @endif
+                            </span>
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
+        </section>
+
+        <section class="mt-8">
+            <p class="font-mono text-xs tracking-[0.16em] text-steel">ADMIN API KEYS</p>
+            <x-confirm-form action="{{ route('console.admin-keys.store') }}" class="mt-3" confirm="Issue an admin key under this name? An existing live key with the same name is revoked.">
+                <div class="flex gap-2">
+                    <input type="text" name="admin_name" placeholder="key name" maxlength="64"
+                        class="min-w-0 flex-1 border border-border bg-void/60 px-3 py-1.5 font-mono text-xs text-cream placeholder:text-steel/60"
+                        style="border-radius: var(--radius-console)">
+                    <button type="submit"
+                        class="border border-border bg-void px-3 py-1.5 font-mono text-xs text-cream hover:border-amber"
+                        style="border-radius: var(--radius-console)">issue key</button>
+                </div>
+                <fieldset class="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-xs text-steel">
+                    @foreach ($adminPermissions as $permission)
+                        <label class="flex items-center gap-1">
+                            <input type="checkbox" name="permissions[]" value="{{ $permission }}" class="accent-amber">
+                            {{ $permission }}
+                        </label>
+                    @endforeach
+                </fieldset>
+            </x-confirm-form>
+            @error('admin_name')
+                <p class="mt-2 font-mono text-xs text-red-400">{{ $message }}</p>
+            @enderror
+            @error('permissions')
+                <p class="mt-2 font-mono text-xs text-red-400">{{ $message }}</p>
+            @enderror
+            <p class="mt-3 text-sm text-steel">
+                An admin key (<code>melfa_…</code>) is the credential a fleet system — Yukihime or another
+                harness — sends as the Bearer credential to <code>/api/admin</code> to provision and inspect
+                brains: read install status, list and create agents, mint their <code>melf_</code> keys.
+                The ticked permissions are the key's whole allowlist, so a consumer can be least-privileged;
+                it never calls tools and never acts as an agent. Reusing a name rolls the key.
+            </p>
+            @if ($adminKeys->isNotEmpty())
+                <ul class="mt-3 space-y-1 font-mono text-xs">
+                    @foreach ($adminKeys as $key)
+                        <li class="flex items-center justify-between gap-3 border {{ $key->isLive() ? 'border-amber/40' : 'border-border/50' }} bg-void/60 px-3 py-1.5" style="border-radius: var(--radius-console)">
+                            <span>
+                                <span class="{{ $key->isLive() ? 'text-cream' : 'text-steel line-through' }}">{{ $key->name }}</span>
+                                <span class="text-steel"> · {{ implode(' · ', $key->permissions ?? []) }}</span>
+                            </span>
+                            <span class="flex items-center gap-3">
+                                <span class="text-steel">{{ $key->isLive() ? 'issued '.$key->created_at->diffForHumans(short: true) : 'revoked '.$key->revoked_at->diffForHumans(short: true) }}</span>
+                                @if ($key->isLive())
+                                    <x-confirm-form action="{{ route('console.admin-keys.destroy', $key) }}" method="DELETE" confirm="Revoke admin key '{{ $key->name }}'? Fleet systems using it lose /api/admin access immediately.">
                                         <button type="submit" class="font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">REVOKE</button>
                                     </x-confirm-form>
                                 @endif
