@@ -235,13 +235,19 @@ class AdminController extends Controller
 
     /**
      * Enforce an endpoint permission on the resolved admin key. Returns
-     * the 403 response when denied, null when the call may proceed.
+     * the failure response when denied, null when the call may proceed.
+     * The middleware guarantees the key on real routes; if the attribute
+     * is absent anyway the guard itself fails closed rather than allow.
      */
     private function permit(Request $request, string $permission): ?JsonResponse
     {
         $key = $request->attributes->get('admin_key');
 
-        if ($key instanceof AdminApiKey && ! $key->allows($permission)) {
+        if (! $key instanceof AdminApiKey) {
+            return $this->fail('Unauthorized.', 401);
+        }
+
+        if (! $key->allows($permission)) {
             return $this->fail("This key lacks the {$permission} permission.", 403);
         }
 

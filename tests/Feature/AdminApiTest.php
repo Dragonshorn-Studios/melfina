@@ -7,6 +7,7 @@ use App\Models\KnowledgeEntry;
 use App\Models\User;
 use App\Models\VfsFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 beforeEach(function () {
@@ -24,12 +25,15 @@ beforeEach(function () {
 // ── status & authentication ─────────────────────────────────────────
 
 it('reports install status to a key with status:read', function () {
+    // A non-default version pins the MELFINA_VERSION wiring — asserting
+    // against config() itself would be tautological.
+    config(['melfina.version' => 'pin-9.9.9']);
     $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_STATUS_READ]));
 
     $this->getJson('/api/admin/status', $bearer)
         ->assertOk()
         ->assertJson(['ok' => true, 'product' => 'Melfina', 'status' => 'ok'])
-        ->assertJsonPath('version', config('melfina.version'));
+        ->assertJsonPath('version', 'pin-9.9.9');
 });
 
 it('rejects missing, wrong-family, and revoked credentials', function () {
@@ -73,6 +77,21 @@ it('answers only the endpoints a key has permissions for', function () {
     $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_STATUS_READ]));
 
     $this->getJson('/api/admin/agents', $bearer)
+        ->assertForbidden()
+        ->assertJson(['ok' => false, 'error' => 'This key lacks the agents:read permission.']);
+});
+
+it('enforces permissions transport-independently over http basic', function () {
+    $reader = ($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_READ]);
+    $statusOnly = ($this->adminKey)([AdminApiKey::PERMISSION_STATUS_READ]);
+
+    $this->withBasicAuth('x', $reader)
+        ->getJson('/api/admin/agents')
+        ->assertOk()
+        ->assertJson(['ok' => true]);
+
+    $this->withBasicAuth('x', $statusOnly)
+        ->getJson('/api/admin/agents')
         ->assertForbidden()
         ->assertJson(['ok' => false, 'error' => 'This key lacks the agents:read permission.']);
 });
@@ -235,6 +254,44 @@ it('accepts a description up to the column-backed limit and no further', functio
         ->assertJson(['ok' => false, 'error' => 'Invalid input.']);
 });
 
+it('declares the description column at the 500-char contract', function () {
+    // SQLite — the CI database — drops varchar lengths from its DDL, so
+    // the boundary test above cannot catch a wrongly-sized migration.
+    // Assert the declared length wherever the driver exposes one, so
+    // the gap closes the day the suite runs against a strict database.
+    $column = collect(DB::select('PRAGMA table_info(agents)'))
+        ->firstWhere('name', 'description');
+    expect($column?->type)->toBe('varchar');
+
+    if (in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)) {
+        $length = (int) DB::selectOne(
+            'select character_maximum_length as length from information_schema.columns'
+            ." where table_schema = ? and table_name = 'agents' and column_name = 'description'",
+            [DB::getDatabaseName()],
+        )?->length;
+
+        expect($length)->toBe(500);
+    }
+});
+
+it('rejects the operator-reserved name owner', function () {
+    $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_WRITE]));
+
+    // 'owner' is the knowledge graph's author stamp for the operator's
+    // own writes — an agent with that name would absorb them.
+    $this->postJson('/api/admin/agents', ['name' => 'Owner'], $bearer)
+        ->assertUnprocessable()
+        ->assertJson(['ok' => false, 'error' => 'Invalid input.']);
+
+    $this->assertDatabaseMissing('agents', ['name' => 'Owner']);
+
+    // The same rule covers the console rename path.
+    $agent = Agent::factory()->create(['name' => 'renamable']);
+    $this->actingAs($this->owner)
+        ->put(route('console.agents.update', $agent), ['name' => 'owner', 'status' => $agent->status])
+        ->assertSessionHasErrors('name');
+});
+
 it('rejects an agent name that slugs to the public repo name', function () {
     $reserved = Str::beforeLast(app(PluginRepo::class)->publicRepoName(), '.git');
     $bearer = ($this->withAdminKey)(($this->adminKey)([AdminApiKey::PERMISSION_AGENTS_WRITE]));
@@ -295,6 +352,22 @@ it('refuses to mint without keys:mint', function () {
     $this->postJson("/api/admin/agents/{$agent->id}/key", [], $bearer)
         ->assertForbidden()
         ->assertJson(['ok' => false, 'error' => 'This key lacks the keys:mint permission.']);
+});
+
+it('stamps key_issued_at on the detail once a key is minted', function () {
+    $agent = Agent::factory()->create(['name' => 'stamp']);
+    $bearer = ($this->withAdminKey)(($this->adminKey)([
+        AdminApiKey::PERMISSION_KEYS_MINT,
+        AdminApiKey::PERMISSION_AGENTS_READ,
+    ]));
+
+    $this->getJson("/api/admin/agents/{$agent->id}", $bearer)
+        ->assertJsonPath('agent.key_issued_at', null);
+
+    $this->postJson("/api/admin/agents/{$agent->id}/key", [], $bearer)->assertOk();
+
+    $detail = $this->getJson("/api/admin/agents/{$agent->id}", $bearer)->assertOk();
+    expect($detail->json('agent.key_issued_at'))->not->toBeNull();
 });
 
 it('keeps the create and the shown-once key when packaging fails', function () {
@@ -409,4 +482,13 @@ it('requires at least one known permission', function () {
     $this->actingAs($this->owner)
         ->post(route('console.admin-keys.store'), ['permissions' => ['nonsense']])
         ->assertSessionHasErrors('permissions.0');
+});
+
+it('rejects console key names outside the safe alphabet', function () {
+    $this->actingAs($this->owner)
+        ->post(route('console.admin-keys.store'), [
+            'admin_name' => 'bad name!',
+            'permissions' => [AdminApiKey::PERMISSION_STATUS_READ],
+        ])
+        ->assertSessionHasErrors('admin_name');
 });

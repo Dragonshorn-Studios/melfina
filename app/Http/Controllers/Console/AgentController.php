@@ -300,18 +300,26 @@ class AgentController extends Controller
         ]);
 
         $originalName = $agent->name;
-        $agent->update($validated);
 
-        // `updated_by` is the knowledge graph's only per-agent attribution
-        // and it is keyed by name — carry it across a rename so per-brain
-        // counts (admin API) don't orphan under the old name or hand the
-        // metric to a future agent that recycles it. Version history keeps
-        // the name each write actually happened under.
-        if ($agent->wasChanged('name')) {
-            KnowledgeEntry::query()
-                ->where('updated_by', $originalName)
-                ->update(['updated_by' => $agent->name]);
-        }
+        // The rename and the attribution carry-over are one unit — a
+        // failure between the two writes would orphan `updated_by` rows
+        // for good, because a retry sees no name change to carry.
+        DB::transaction(function () use ($agent, $validated, $originalName): void {
+            $agent->update($validated);
+
+            // `updated_by` is the knowledge graph's only per-agent
+            // attribution and it is keyed by name — carry it across a
+            // rename so per-brain counts (admin API) don't orphan under
+            // the old name or hand the metric to a future agent that
+            // recycles it. `owner` is the operator's author stamp, never
+            // an agent's to rewrite; version history keeps the name each
+            // write actually happened under.
+            if ($agent->wasChanged('name') && $originalName !== 'owner') {
+                KnowledgeEntry::query()
+                    ->where('updated_by', $originalName)
+                    ->update(['updated_by' => $agent->name]);
+            }
+        });
 
         // The name is the fleet persona, and a disabled agent shouldn't
         // leave credential-bearing artifacts at rest — both make built

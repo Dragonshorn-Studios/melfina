@@ -20,12 +20,13 @@ return new class extends Migration
     }
 
     /**
-     * Reverse the migrations.
+     * Irreversible on purpose: narrowing back to 255 would fail (strict
+     * databases) or silently truncate rows already storing a contract-
+     * valid 500-character description, so rollback leaves the widened
+     * column in place.
      */
     public function down(): void
     {
-        Schema::table('agents', function (Blueprint $table) {
-            $table->string('description')->nullable()->change();
-        });
+        //
     }
 };
