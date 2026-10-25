@@ -975,73 +975,133 @@ const KnowledgeGraphSimple = {
         const links = this.state.links;
         const center = { x: this.config.width / 2, y: this.config.height / 2 };
         
-        // If we have a focused node, position it at center
+        // If no nodes, nothing to layout
+        if (nodes.length === 0) return;
+        
+        // If we have a focused node, use hop-based layout
         if (this.state.focusId) {
             const focusNode = nodes.find(n => String(n.id) === this.state.focusId);
+            
+            // Position focus at center
             if (focusNode) {
                 focusNode.x = center.x;
                 focusNode.y = center.y;
             }
+            
+            // Use hop-based layout with concentric circles
+            this.layoutByHops(this.state.focusId, nodes, links, center);
+        } else {
+            // No focus - use spiral layout for all nodes
+            this.layoutSpiral(nodes, center);
+        }
+    },
+
+    // Layout nodes in concentric circles based on hop distance from focus
+    layoutByHops(focusId, nodes, links, center) {
+        // Calculate hop distances from focus
+        const hopDistances = this.calculateHopDistances(focusId, nodes, links);
+        
+        // Group nodes by hop distance
+        const nodesByHop = {};
+        nodes.forEach(node => {
+            const hop = hopDistances[node.id] ?? 0;
+            if (!nodesByHop[hop]) {
+                nodesByHop[hop] = [];
+            }
+            nodesByHop[hop].push(node);
+        });
+        
+        // Sort hop distances
+        const hopLevels = Object.keys(nodesByHop).map(Number).sort((a, b) => a - b);
+        
+        // Position nodes in concentric circles by hop level
+        hopLevels.forEach(hop => {
+            const hopNodes = nodesByHop[hop];
+            const radius = 150 + (hop * 120);
+            const nodeCount = hopNodes.length;
+            
+            hopNodes.forEach((node, index) => {
+                const angle = (index / Math.max(nodeCount, 1)) * Math.PI * 2;
+                
+                // Add small random offset for better distribution
+                const randomOffset = ((Math.random() - 0.5) * 0.3); // +/- 30% of angle spacing
+                const finalAngle = angle + randomOffset;
+                
+                node.x = center.x + Math.cos(finalAngle) * radius;
+                node.y = center.y + Math.sin(finalAngle) * radius;
+            });
+        });
+    },
+
+    // Layout nodes in a spiral pattern (for unfocused view)
+    layoutSpiral(nodes, center) {
+        const nodeCount = nodes.length;
+        const maxRadius = Math.min(this.config.width, this.config.height) * 0.45;
+        const minRadius = 100;
+        
+        nodes.forEach((node, index) => {
+            const fraction = index / Math.max(nodeCount - 1, 1);
+            const radius = minRadius + (maxRadius - minRadius) * fraction;
+            const angle = index * 0.349; // ~20 degrees per node in radians
+            
+            node.x = center.x + Math.cos(angle) * radius;
+            node.y = center.y + Math.sin(angle) * radius;
+        });
+    },
+
+    // Calculate hop distance from focus node for each node using BFS
+    calculateHopDistances(focusId, nodes, links) {
+        const distances = {};
+        
+        if (!focusId) {
+            nodes.forEach(node => {
+                distances[node.id] = 0;
+            });
+            return distances;
         }
         
-        // Position neighbors in a ring
-        const focusId = this.state.focusId || (nodes[0]?.id ? String(nodes[0].id) : null);
-        const focusNode = nodes.find(n => String(n.id) === focusId);
+        // BFS to calculate hop distances
+        const queue = [];
+        const visited = new Set();
         
-        if (focusNode) {
-            // Get all neighbors (1-hop)
+        queue.push({ id: focusId, distance: 0 });
+        visited.add(focusId);
+        distances[focusId] = 0;
+        
+        while (queue.length > 0) {
+            const current = queue.shift();
+            const currentId = current.id;
+            const currentDist = current.distance;
+            
+            // Find all neighbors of current node
             const neighbors = new Set();
             links.forEach(link => {
-                if (String(link.from) === focusId) neighbors.add(String(link.to));
-                if (String(link.to) === focusId) neighbors.add(String(link.from));
-            });
-            
-            // Position neighbors in a circle
-            const neighborList = Array.from(neighbors);
-            const radius = 200;
-            neighborList.forEach((id, index) => {
-                const angle = (index / Math.max(neighborList.length, 1)) * Math.PI * 2 - Math.PI / 2;
-                const node = nodes.find(n => String(n.id) === id);
-                if (node) {
-                    node.x = center.x + Math.cos(angle) * radius;
-                    node.y = center.y + Math.sin(angle) * radius;
+                if (String(link.from) === currentId) {
+                    neighbors.add(String(link.to));
+                }
+                if (String(link.to) === currentId) {
+                    neighbors.add(String(link.from));
                 }
             });
             
-            // Position 2-hop neighbors
-            const placed = new Set([focusId, ...neighborList]);
-            const secondHop = new Set();
-            
-            neighborList.forEach(id => {
-                links.forEach(link => {
-                    if (String(link.from) === id && !placed.has(String(link.to))) {
-                        secondHop.add(String(link.to));
-                    }
-                    if (String(link.to) === id && !placed.has(String(link.from))) {
-                        secondHop.add(String(link.from));
-                    }
-                });
-            });
-            
-            const secondHopList = Array.from(secondHop);
-            const radius2 = 330;
-            secondHopList.forEach((id, index) => {
-                const angle = (index / Math.max(secondHopList.length, 1)) * Math.PI * 2 - Math.PI / 2 + 0.2;
-                const node = nodes.find(n => String(n.id) === id);
-                if (node) {
-                    node.x = center.x + Math.cos(angle) * radius2;
-                    node.y = center.y + Math.sin(angle) * radius2;
+            // Add unvisited neighbors to queue
+            neighbors.forEach(id => {
+                if (!visited.has(id)) {
+                    visited.add(id);
+                    distances[id] = currentDist + 1;
+                    queue.push({ id, distance: currentDist + 1 });
                 }
-            });
-        } else {
-            // No focus, use simple circular layout
-            nodes.forEach((node, index) => {
-                const angle = (index / Math.max(nodes.length, 1)) * Math.PI * 2;
-                const radius = 200 + (index % 3) * 50;
-                node.x = center.x + Math.cos(angle) * radius;
-                node.y = center.y + Math.sin(angle) * radius;
             });
         }
+        
+        // Mark unreachable nodes with a large distance
+        nodes.forEach(node => {
+            if (!distances.hasOwnProperty(node.id)) {
+                distances[node.id] = 10; // Far away
+            }
+        });
+        
+        return distances;
     },
 
     // Form handlers
