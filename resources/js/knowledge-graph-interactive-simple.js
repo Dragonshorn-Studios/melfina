@@ -47,6 +47,7 @@ const KnowledgeGraphSimple = {
         searchQuery: '',
         predicates: [],
         types: [],
+        loadingForms: new Set(),
     },
 
     elements: {
@@ -86,7 +87,7 @@ const KnowledgeGraphSimple = {
         // Load fresh data from API
         await this.loadData();
         
-        console.log('Knowledge Graph Simple initialized');
+
     },
 
     parseInitialData() {
@@ -867,7 +868,41 @@ const KnowledgeGraphSimple = {
 
     saveNodePosition(node) {
         // For now, just keep in local state
-        console.log('Node moved:', node.id, 'to', node.x, node.y);
+        // Node positions are stored locally and reset on page reload
+    },
+
+    // Loading state helpers
+    setLoading(formId, isLoading = true) {
+        if (isLoading) {
+            this.state.loadingForms.add(formId);
+        } else {
+            this.state.loadingForms.delete(formId);
+        }
+        this.updateLoadingIndicators();
+    },
+
+    updateLoadingIndicators() {
+        const forms = document.querySelectorAll('form[data-ajax]');
+        forms.forEach(form => {
+            const formId = form.id;
+            const isLoading = this.state.loadingForms.has(formId);
+            const submitBtn = form.querySelector('button[type="submit"]');
+            
+            if (submitBtn) {
+                submitBtn.disabled = isLoading;
+                if (isLoading) {
+                    submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    const originalText = submitBtn.dataset.originalText || submitBtn.textContent;
+                    submitBtn.dataset.originalText = originalText;
+                    submitBtn.textContent = 'Processing...';
+                } else {
+                    submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    if (submitBtn.dataset.originalText) {
+                        submitBtn.textContent = submitBtn.dataset.originalText;
+                    }
+                }
+            }
+        });
     },
 
     renderTextLabels() {
@@ -1014,10 +1049,13 @@ const KnowledgeGraphSimple = {
         e.preventDefault();
         
         const form = e.target;
+        const formId = form.id;
         const formData = new FormData(form);
         
         // Add return parameter
         formData.append('return', 'graph');
+        
+        this.setLoading(formId, true);
         
         try {
             const response = await fetch(form.action, {
@@ -1055,8 +1093,9 @@ const KnowledgeGraphSimple = {
                 this.showStatus(error.message || 'Failed to create entry.', 'error');
             }
         } catch (error) {
-            console.error('Error creating entry:', error);
             this.showStatus('Network error. Please try again.', 'error');
+        } finally {
+            this.setLoading(formId, false);
         }
     },
 
@@ -1064,7 +1103,10 @@ const KnowledgeGraphSimple = {
         e.preventDefault();
         
         const form = e.target;
+        const formId = form.id;
         const formData = new FormData(form);
+        
+        this.setLoading(formId, true);
         
         try {
             const response = await fetch(form.action, {
@@ -1106,8 +1148,9 @@ const KnowledgeGraphSimple = {
                 this.showStatus(error.message || 'Failed to create link.', 'error');
             }
         } catch (error) {
-            console.error('Error creating link:', error);
             this.showStatus('Network error. Please try again.', 'error');
+        } finally {
+            this.setLoading(formId, false);
         }
     },
 
@@ -1115,10 +1158,13 @@ const KnowledgeGraphSimple = {
         e.preventDefault();
         
         const form = e.target;
+        const formId = form.id;
         const formData = new FormData(form);
         const linkId = this.state.selectedLinkId;
         
         if (!linkId) return;
+        
+        this.setLoading(formId, true);
         
         try {
             const response = await fetch(`/api/knowledge/links/${linkId}`, {
@@ -1156,8 +1202,9 @@ const KnowledgeGraphSimple = {
                 this.showStatus(error.message || 'Failed to fix link.', 'error');
             }
         } catch (error) {
-            console.error('Error fixing link:', error);
             this.showStatus('Network error. Please try again.', 'error');
+        } finally {
+            this.setLoading(formId, false);
         }
     },
 
@@ -1166,6 +1213,9 @@ const KnowledgeGraphSimple = {
         
         const linkId = this.state.selectedLinkId;
         if (!linkId) return;
+        
+        const formId = 'kg-confirm-form';
+        this.setLoading(formId, true);
         
         try {
             const response = await fetch(`/api/knowledge/links/${linkId}/confirm`, {
@@ -1193,8 +1243,9 @@ const KnowledgeGraphSimple = {
                 this.showStatus(error.message || 'Failed to confirm link.', 'error');
             }
         } catch (error) {
-            console.error('Error confirming link:', error);
             this.showStatus('Network error. Please try again.', 'error');
+        } finally {
+            this.setLoading(formId, false);
         }
     },
 
@@ -1203,6 +1254,9 @@ const KnowledgeGraphSimple = {
         
         const linkId = this.state.selectedLinkId;
         if (!linkId) return;
+        
+        const formId = isPermanent ? 'kg-permanent-form' : 'kg-unpermanent-form';
+        this.setLoading(formId, true);
         
         try {
             const response = await fetch(`/api/knowledge/links/${linkId}/permanent`, {
@@ -1233,8 +1287,9 @@ const KnowledgeGraphSimple = {
                 this.showStatus(error.message || 'Failed to update permanent status.', 'error');
             }
         } catch (error) {
-            console.error('Error updating permanent status:', error);
             this.showStatus('Network error. Please try again.', 'error');
+        } finally {
+            this.setLoading(formId, false);
         }
     },
 
@@ -1247,6 +1302,9 @@ const KnowledgeGraphSimple = {
         if (!confirm('Retract this link? Agents can still re-assert it unless you recreate and lock it.')) {
             return;
         }
+        
+        const formId = 'kg-retract-form';
+        this.setLoading(formId, true);
         
         try {
             const response = await fetch(`/api/knowledge/links/${linkId}/retract`, {
@@ -1271,8 +1329,9 @@ const KnowledgeGraphSimple = {
                 this.showStatus(error.message || 'Failed to retract link.', 'error');
             }
         } catch (error) {
-            console.error('Error retracting link:', error);
             this.showStatus('Network error. Please try again.', 'error');
+        } finally {
+            this.setLoading(formId, false);
         }
     },
 

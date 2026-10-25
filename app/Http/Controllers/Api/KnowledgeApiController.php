@@ -23,6 +23,14 @@ use Illuminate\Validation\ValidationException;
 class KnowledgeApiController extends Controller
 {
     /**
+     * Get the authenticated user's author identifier.
+     */
+    private function getAuthorName(Request $request): string
+    {
+        return $request->user()?->name ?? 'owner';
+    }
+
+    /**
      * Get the full graph or a focused constellation.
      */
     public function graph(Request $request, KnowledgeGraph $graph): JsonResponse
@@ -84,7 +92,7 @@ class KnowledgeApiController extends Controller
 
         $result = $writer->upsert(
             context: KnowledgeIdentityContext::forOwner(),
-            author: 'owner',
+            author: $this->getAuthorName($request),
             authorKind: KnowledgeAuthorKind::Owner,
             entryName: $name,
             entryId: null,
@@ -152,7 +160,7 @@ class KnowledgeApiController extends Controller
 
         $result = $writer->upsert(
             context: KnowledgeIdentityContext::forOwner(),
-            author: 'owner',
+            author: $this->getAuthorName($request),
             authorKind: KnowledgeAuthorKind::Owner,
             entryName: $entry->name,
             entryId: $entry->id,
@@ -259,7 +267,7 @@ class KnowledgeApiController extends Controller
         ]);
 
         $result = $graph->connect(
-            author: 'owner',
+            author: $this->getAuthorName($request),
             authorKind: KnowledgeAuthorKind::Owner,
             from: $validated['from'],
             to: $validated['to'],
@@ -396,7 +404,7 @@ class KnowledgeApiController extends Controller
     {
         $fromId = $link->from_entry_id;
         $graph->connect(
-            author: 'owner',
+            author: $this->getAuthorName($request),
             authorKind: KnowledgeAuthorKind::Owner,
             from: $link->fromEntry->name,
             to: $link->toEntry->name,

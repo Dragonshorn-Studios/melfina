@@ -3,7 +3,7 @@
 use App\Http\Controllers\Api\KnowledgeApiController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['web', 'auth'])->prefix('api/knowledge')->group(function () {
+Route::middleware(['web', 'auth', 'throttle:60,1'])->prefix('api/v1/knowledge')->group(function () {
     // Graph operations
     Route::get('/graph', [KnowledgeApiController::class, 'graph'])->name('api.knowledge.graph');
 
