@@ -478,17 +478,22 @@ class KnowledgeApiController extends Controller
     {
         $query = $request->string('q', '');
         $limit = $request->integer('limit', 10);
+        $page = $request->integer('page', 1);
 
         $searchTerm = '%'.strtolower($query).'%';
         
         $entries = KnowledgeEntry::query()
             ->where('name_lower', 'like', $searchTerm)
             ->orderBy('name_lower')
-            ->limit($limit)
-            ->get(['id', 'name', 'type']);
+            ->paginate($limit, ['id', 'name', 'type'], 'page', $page);
 
         return response()->json([
-            'results' => $entries,
+            'results' => $entries->items(),
+            'query' => $query,
+            'limit' => $limit,
+            'page' => $page,
+            'total' => $entries->total(),
+            'last_page' => $entries->lastPage(),
         ]);
     }
 

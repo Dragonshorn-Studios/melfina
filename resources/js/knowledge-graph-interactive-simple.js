@@ -10,19 +10,19 @@ const KnowledgeGraphSimple = {
         linkWidth: 1.25,
         focusedLinkWidth: 2.5,
         colors: {
-            background: '#152238',
-            node: '#E8E4D8',
-            nodeFill: '#152238',
-            nodeStroke: '#E8E4D8',
-            focusedNode: '#E8A838',
-            focusedNodeStroke: '#E8A838',
+            background: 'var(--color-panel)',
+            node: 'var(--color-cream)',
+            nodeFill: 'var(--color-panel)',
+            nodeStroke: 'var(--color-cream)',
+            focusedNode: 'var(--color-amber)',
+            focusedNodeStroke: 'var(--color-amber)',
             link: 'rgba(138, 155, 176, 0.6)',
-            permanentLink: '#E8A838',
-            disputedLink: '#C45C4A',
-            text: '#E8E4D8',
-            textSecondary: '#8A9BB0',
-            compass: '#E8A838',
-            grid: '#2A3A52',
+            permanentLink: 'var(--color-amber)',
+            disputedLink: 'var(--color-danger)',
+            text: 'var(--color-cream)',
+            textSecondary: 'var(--color-steel)',
+            compass: 'var(--color-amber)',
+            grid: 'var(--color-border)',
         },
         font: {
             family: 'IBM Plex Mono, ui-monospace, monospace',
@@ -65,6 +65,31 @@ const KnowledgeGraphSimple = {
         };
     },
 
+    // Update dimensions from SVG element's viewBox
+    updateDimensions() {
+        if (this.elements.svg) {
+            const viewBox = this.elements.svg.viewBox?.baseVal;
+            if (viewBox && viewBox.width > 0 && viewBox.height > 0) {
+                this.config.width = viewBox.width;
+                this.config.height = viewBox.height;
+            } else {
+                // Fallback to client dimensions
+                this.config.width = this.elements.svg.clientWidth || 800;
+                this.config.height = this.elements.svg.clientHeight || 800;
+            }
+        }
+    },
+
+    // Load saved node positions from localStorage
+    loadSavedPositions() {
+        try {
+            const positions = JSON.parse(localStorage.getItem('kg-node-positions') || '{}');
+            this.state.savedPositions = positions;
+        } catch (e) {
+            this.state.savedPositions = {};
+        }
+    },
+
     elements: {
         root: null,
         svg: null,
@@ -84,8 +109,19 @@ const KnowledgeGraphSimple = {
             return;
         }
         
+        // Read actual SVG dimensions
+        this.updateDimensions();
+        
         // Parse initial data
         this.parseInitialData();
+        
+        // Load saved node positions
+        this.loadSavedPositions();
+        
+        // Apply layout to initial data
+        if (this.state.nodes.length > 0) {
+            this.applyForceLayout();
+        }
         
         // Load predicates and types
         await this.loadMetadata();
@@ -124,8 +160,8 @@ const KnowledgeGraphSimple = {
     async loadMetadata() {
         try {
             const [predicatesRes, typesRes] = await Promise.all([
-                fetch('/api/knowledge/predicates'),
-                fetch('/api/knowledge/types'),
+                fetch('/api/v1/knowledge/predicates'),
+                fetch('/api/v1/knowledge/types'),
             ]);
             
             if (predicatesRes.ok) {
@@ -151,7 +187,7 @@ const KnowledgeGraphSimple = {
             params.set('hops', '2');
             params.set('limit', '250');
             
-            const response = await fetch(`/api/knowledge/graph?${params.toString()}`);
+            const response = await fetch(`/api/v1/knowledge/graph?${params.toString()}`);
             
             if (response.ok) {
                 const data = await response.json();
@@ -204,6 +240,12 @@ const KnowledgeGraphSimple = {
 
     setupEvents() {
         const svg = this.elements.svg;
+        
+        // Resize handler
+        window.addEventListener('resize', () => {
+            this.updateDimensions();
+            this.render();
+        });
         
         // Zoom with mouse wheel
         svg.addEventListener('wheel', (e) => this.handleWheel(e));
@@ -299,7 +341,7 @@ const KnowledgeGraphSimple = {
 
             timeout = setTimeout(async () => {
                 try {
-                    const response = await fetch(`/api/knowledge/entries?q=${encodeURIComponent(this.state.searchQuery)}&limit=10`);
+                    const response = await fetch(`/api/v1/knowledge/entries?q=${encodeURIComponent(this.state.searchQuery)}&limit=10`);
                     if (response.ok) {
                         const data = await response.json();
                         this.updateSearchResults(data.results || []);
@@ -367,21 +409,44 @@ const KnowledgeGraphSimple = {
     },
 
     handlePanMove(e) {
-        if (!this.state.isDragging || !this.state.dragStart) return;
+        if (!this.state.isDragging && !this.state.draggingNode) return;
         
-        const dx = e.clientX - this.state.dragStart.x;
-        const dy = e.clientY - this.state.dragStart.y;
-        
-        this.state.transform.x += dx / this.state.transform.k;
-        this.state.transform.y += dy / this.state.transform.k;
-        
-        this.state.dragStart = { x: e.clientX, y: e.clientY };
-        this.applyTransform();
-        e.preventDefault();
+        if (this.state.isDragging && this.state.dragStart) {
+            // Pan drag
+            const dx = e.clientX - this.state.dragStart.x;
+            const dy = e.clientY - this.state.dragStart.y;
+            
+            this.state.transform.x += dx / this.state.transform.k;
+            this.state.transform.y += dy / this.state.transform.k;
+            
+            this.state.dragStart = { x: e.clientX, y: e.clientY };
+            this.applyTransform();
+            e.preventDefault();
+        } else if (this.state.draggingNode && this.state.dragStart) {
+            // Node drag
+            const node = this.state.draggingNode;
+            const dx = (e.clientX - this.state.dragStart.x) / this.state.transform.k;
+            const dy = (e.clientY - this.state.dragStart.y) / this.state.transform.k;
+            
+            node.x = this.state.dragStart.nodeX + dx;
+            node.y = this.state.dragStart.nodeY + dy;
+            
+            this.renderNodes();
+            this.renderTextLabels();
+            this.renderLinks();
+            e.preventDefault();
+        }
     },
 
     handlePanEnd() {
-        this.state.isDragging = false;
+        if (this.state.isDragging) {
+            this.state.isDragging = false;
+        }
+        if (this.state.draggingNode && this.state.dragStart) {
+            // Save node position
+            this.saveNodePosition(this.state.draggingNode);
+            this.state.draggingNode = null;
+        }
         this.state.dragStart = null;
     },
 
@@ -842,39 +907,18 @@ const KnowledgeGraphSimple = {
             });
             
             // Drag handlers for moving nodes
-            let isDragging = false;
-            let dragStart = null;
-            
             g.addEventListener('mousedown', (e) => {
-                if (this.state.isDragging) return;
+                if (this.state.isDragging || this.state.draggingNode) return;
                 
-                isDragging = true;
-                dragStart = { x: e.clientX, y: e.clientY, nodeX: node.x, nodeY: node.y };
+                this.state.draggingNode = node;
+                this.state.dragStart = { 
+                    x: e.clientX, 
+                    y: e.clientY, 
+                    nodeX: node.x, 
+                    nodeY: node.y 
+                };
                 e.stopPropagation();
                 e.preventDefault();
-            });
-            
-            document.addEventListener('mousemove', (e) => {
-                if (!isDragging || !dragStart) return;
-                
-                const dx = (e.clientX - dragStart.x) / this.state.transform.k;
-                const dy = (e.clientY - dragStart.y) / this.state.transform.k;
-                
-                node.x = dragStart.nodeX + dx;
-                node.y = dragStart.nodeY + dy;
-                
-                this.renderNodes();
-                this.renderTextLabels();
-                this.renderLinks();
-            });
-            
-            document.addEventListener('mouseup', () => {
-                if (isDragging) {
-                    isDragging = false;
-                    dragStart = null;
-                    // Save position
-                    this.saveNodePosition(node);
-                }
             });
             
             layer.appendChild(g);
@@ -882,8 +926,14 @@ const KnowledgeGraphSimple = {
     },
 
     saveNodePosition(node) {
-        // For now, just keep in local state
-        // Node positions are stored locally and reset on page reload
+        // Save node position to localStorage
+        try {
+            const positions = JSON.parse(localStorage.getItem('kg-node-positions') || '{}');
+            positions[node.id] = { x: node.x, y: node.y };
+            localStorage.setItem('kg-node-positions', JSON.stringify(positions));
+        } catch (e) {
+            console.warn('Failed to save node position:', e);
+        }
     },
 
     // Loading state helpers
@@ -993,21 +1043,36 @@ const KnowledgeGraphSimple = {
         // If no nodes, nothing to layout
         if (nodes.length === 0) return;
         
-        // If we have a focused node, use hop-based layout
-        if (this.state.focusId) {
-            const focusNode = nodes.find(n => String(n.id) === this.state.focusId);
-            
-            // Position focus at center
-            if (focusNode) {
-                focusNode.x = center.x;
-                focusNode.y = center.y;
+        // Restore saved positions if available
+        const savedPositions = this.state.savedPositions || {};
+        let hasSavedPositions = false;
+        
+        for (const node of nodes) {
+            if (savedPositions[node.id]) {
+                node.x = savedPositions[node.id].x;
+                node.y = savedPositions[node.id].y;
+                hasSavedPositions = true;
             }
-            
-            // Use hop-based layout with concentric circles
-            this.layoutByHops(this.state.focusId, nodes, links, center);
-        } else {
-            // No focus - use spiral layout for all nodes
-            this.layoutSpiral(nodes, center);
+        }
+        
+        // If we have saved positions, use them; otherwise apply automatic layout
+        if (!hasSavedPositions) {
+            // If we have a focused node, use hop-based layout
+            if (this.state.focusId) {
+                const focusNode = nodes.find(n => String(n.id) === this.state.focusId);
+                
+                // Position focus at center
+                if (focusNode) {
+                    focusNode.x = center.x;
+                    focusNode.y = center.y;
+                }
+                
+                // Use hop-based layout with concentric circles
+                this.layoutByHops(this.state.focusId, nodes, links, center);
+            } else {
+                // No focus - use spiral layout for all nodes
+                this.layoutSpiral(nodes, center);
+            }
         }
     },
 
@@ -1236,7 +1301,7 @@ const KnowledgeGraphSimple = {
         this.setLoading(formId, true);
         
         try {
-            const response = await fetch(`/api/knowledge/links/${linkId}`, {
+            const response = await fetch(`/api/v1/knowledge/links/${linkId}`, {
                 method: 'PUT',
                 headers: this.getAjaxHeaders(),
                 body: formData,
@@ -1284,7 +1349,7 @@ const KnowledgeGraphSimple = {
         this.setLoading(formId, true);
         
         try {
-            const response = await fetch(`/api/knowledge/links/${linkId}/confirm`, {
+            const response = await fetch(`/api/v1/knowledge/links/${linkId}/confirm`, {
                 method: 'POST',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
@@ -1325,7 +1390,7 @@ const KnowledgeGraphSimple = {
         this.setLoading(formId, true);
         
         try {
-            const response = await fetch(`/api/knowledge/links/${linkId}/permanent`, {
+            const response = await fetch(`/api/v1/knowledge/links/${linkId}/permanent`, {
                 method: 'POST',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
@@ -1373,7 +1438,7 @@ const KnowledgeGraphSimple = {
         this.setLoading(formId, true);
         
         try {
-            const response = await fetch(`/api/knowledge/links/${linkId}/retract`, {
+            const response = await fetch(`/api/v1/knowledge/links/${linkId}/retract`, {
                 method: 'POST',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
@@ -1425,7 +1490,7 @@ const KnowledgeGraphSimple = {
 
     async deleteNode(nodeId) {
         try {
-            const response = await fetch(`/api/knowledge/entries/${nodeId}`, {
+            const response = await fetch(`/api/v1/knowledge/entries/${nodeId}`, {
                 method: 'DELETE',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
@@ -1457,7 +1522,7 @@ const KnowledgeGraphSimple = {
 
     async deleteLink(linkId) {
         try {
-            const response = await fetch(`/api/knowledge/links/${linkId}`, {
+            const response = await fetch(`/api/v1/knowledge/links/${linkId}`, {
                 method: 'DELETE',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',

@@ -74,25 +74,25 @@ All forms now submit via AJAX without page reload:
 Complete RESTful API for knowledge operations:
 
 **Graph Endpoints:**
-- `GET /api/knowledge/graph` - Get graph data (focus, hops, limit)
-- `GET /api/knowledge/entries` - Search entries
-- `GET /api/knowledge/predicates` - Get predicates list
-- `GET /api/knowledge/types` - Get types list
+- `GET /api/v1/knowledge/graph` - Get graph data (focus, hops, limit)
+- `GET /api/v1/knowledge/entries` - Search entries
+- `GET /api/v1/knowledge/predicates` - Get predicates list
+- `GET /api/v1/knowledge/types` - Get types list
 
 **Entry Endpoints:**
-- `GET /api/knowledge/entries/{entry}` - Get single entry
-- `POST /api/knowledge/entries` - Create entry
-- `PUT /api/knowledge/entries/{entry}` - Update entry
-- `DELETE /api/knowledge/entries/{entry}` - Delete entry
+- `GET /api/v1/knowledge/entries/{entry}` - Get single entry
+- `POST /api/v1/knowledge/entries` - Create entry
+- `PUT /api/v1/knowledge/entries/{entry}` - Update entry
+- `DELETE /api/v1/knowledge/entries/{entry}` - Delete entry
 
 **Link Endpoints:**
-- `GET /api/knowledge/links/{link}` - Get single link
-- `POST /api/knowledge/links` - Create link
-- `PUT /api/knowledge/links/{link}` - Update link
-- `POST /api/knowledge/links/{link}/confirm` - Confirm link
-- `POST /api/knowledge/links/{link}/permanent` - Toggle permanent
-- `POST /api/knowledge/links/{link}/retract` - Retract link
-- `DELETE /api/knowledge/links/{link}` - Delete link
+- `GET /api/v1/knowledge/links/{link}` - Get single link
+- `POST /api/v1/knowledge/links` - Create link
+- `PUT /api/v1/knowledge/links/{link}` - Update link
+- `POST /api/v1/knowledge/links/{link}/confirm` - Confirm link
+- `POST /api/v1/knowledge/links/{link}/permanent` - Toggle permanent
+- `POST /api/v1/knowledge/links/{link}/retract` - Retract link
+- `DELETE /api/v1/knowledge/links/{link}` - Delete link
 
 #### 6. **Updated Frontend** (`resources/views/console/knowledge/graph.blade.php`)
 - Added search input with autocomplete
@@ -275,7 +275,7 @@ Consider adding:
 
 1. Check browser console for errors
 2. Verify Laravel routes are registered: `php artisan route:list`
-3. Check API responses: `curl /api/knowledge/graph`
+3. Check API responses: `curl /api/v1/knowledge/graph`
 4. Ensure you're authenticated (console routes require auth)
 
 ### Known Issues

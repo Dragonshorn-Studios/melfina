@@ -14,21 +14,21 @@ Created new API controller and routes in:
 
 **Available API Endpoints:**
 
-- `GET /api/knowledge/graph` - Get graph data (with optional focus, hops, limit params)
-- `GET /api/knowledge/entries/{entry}` - Get single knowledge entry
-- `POST /api/knowledge/entries` - Create new entry
-- `PUT /api/knowledge/entries/{entry}` - Update entry
-- `DELETE /api/knowledge/entries/{entry}` - Delete entry
-- `GET /api/knowledge/links/{link}` - Get single link
-- `POST /api/knowledge/links` - Create new link
-- `PUT /api/knowledge/links/{link}` - Update link
-- `POST /api/knowledge/links/{link}/confirm` - Confirm link
-- `POST /api/knowledge/links/{link}/permanent` - Toggle permanent status
-- `POST /api/knowledge/links/{link}/retract` - Retract link
-- `DELETE /api/knowledge/links/{link}` - Delete link
-- `GET /api/knowledge/predicates` - Get list of predicates
-- `GET /api/knowledge/types` - Get list of entry types
-- `GET /api/knowledge/entries` - Search entries (with `q` and `limit` params)
+- `GET /api/v1/knowledge/graph` - Get graph data (with optional focus, hops, limit params)
+- `GET /api/v1/knowledge/entries/{entry}` - Get single knowledge entry
+- `POST /api/v1/knowledge/entries` - Create new entry
+- `PUT /api/v1/knowledge/entries/{entry}` - Update entry
+- `DELETE /api/v1/knowledge/entries/{entry}` - Delete entry
+- `GET /api/v1/knowledge/links/{link}` - Get single link
+- `POST /api/v1/knowledge/links` - Create new link
+- `PUT /api/v1/knowledge/links/{link}` - Update link
+- `POST /api/v1/knowledge/links/{link}/confirm` - Confirm link
+- `POST /api/v1/knowledge/links/{link}/permanent` - Toggle permanent status
+- `POST /api/v1/knowledge/links/{link}/retract` - Retract link
+- `DELETE /api/v1/knowledge/links/{link}` - Delete link
+- `GET /api/v1/knowledge/predicates` - Get list of predicates
+- `GET /api/v1/knowledge/types` - Get list of entry types
+- `GET /api/v1/knowledge/entries` - Search entries (with `q` and `limit` params)
 
 ### Frontend (Interactive Graph Viewer)
 
