@@ -4,9 +4,11 @@
             <x-page-header eyebrow="KNOWLEDGE" title="Constellation">
                 <x-slot:subtitle>Typed links. Confidence on every edge. Owner can lock one permanent.</x-slot:subtitle>
             </x-page-header>
-            <div class="flex gap-2 font-mono text-xs">
+            <div class="flex gap-2 font-mono text-xs items-center">
                 <a href="{{ route('console.knowledge.index') }}" class="border border-transparent px-3 py-1.5 text-steel hover:border-border hover:text-cream" style="border-radius: var(--radius-console)">entries</a>
                 <span class="border border-amber bg-void px-3 py-1.5 text-amber" style="border-radius: var(--radius-console)">graph</span>
+                <button id="kg-refresh" class="border border-transparent px-3 py-1.5 text-steel hover:border-border hover:text-cream" style="border-radius: var(--radius-console)" title="Refresh graph (Ctrl+R)">refresh</button>
+                <span id="kg-status-indicator" class="w-2 h-2 rounded-full bg-green-500 opacity-50 hidden"></span>
             </div>
         </div>
 
@@ -21,6 +23,12 @@
             <div id="knowledge-graph" class="kg-stage relative min-h-[32rem] lg:min-h-[36rem] lg:h-[min(72vh,40rem)]"
                 data-focus="{{ $focusId ?? '' }}"
                 data-link="{{ request('link') }}">
+                <div class="absolute top-3 left-4 z-10">
+                    <input id="kg-search" type="text" placeholder="Search nodes..." 
+                        class="border border-border/50 bg-void/80 px-2 py-1 font-mono text-xs text-cream placeholder:text-steel/60 rounded"
+                        style="border-radius: var(--radius-console)">
+                    <datalist id="kg-search-results" class="hidden"></datalist>
+                </div>
                 <svg class="kg-svg absolute inset-0 h-full w-full" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Knowledge constellation"></svg>
                 @if ($snapshot['nodes'] === [])
                     <p class="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-xs text-steel">No entities yet — create one here, or wait for an agent to upsert.</p>
@@ -32,6 +40,7 @@
                 <div id="kg-inspect-empty" class="space-y-3 p-4">
                     <p class="font-mono text-[10px] tracking-[0.16em] text-steel">INSPECT</p>
                     <p class="text-sm text-steel">Click a node to focus it. Click an edge to confirm, fix, retract, or mark it permanent. Create only when the graph is missing a noun.</p>
+                    <p class="font-mono text-xs text-steel/60 mt-2">Press <kbd class="px-1 border border-border/30">F</kbd> to focus, <kbd class="px-1 border border-border/30">+</kbd>/<kbd class="px-1 border border-border/30">-</kbd> to zoom, <kbd class="px-1 border border-border/30">0</kbd> to reset view.</p>
                 </div>
 
                 <div id="kg-inspect-node" class="hidden space-y-4 p-4">
@@ -47,7 +56,7 @@
                     <p id="kg-link-label" class="font-mono text-xs text-cream"></p>
                     <p id="kg-link-meta" class="font-mono text-xs text-steel"></p>
 
-                    <form id="kg-fix-form" method="POST" class="space-y-2">
+                    <form id="kg-fix-form" method="POST" class="space-y-2" data-ajax="true"
                         @csrf
                         @method('PUT')
                         <label class="block font-mono text-[10px] tracking-[0.12em] text-steel">
@@ -101,7 +110,7 @@
 
                 <div class="border-t border-border p-4">
                     <p class="font-mono text-[10px] tracking-[0.16em] text-steel">NEW LINK</p>
-                    <form method="POST" action="{{ route('console.knowledge.links.store') }}" class="mt-3 space-y-2">
+                    <form id="kg-new-link-form" method="POST" action="{{ route('console.knowledge.links.store') }}" class="mt-3 space-y-2" data-ajax="true"
                         @csrf
                         <label class="block font-mono text-[10px] text-steel">
                             from
@@ -141,7 +150,7 @@
 
                 <div class="border-t border-border p-4">
                     <p class="font-mono text-[10px] tracking-[0.16em] text-steel">NEW ENTITY</p>
-                    <form method="POST" action="{{ route('console.knowledge.store') }}" class="mt-3 space-y-2">
+                    <form id="kg-new-entity-form" method="POST" action="{{ route('console.knowledge.store') }}" class="mt-3 space-y-2" data-ajax="true"
                         @csrf
                         <input type="hidden" name="return" value="graph">
                         <label class="block font-mono text-[10px] text-steel">
