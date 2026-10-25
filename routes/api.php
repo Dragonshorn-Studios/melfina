@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\KnowledgeApiController;
+use App\Models\KnowledgeEntry;
+use App\Models\KnowledgeLink;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['web', 'auth', 'throttle:60,1'])->prefix('api/v1/knowledge')->group(function () {
+Route::middleware(['auth', 'owner', 'throttle:60,1'])->prefix('api/v1/knowledge')->group(function () {
     // Graph operations
     Route::get('/graph', [KnowledgeApiController::class, 'graph'])->name('api.knowledge.graph');
 

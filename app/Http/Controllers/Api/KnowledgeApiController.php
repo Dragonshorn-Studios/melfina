@@ -27,7 +27,11 @@ class KnowledgeApiController extends Controller
      */
     private function getAuthorName(Request $request): string
     {
-        return $request->user()?->name ?? 'owner';
+        if (!$request->user()) {
+            throw new \Illuminate\Auth\AuthenticationException();
+        }
+        
+        return $request->user()->name;
     }
 
     /**
@@ -224,10 +228,16 @@ class KnowledgeApiController extends Controller
         }
 
         $name = $entry->name;
-        $entry->delete();
+        
+        if (! $entry->delete()) {
+            throw ValidationException::withMessages([
+                'delete' => 'Failed to delete entry. Please try again.',
+            ]);
+        }
 
         return response()->json([
             'message' => "Entry '{$name}' deleted.",
+            'success' => true,
         ]);
     }
 
@@ -248,7 +258,7 @@ class KnowledgeApiController extends Controller
             'confidence' => $link->confidence,
             'permanent' => $link->permanent,
             'disputed' => $link->disputed,
-            'status' => $link->status->value,
+            'status' => $link->status->value ?? $link->status,
         ]);
     }
 
@@ -400,7 +410,7 @@ class KnowledgeApiController extends Controller
     /**
      * Retract a link.
      */
-    public function retractLink(KnowledgeLink $link, KnowledgeGraph $graph): JsonResponse
+    public function retractLink(Request $request, KnowledgeLink $link, KnowledgeGraph $graph): JsonResponse
     {
         $fromId = $link->from_entry_id;
         $graph->connect(
@@ -429,10 +439,15 @@ class KnowledgeApiController extends Controller
      */
     public function deleteLink(KnowledgeLink $link): JsonResponse
     {
-        $link->delete();
+        if (! $link->delete()) {
+            throw ValidationException::withMessages([
+                'delete' => 'Failed to delete link. Please try again.',
+            ]);
+        }
 
         return response()->json([
             'message' => 'Link deleted.',
+            'success' => true,
         ]);
     }
 
@@ -464,8 +479,10 @@ class KnowledgeApiController extends Controller
         $query = $request->string('q', '');
         $limit = $request->integer('limit', 10);
 
+        $searchTerm = '%'.strtolower($query).'%';
+        
         $entries = KnowledgeEntry::query()
-            ->where('name_lower', 'like', '%'.strtolower($query).'%')
+            ->where('name_lower', 'like', $searchTerm)
             ->orderBy('name_lower')
             ->limit($limit)
             ->get(['id', 'name', 'type']);

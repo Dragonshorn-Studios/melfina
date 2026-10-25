@@ -50,6 +50,21 @@ const KnowledgeGraphSimple = {
         loadingForms: new Set(),
     },
 
+    // Get CSRF token for AJAX requests
+    getCsrfToken() {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.content : '';
+    },
+
+    // Default headers for AJAX requests
+    getAjaxHeaders() {
+        return {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': this.getCsrfToken(),
+        };
+    },
+
     elements: {
         root: null,
         svg: null,
@@ -1120,10 +1135,7 @@ const KnowledgeGraphSimple = {
         try {
             const response = await fetch(form.action, {
                 method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                },
+                headers: this.getAjaxHeaders(),
                 body: formData,
             });
             
@@ -1171,10 +1183,7 @@ const KnowledgeGraphSimple = {
         try {
             const response = await fetch(form.action, {
                 method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                },
+                headers: this.getAjaxHeaders(),
                 body: formData,
             });
             
@@ -1229,10 +1238,7 @@ const KnowledgeGraphSimple = {
         try {
             const response = await fetch(`/api/knowledge/links/${linkId}`, {
                 method: 'PUT',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                },
+                headers: this.getAjaxHeaders(),
                 body: formData,
             });
             
