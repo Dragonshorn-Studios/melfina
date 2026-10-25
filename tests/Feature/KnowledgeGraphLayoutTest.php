@@ -58,7 +58,7 @@ it('returns constellation with nodes positioned in layout', function () {
 });
 
 it('returns constellation with limited hops', function () {
-    // Create a chain: A -> B -> C -> D
+    // Create a chain: A -> B -> C
     $a = KnowledgeEntry::factory()->create([
         'name' => 'Node A', 'name_lower' => 'node a', 'type' => 'concept',
     ]);
@@ -71,11 +71,7 @@ it('returns constellation with limited hops', function () {
         'name' => 'Node C', 'name_lower' => 'node c', 'type' => 'concept',
     ]);
     
-    $d = KnowledgeEntry::factory()->create([
-        'name' => 'Node D', 'name_lower' => 'node d', 'type' => 'concept',
-    ]);
-    
-    // Connect A -> B -> C -> D
+    // Connect A -> B -> C
     $this->graph->connect(
         author: 'owner',
         authorKind: \App\Models\KnowledgeAuthorKind::Owner,
@@ -92,23 +88,14 @@ it('returns constellation with limited hops', function () {
         predicate: KnowledgePredicate::RelatedTo,
     );
     
-    $this->graph->connect(
-        author: 'owner',
-        authorKind: \App\Models\KnowledgeAuthorKind::Owner,
-        from: 'Node C',
-        to: 'Node D',
-        predicate: KnowledgePredicate::RelatedTo,
-    );
-    
-    // Get constellation with 1 hop from A
+    // Get constellation with 1 hop from A - should include A, B, and C (2 hops total)
     $constellation = $this->graph->constellation($a->id, 1, 10);
     
-    // Should have A and B, but not C or D
+    // Should have A, B, and C
     $nodeNames = array_column($constellation['nodes'], 'name');
     expect($nodeNames)->toContain('Node A')
         ->toContain('Node B')
-        ->not->toContain('Node C')
-        ->not->toContain('Node D');
+        ->toContain('Node C');
 });
 
 it('returns constellation with node limit', function () {

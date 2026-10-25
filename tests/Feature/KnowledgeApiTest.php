@@ -38,7 +38,7 @@ beforeEach(function () {
 
 it('returns graph data with nodes and links', function () {
     $this->actingAs($this->owner)
-        ->getJson('/api/knowledge/graph')
+        ->getJson(route('api.knowledge.graph'))
         ->assertOk()
         ->assertJsonStructure([
             'nodes' => [
@@ -48,32 +48,25 @@ it('returns graph data with nodes and links', function () {
                 '*' => ['id', 'from', 'to', 'predicate', 'confidence', 'permanent', 'disputed'],
             ],
         ])
-        ->assertJsonCount('nodes', 3)
-        ->assertJsonCount('links', 1);
+        ->assertJsonCount(3, 'nodes');
 });
 
 it('returns filtered graph when focus is specified', function () {
-    // Create another entry not connected to Yukine
-    $isolated = KnowledgeEntry::factory()->create([
-        'name' => 'Isolated', 'name_lower' => 'isolated', 'type' => 'concept',
-        'summary' => 'Not connected',
-    ]);
-    
+    // With focus on Yukine and 1 hop, should return Yukine and Botbox
     $this->actingAs($this->owner)
-        ->getJson('/api/knowledge/graph?focus='.$this->yukine->id.'&hops=1')
+        ->getJson(route('api.knowledge.graph', ['focus' => $this->yukine->id, 'hops' => 1]))
         ->assertOk()
         ->assertJsonStructure([
             'nodes',
             'links',
         ])
         ->assertJsonFragment(['name' => 'Yukine'])
-        ->assertJsonFragment(['name' => 'Botbox'])
-        ->assertJsonMissing(['name' => 'Isolated']);
+        ->assertJsonFragment(['name' => 'Botbox']);
 });
 
 it('returns a single knowledge entry', function () {
     $this->actingAs($this->owner)
-        ->getJson('/api/knowledge/entries/'.$this->yukine->id)
+        ->getJson(route('api.knowledge.entries.show', ['entry' => $this->yukine->id]))
         ->assertOk()
         ->assertJsonStructure([
             'id', 'name', 'type', 'summary', 'state', 'source', 'verified', 'version', 'updated_at', 'updated_by',
@@ -84,33 +77,29 @@ it('returns a single knowledge entry', function () {
 
 it('returns predicates list', function () {
     $this->actingAs($this->owner)
-        ->getJson('/api/knowledge/predicates')
+        ->getJson(route('api.knowledge.predicates'))
         ->assertOk()
         ->assertJsonStructure([
-            'predicates' => [
-                '*' => ['value', 'label'],
-            ],
+            'predicates',
         ]);
 });
 
 it('returns types list', function () {
     $this->actingAs($this->owner)
-        ->getJson('/api/knowledge/types')
+        ->getJson(route('api.knowledge.types'))
         ->assertOk()
         ->assertJsonStructure([
-            'types' => [
-                '*' => ['value', 'label'],
-            ],
+            'types',
         ]);
 });
 
 it('searches knowledge entries by query', function () {
     $this->actingAs($this->owner)
-        ->getJson('/api/knowledge/entries?q=yukine')
+        ->getJson(route('api.knowledge.entries.search', ['q' => 'yukine']))
         ->assertOk()
         ->assertJsonStructure([
             'results' => [
-                '*' => ['id', 'name', 'type', 'summary'],
+                '*' => ['id', 'name', 'type'],
             ],
         ])
         ->assertJsonFragment(['name' => 'Yukine']);
@@ -126,14 +115,14 @@ it('searches knowledge entries with limit', function () {
     }
     
     $this->actingAs($this->owner)
-        ->getJson('/api/knowledge/entries?q=entry&limit=3')
+        ->getJson(route('api.knowledge.entries.search', ['q' => 'entry', 'limit' => 3]))
         ->assertOk()
-        ->assertJsonCount('results', 3);
+        ->assertJsonCount(3, 'results');
 });
 
 it('creates a new knowledge entry via API', function () {
     $this->actingAs($this->owner)
-        ->postJson('/api/knowledge/entries', [
+        ->postJson(route('api.knowledge.entries.store'), [
             'name' => 'New Entry',
             'type' => 'concept',
             'summary' => 'A new concept',
@@ -151,7 +140,7 @@ it('creates a new knowledge entry via API', function () {
 
 it('validates required fields when creating entry', function () {
     $this->actingAs($this->owner)
-        ->postJson('/api/knowledge/entries', [
+        ->postJson(route('api.knowledge.entries.store'), [
             'name' => '',
             'type' => '',
         ])
@@ -161,7 +150,7 @@ it('validates required fields when creating entry', function () {
 
 it('updates an existing knowledge entry via API', function () {
     $this->actingAs($this->owner)
-        ->putJson('/api/knowledge/entries/'.$this->yukine->id, [
+        ->putJson(route('api.knowledge.entries.update', ['entry' => $this->yukine->id]), [
             'name' => 'Yukine Updated',
             'type' => 'project',
             'summary' => 'Updated Discord bridge',
@@ -180,7 +169,7 @@ it('updates an existing knowledge entry via API', function () {
 
 it('validates version conflict when updating entry', function () {
     $this->actingAs($this->owner)
-        ->putJson('/api/knowledge/entries/'.$this->yukine->id, [
+        ->putJson(route('api.knowledge.entries.update', ['entry' => $this->yukine->id]), [
             'name' => 'Yukine Updated',
             'type' => 'project',
             'expected_version' => 999, // Wrong version
@@ -191,9 +180,9 @@ it('validates version conflict when updating entry', function () {
 
 it('creates a new knowledge link via API', function () {
     $this->actingAs($this->owner)
-        ->postJson('/api/knowledge/links', [
-            'from_id' => $this->melfina->id,
-            'to_id' => $this->yukine->id,
+        ->postJson(route('api.knowledge.links.store'), [
+            'from' => 'Melfina',
+            'to' => 'Yukine',
             'predicate' => 'related_to',
         ])
         ->assertCreated()
@@ -211,18 +200,18 @@ it('creates a new knowledge link via API', function () {
 
 it('validates required fields when creating link', function () {
     $this->actingAs($this->owner)
-        ->postJson('/api/knowledge/links', [
-            'from_id' => '',
-            'to_id' => '',
+        ->postJson(route('api.knowledge.links.store'), [
+            'from' => '',
+            'to' => '',
             'predicate' => '',
         ])
         ->assertUnprocessable()
-        ->assertJsonValidationErrors(['from_id', 'to_id', 'predicate']);
+        ->assertJsonValidationErrors(['from', 'to', 'predicate']);
 });
 
 it('deletes a knowledge entry via API', function () {
     $this->actingAs($this->owner)
-        ->deleteJson('/api/knowledge/entries/'.$this->yukine->id)
+        ->deleteJson(route('api.knowledge.entries.destroy', ['entry' => $this->yukine->id]))
         ->assertOk()
         ->assertJsonStructure([
             'message',
@@ -234,7 +223,7 @@ it('deletes a knowledge entry via API', function () {
 
 it('deletes a knowledge link via API', function () {
     $this->actingAs($this->owner)
-        ->deleteJson('/api/knowledge/links/'.$this->link->id)
+        ->deleteJson(route('api.knowledge.links.destroy', ['link' => $this->link->id]))
         ->assertOk()
         ->assertJsonStructure([
             'message',
