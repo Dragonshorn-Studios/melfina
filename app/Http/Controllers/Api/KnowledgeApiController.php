@@ -76,14 +76,7 @@ class KnowledgeApiController extends Controller
         KnowledgeEntryWriter $writer,
         KnowledgeIdentityResolver $resolver,
     ): JsonResponse {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:200'],
-            'type' => ['required', 'string', Rule::in(KnowledgeEntry::TYPES)],
-            'summary' => ['nullable', 'string', 'max:500'],
-            'state' => ['nullable', 'string', 'max:20000'],
-            'related' => ['nullable', 'string', 'max:4200'],
-            'source' => ['nullable', 'string', 'max:500'],
-        ]);
+        $validated = $request->validate(self::entryRules());
 
         $name = trim($validated['name']);
         $nameLower = KnowledgeName::normalize($name);
@@ -94,9 +87,7 @@ class KnowledgeApiController extends Controller
             ]);
         }
 
-        $collision = KnowledgeEntry::query()
-            ->where('name_lower', $nameLower)
-            ->first();
+        $collision = self::nameCollision($nameLower);
 
         if ($collision !== null) {
             throw ValidationException::withMessages([
@@ -161,13 +152,7 @@ class KnowledgeApiController extends Controller
         $unresolved = $this->unresolvedRelated($result->entry, self::lines($validated['related'] ?? null));
 
         return response()->json([
-            'entry' => [
-                'id' => $result->entry->id,
-                'name' => $result->entry->name,
-                'type' => $result->entry->type,
-                'summary' => $result->entry->summary,
-                'version' => $result->entry->version,
-            ],
+            'entry' => self::entryPayload($result->entry),
             'unresolved_related' => $unresolved,
             'message' => $unresolved === []
                 ? 'Entry created.'
@@ -180,13 +165,7 @@ class KnowledgeApiController extends Controller
      */
     public function updateEntry(Request $request, KnowledgeEntry $entry, KnowledgeEntryWriter $writer): JsonResponse
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:200'],
-            'type' => ['required', 'string', Rule::in(KnowledgeEntry::TYPES)],
-            'summary' => ['nullable', 'string', 'max:500'],
-            'state' => ['nullable', 'string', 'max:20000'],
-            'related' => ['nullable', 'string', 'max:4200'],
-            'source' => ['nullable', 'string', 'max:500'],
+        $validated = $request->validate(self::entryRules() + [
             'verified' => ['nullable', 'boolean'],
             'expected_version' => ['nullable', 'integer', 'min:1'],
         ]);
@@ -194,10 +173,7 @@ class KnowledgeApiController extends Controller
         $name = trim($validated['name']);
         $nameLower = KnowledgeName::normalize($name);
 
-        $collision = KnowledgeEntry::query()
-            ->where('name_lower', $nameLower)
-            ->whereKeyNot($entry->id)
-            ->first();
+        $collision = self::nameCollision($nameLower, $entry->id);
 
         if ($collision !== null) {
             throw ValidationException::withMessages([
@@ -238,13 +214,7 @@ class KnowledgeApiController extends Controller
         }
 
         return response()->json([
-            'entry' => [
-                'id' => $result->entry->id,
-                'name' => $result->entry->name,
-                'type' => $result->entry->type,
-                'summary' => $result->entry->summary,
-                'version' => $result->entry->version,
-            ],
+            'entry' => self::entryPayload($result->entry),
             'message' => 'Entry updated.',
         ]);
     }
@@ -291,18 +261,7 @@ class KnowledgeApiController extends Controller
     {
         $link->load(['fromEntry', 'toEntry']);
 
-        return response()->json([
-            'id' => $link->id,
-            'from' => $link->fromEntry->name,
-            'from_id' => $link->from_entry_id,
-            'to' => $link->toEntry->name,
-            'to_id' => $link->to_entry_id,
-            'predicate' => $link->predicate->value,
-            'confidence' => $link->confidence,
-            'permanent' => $link->permanent,
-            'disputed' => $link->disputed,
-            'status' => $link->status->value,
-        ]);
+        return response()->json(self::linkPayload($link));
     }
 
     /**
@@ -346,17 +305,7 @@ class KnowledgeApiController extends Controller
         $result->link->load(['fromEntry', 'toEntry']);
 
         return response()->json([
-            'link' => [
-                'id' => $result->link->id,
-                'from' => $result->link->fromEntry->name,
-                'from_id' => $result->link->from_entry_id,
-                'to' => $result->link->toEntry->name,
-                'to_id' => $result->link->to_entry_id,
-                'predicate' => $result->link->predicate->value,
-                'confidence' => $result->link->confidence,
-                'permanent' => $result->link->permanent,
-                'disputed' => $result->link->disputed,
-            ],
+            'link' => self::linkPayload($result->link, withStatus: false),
             'message' => 'Link created.',
         ], 201);
     }
@@ -372,10 +321,10 @@ class KnowledgeApiController extends Controller
             'predicate' => ['required', 'string', Rule::in(KnowledgePredicate::values())],
         ]);
 
-        $from = app(KnowledgeIdentityResolver::class)
-            ->resolve(KnowledgeIdentityContext::forOwner(), query: $validated['from']);
-        $to = app(KnowledgeIdentityResolver::class)
-            ->resolve(KnowledgeIdentityContext::forOwner(), query: $validated['to']);
+        $resolver = app(KnowledgeIdentityResolver::class);
+
+        $from = $resolver->resolve(KnowledgeIdentityContext::forOwner(), query: $validated['from']);
+        $to = $resolver->resolve(KnowledgeIdentityContext::forOwner(), query: $validated['to']);
 
         $endError = $this->linkEndError($from) ?? $this->linkEndError($to);
         if ($endError !== null || $from->entry === null || $to->entry === null) {
@@ -400,18 +349,7 @@ class KnowledgeApiController extends Controller
         $result->link->load(['fromEntry', 'toEntry']);
 
         return response()->json([
-            'link' => [
-                'id' => $result->link->id,
-                'from' => $result->link->fromEntry->name,
-                'from_id' => $result->link->from_entry_id,
-                'to' => $result->link->toEntry->name,
-                'to_id' => $result->link->to_entry_id,
-                'predicate' => $result->link->predicate->value,
-                'confidence' => $result->link->confidence,
-                'permanent' => $result->link->permanent,
-                'disputed' => $result->link->disputed,
-                'status' => $result->link->status->value,
-            ],
+            'link' => self::linkPayload($result->link),
             'message' => 'Link updated.',
         ]);
     }
@@ -547,6 +485,81 @@ class KnowledgeApiController extends Controller
             'total' => $entries->total(),
             'last_page' => $entries->lastPage(),
         ]);
+    }
+
+    /**
+     * The entry shape the API answers with after a write.
+     *
+     * @return array<string, mixed>
+     */
+    private static function entryPayload(KnowledgeEntry $entry): array
+    {
+        return [
+            'id' => $entry->id,
+            'name' => $entry->name,
+            'type' => $entry->type,
+            'summary' => $entry->summary,
+            'version' => $entry->version,
+        ];
+    }
+
+    /**
+     * The link shape the API answers with. The status is opt-in: a link
+     * that was just written has nothing to report yet.
+     *
+     * @return array<string, mixed>
+     */
+    private static function linkPayload(KnowledgeLink $link, bool $withStatus = true): array
+    {
+        $payload = [
+            'id' => $link->id,
+            'from' => $link->fromEntry->name,
+            'from_id' => $link->from_entry_id,
+            'to' => $link->toEntry->name,
+            'to_id' => $link->to_entry_id,
+            'predicate' => $link->predicate->value,
+            'confidence' => $link->confidence,
+            'permanent' => $link->permanent,
+            'disputed' => $link->disputed,
+        ];
+
+        if ($withStatus) {
+            $payload['status'] = $link->status->value;
+        }
+
+        return $payload;
+    }
+
+    /**
+     * The rules every entry write shares.
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    private static function entryRules(): array
+    {
+        return [
+            'name' => ['required', 'string', 'max:200'],
+            'type' => ['required', 'string', Rule::in(KnowledgeEntry::TYPES)],
+            'summary' => ['nullable', 'string', 'max:500'],
+            'state' => ['nullable', 'string', 'max:20000'],
+            'related' => ['nullable', 'string', 'max:4200'],
+            'source' => ['nullable', 'string', 'max:500'],
+        ];
+    }
+
+    /**
+     * The entry that already owns this name, if any. An update ignores the
+     * entry it is updating.
+     */
+    private static function nameCollision(string $nameLower, ?int $exceptId = null): ?KnowledgeEntry
+    {
+        $query = KnowledgeEntry::query()->where('name_lower', $nameLower);
+
+        if ($exceptId !== null) {
+            $query->whereKeyNot($exceptId);
+        }
+
+        return $query->first();
     }
 
     /**

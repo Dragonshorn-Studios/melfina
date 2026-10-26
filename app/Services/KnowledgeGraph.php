@@ -375,8 +375,8 @@ class KnowledgeGraph
 
         if ($focusId !== null && $entries->count() > $limit) {
             $keep = $this->focusIds($this->resolver->canonicalId($focusId) ?? $focusId, $hops, $limit);
-            // focusIds() returns a set keyed by entry id; the filter has to
-            // compare against the ids, not against the keys' values.
+            // focusIds() returns a set keyed by entry id; whereIn needs
+            // the ids themselves, not the `true` markers it keeps as values.
             $entries = $entries->whereIn('id', array_keys($keep))->values();
         } elseif ($entries->count() > $limit) {
             $entries = $entries->take($limit)->values();

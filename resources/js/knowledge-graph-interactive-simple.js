@@ -1,6 +1,10 @@
 // Interactive Knowledge Graph Viewer - Lightweight Version
 // No D3.js dependency - uses vanilla JavaScript
 
+// The link forms whose action carries the `/0` placeholder the viewer
+// swaps for the selected link id.
+const LINK_FORM_IDS = ['kg-fix-form', 'kg-confirm-form', 'kg-permanent-form', 'kg-unpermanent-form', 'kg-retract-form'];
+
 const KnowledgeGraphSimple = {
     config: {
         width: 800,
@@ -10,13 +14,10 @@ const KnowledgeGraphSimple = {
         linkWidth: 1.25,
         focusedLinkWidth: 2.5,
         colors: {
-            background: 'var(--color-panel)',
-            node: 'var(--color-cream)',
             nodeFill: 'var(--color-panel)',
             nodeStroke: 'var(--color-cream)',
             focusedNode: 'var(--color-amber)',
             focusedNodeStroke: 'var(--color-amber)',
-            link: 'rgba(138, 155, 176, 0.6)',
             permanentLink: 'var(--color-amber)',
             disputedLink: 'var(--color-danger)',
             text: 'var(--color-cream)',
@@ -27,7 +28,6 @@ const KnowledgeGraphSimple = {
         font: {
             family: 'IBM Plex Mono, ui-monospace, monospace',
             size: 12,
-            small: 10,
             label: 11,
         },
     },
@@ -42,9 +42,9 @@ const KnowledgeGraphSimple = {
         isDragging: false,
         dragStart: null,
         hoveredNode: null,
-        hoveredLink: null,
         draggingNode: null,
         searchQuery: '',
+        savedPositions: {},
         loadingForms: new Set(),
     },
 
@@ -92,6 +92,52 @@ const KnowledgeGraphSimple = {
         return {
             ...this.getAjaxHeaders(),
             'Content-Type': 'application/json',
+        };
+    },
+
+    // The one write path: it sends the request, reports a refused write
+    // the way every panel does, and hands a successful answer to the
+    // caller. `formId` lights the submit button while the request runs.
+    async write(url, { method = 'POST', body = null, headers = null, formId = null, failure = 'Request failed.', onSuccess, onError = null }) {
+        if (formId) {
+            this.setLoading(formId, true);
+        }
+
+        try {
+            const response = await fetch(url, {
+                method,
+                headers: headers ?? this.getAjaxHeaders(),
+                body,
+            });
+
+            if (!response.ok) {
+                const error = await this.readError(response);
+                this.showStatus(error || failure, 'error');
+                return;
+            }
+
+            onSuccess(await response.json());
+        } catch (error) {
+            onError?.(error);
+            this.showStatus('Network error. Please try again.', 'error');
+        } finally {
+            if (formId) {
+                this.setLoading(formId, false);
+            }
+        }
+    },
+
+    // The API answers with `from_id`/`to_id`; the viewer works with
+    // `from`/`to`.
+    toLink(dataLink) {
+        return {
+            id: dataLink.id,
+            from: dataLink.from_id,
+            to: dataLink.to_id,
+            predicate: dataLink.predicate,
+            confidence: dataLink.confidence,
+            permanent: dataLink.permanent,
+            disputed: dataLink.disputed,
         };
     },
 
@@ -226,14 +272,12 @@ const KnowledgeGraphSimple = {
         this.elements.linkLayer = this.createElement('g');
         this.elements.nodeLayer = this.createElement('g');
         this.elements.textLayer = this.createElement('g');
-        this.elements.overlay = this.createElement('g');
 
         svg.appendChild(this.elements.gridLayer);
         svg.appendChild(this.elements.compassLayer);
         svg.appendChild(this.elements.linkLayer);
         svg.appendChild(this.elements.nodeLayer);
         svg.appendChild(this.elements.textLayer);
-        svg.appendChild(this.elements.overlay);
     },
 
     createElement(tag) {
@@ -280,54 +324,28 @@ const KnowledgeGraphSimple = {
         // The link forms carry a `0` placeholder that the viewer swaps for
         // the selected link id. The pristine template is kept so every
         // selection rewrites the action from scratch.
-        ['kg-fix-form', 'kg-confirm-form', 'kg-permanent-form', 'kg-unpermanent-form', 'kg-retract-form']
-            .forEach((id) => {
-                const form = document.getElementById(id);
-                if (form) {
-                    form.dataset.actionTemplate = form.action;
-                }
-            });
+        LINK_FORM_IDS.forEach((id) => {
+            const form = document.getElementById(id);
+            if (form) {
+                form.dataset.actionTemplate = form.action;
+            }
+        });
 
-        // New entity form
-        const newEntityForm = document.getElementById('kg-new-entity-form');
-        if (newEntityForm) {
-            newEntityForm.addEventListener('submit', (e) => this.handleNewEntitySubmit(e));
-        }
+        const submitHandlers = {
+            'kg-new-entity-form': (e) => this.handleNewEntitySubmit(e),
+            'kg-new-link-form': (e) => this.handleNewLinkSubmit(e),
+            'kg-fix-form': (e) => this.handleFixLinkSubmit(e),
+            'kg-confirm-form': (e) => this.handleConfirmLinkSubmit(e),
+            'kg-permanent-form': (e) => this.handlePermanentLinkSubmit(e, true),
+            'kg-unpermanent-form': (e) => this.handlePermanentLinkSubmit(e, false),
+            'kg-retract-form': (e) => this.handleRetractLinkSubmit(e),
+        };
 
-        // New link form
-        const newLinkForm = document.getElementById('kg-new-link-form');
-        if (newLinkForm) {
-            newLinkForm.addEventListener('submit', (e) => this.handleNewLinkSubmit(e));
-        }
-
-        // Link fix form
-        const fixForm = document.getElementById('kg-fix-form');
-        if (fixForm) {
-            fixForm.addEventListener('submit', (e) => this.handleFixLinkSubmit(e));
-        }
-
-        // Confirm form
-        const confirmForm = document.getElementById('kg-confirm-form');
-        if (confirmForm) {
-            confirmForm.addEventListener('submit', (e) => this.handleConfirmLinkSubmit(e));
-        }
-
-        // Permanent forms
-        const permanentForm = document.getElementById('kg-permanent-form');
-        const unpermanentForm = document.getElementById('kg-unpermanent-form');
-        
-        if (permanentForm) {
-            permanentForm.addEventListener('submit', (e) => this.handlePermanentLinkSubmit(e, true));
-        }
-        
-        if (unpermanentForm) {
-            unpermanentForm.addEventListener('submit', (e) => this.handlePermanentLinkSubmit(e, false));
-        }
-
-        // Retract form
-        const retractForm = document.getElementById('kg-retract-form');
-        if (retractForm) {
-            retractForm.addEventListener('submit', (e) => this.handleRetractLinkSubmit(e));
+        for (const [id, handler] of Object.entries(submitHandlers)) {
+            const form = document.getElementById(id);
+            if (form) {
+                form.addEventListener('submit', handler);
+            }
         }
 
         // Node edit button
@@ -399,7 +417,6 @@ const KnowledgeGraphSimple = {
             const option = document.createElement('option');
             option.value = r.name;
             option.dataset.id = r.id;
-            option.dataset.type = r.type;
             resultsEl.appendChild(option);
         });
         
@@ -485,7 +502,6 @@ const KnowledgeGraphSimple = {
         this.elements.linkLayer.setAttribute('transform', transform);
         this.elements.nodeLayer.setAttribute('transform', transform);
         this.elements.textLayer.setAttribute('transform', transform);
-        this.elements.overlay.setAttribute('transform', transform);
     },
 
     handleKeyDown(event) {
@@ -614,8 +630,7 @@ const KnowledgeGraphSimple = {
         this.state.selectedNodeId = null;
         this.state.selectedLinkId = null;
         this.state.hoveredNode = null;
-        this.state.hoveredLink = null;
-        
+
         this.updateURL();
         this.render();
         this.showEmpty();
@@ -640,32 +655,35 @@ const KnowledgeGraphSimple = {
         this.render();
     },
 
+    // The inspector holds three panels; exactly one of them is visible.
+    showInspectorPanel(panel) {
+        const panels = {
+            empty: 'kg-inspect-empty',
+            node: 'kg-inspect-node',
+            link: 'kg-inspect-link',
+        };
+
+        for (const [name, id] of Object.entries(panels)) {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('hidden', name !== panel);
+        }
+    },
+
     showEmpty() {
-        const emptyEl = document.getElementById('kg-inspect-empty');
-        const nodeEl = document.getElementById('kg-inspect-node');
-        const linkEl = document.getElementById('kg-inspect-link');
-        
-        if (emptyEl) emptyEl.classList.remove('hidden');
-        if (nodeEl) nodeEl.classList.add('hidden');
-        if (linkEl) linkEl.classList.add('hidden');
+        this.showInspectorPanel('empty');
     },
 
     showNode(node) {
-        const emptyEl = document.getElementById('kg-inspect-empty');
+        this.showInspectorPanel('node');
+
         const nodeEl = document.getElementById('kg-inspect-node');
-        const linkEl = document.getElementById('kg-inspect-link');
-        
-        if (emptyEl) emptyEl.classList.add('hidden');
-        if (nodeEl) nodeEl.classList.remove('hidden');
-        if (linkEl) linkEl.classList.add('hidden');
-        
         if (nodeEl) {
             const nameEl = nodeEl.querySelector('#kg-node-name');
             const metaEl = nodeEl.querySelector('#kg-node-meta');
             const summaryEl = nodeEl.querySelector('#kg-node-summary');
             const editEl = nodeEl.querySelector('#kg-node-edit');
             const newFromEl = nodeEl.querySelector('#kg-new-from');
-            
+
             if (nameEl) nameEl.textContent = node.name;
             if (metaEl) metaEl.textContent = node.type;
             if (summaryEl) summaryEl.textContent = node.summary || '';
@@ -675,59 +693,52 @@ const KnowledgeGraphSimple = {
     },
 
     showLink(link) {
-        const emptyEl = document.getElementById('kg-inspect-empty');
-        const nodeEl = document.getElementById('kg-inspect-node');
+        this.showInspectorPanel('link');
+
         const linkEl = document.getElementById('kg-inspect-link');
-        
-        if (emptyEl) emptyEl.classList.add('hidden');
-        if (nodeEl) nodeEl.classList.add('hidden');
-        if (linkEl) linkEl.classList.remove('hidden');
-        
+
         if (linkEl) {
             const fromNode = this.state.nodes.find(n => String(n.id) === String(link.from));
             const toNode = this.state.nodes.find(n => String(n.id) === String(link.to));
-            
+
             const labelEl = linkEl.querySelector('#kg-link-label');
             const metaEl = linkEl.querySelector('#kg-link-meta');
             const fixFromEl = linkEl.querySelector('#kg-fix-from');
             const fixToEl = linkEl.querySelector('#kg-fix-to');
             const fixPredicateEl = linkEl.querySelector('#kg-fix-predicate');
-            
+
             if (labelEl) {
                 labelEl.textContent = `${fromNode?.name ?? '?'} —${link.predicate}→ ${toNode?.name ?? '?'}`;
             }
-            
+
             if (metaEl) {
                 const bits = [`confidence ${link.confidence}`];
                 if (link.permanent) bits.push('permanent');
                 if (link.disputed) bits.push('disputed');
                 metaEl.textContent = bits.join(' · ');
             }
-            
+
             if (fixFromEl) fixFromEl.value = fromNode?.name ?? '';
             if (fixToEl) fixToEl.value = toNode?.name ?? '';
             if (fixPredicateEl) fixPredicateEl.value = link.predicate;
-            
-            // Update form actions
-            const fixForm = document.getElementById('kg-fix-form');
-            const confirmForm = document.getElementById('kg-confirm-form');
+
+            // The link forms carry a `/0` placeholder that the viewer
+            // swaps for the selected link id.
+            for (const id of LINK_FORM_IDS) {
+                const form = document.getElementById(id);
+                if (form) {
+                    const template = form.dataset.actionTemplate || form.action;
+                    form.action = template.replace(/\/0(\/|$)/, `/${link.id}$1`);
+                }
+            }
+
             const permanentForm = document.getElementById('kg-permanent-form');
             const unpermanentForm = document.getElementById('kg-unpermanent-form');
-            const retractForm = document.getElementById('kg-retract-form');
-            
-            const linkUrl = (template, id) => template.replace(/\/0(\/|$)/, `/${id}$1`);
-            const actionFor = (form) => linkUrl(form.dataset.actionTemplate || form.action, link.id);
 
-            if (fixForm) fixForm.action = actionFor(fixForm);
-            if (confirmForm) confirmForm.action = actionFor(confirmForm);
-            if (permanentForm) permanentForm.action = actionFor(permanentForm);
-            if (unpermanentForm) unpermanentForm.action = actionFor(unpermanentForm);
-            if (retractForm) retractForm.action = actionFor(retractForm);
-            
             if (permanentForm) permanentForm.classList.toggle('hidden', !!link.permanent);
             if (unpermanentForm) unpermanentForm.classList.toggle('hidden', !link.permanent);
         }
-        
+
         // Update new link form
         const newFromEl = document.getElementById('kg-new-from');
         if (newFromEl) {
@@ -747,33 +758,17 @@ const KnowledgeGraphSimple = {
     renderGrid() {
         const layer = this.elements.gridLayer;
         layer.innerHTML = '';
-        
+
         const gridSize = 50;
         const halfWidth = this.config.width / 2;
         const halfHeight = this.config.height / 2;
-        
+
         for (let x = -halfWidth; x <= halfWidth; x += gridSize) {
-            const line = this.createElement('line');
-            line.setAttribute('x1', String(x));
-            line.setAttribute('y1', String(-halfHeight));
-            line.setAttribute('x2', String(x));
-            line.setAttribute('y2', String(halfHeight));
-            line.setAttribute('stroke', this.config.colors.grid);
-            line.setAttribute('stroke-width', '0.5');
-            line.setAttribute('opacity', '0.3');
-            layer.appendChild(line);
+            layer.appendChild(this.createLine(x, -halfHeight, x, halfHeight, this.config.colors.grid, 0.5, 0.3));
         }
-        
+
         for (let y = -halfHeight; y <= halfHeight; y += gridSize) {
-            const line = this.createElement('line');
-            line.setAttribute('x1', String(-halfWidth));
-            line.setAttribute('y1', String(y));
-            line.setAttribute('x2', String(halfWidth));
-            line.setAttribute('y2', String(y));
-            line.setAttribute('stroke', this.config.colors.grid);
-            line.setAttribute('stroke-width', '0.5');
-            line.setAttribute('opacity', '0.3');
-            layer.appendChild(line);
+            layer.appendChild(this.createLine(-halfWidth, y, halfWidth, y, this.config.colors.grid, 0.5, 0.3));
         }
     },
 
@@ -805,10 +800,9 @@ const KnowledgeGraphSimple = {
             if (!fromNode || !toNode) continue;
             
             const isSelected = String(link.id) === this.state.selectedLinkId;
-            const isHovered = String(link.id) === this.state.hoveredLink;
-            
+
             const stroke = this.getLinkStroke(link, isSelected);
-            
+
             const hitLine = this.createLine(
                 fromNode.x, fromNode.y,
                 toNode.x, toNode.y,
@@ -822,14 +816,6 @@ const KnowledgeGraphSimple = {
             hitLine.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.selectLink(link);
-            });
-            hitLine.addEventListener('mouseenter', () => {
-                this.state.hoveredLink = String(link.id);
-                this.renderLinks();
-            });
-            hitLine.addEventListener('mouseleave', () => {
-                this.state.hoveredLink = null;
-                this.renderLinks();
             });
             layer.appendChild(hitLine);
             
@@ -1208,23 +1194,16 @@ const KnowledgeGraphSimple = {
     // Form handlers
     async handleNewEntitySubmit(e) {
         e.preventDefault();
-        
-        const form = e.target;
-        const formId = form.id;
-        const formData = new FormData(form);
 
-        this.setLoading(formId, true);
-        
-        try {
-            const response = await fetch(form.action, {
-                method: 'POST',
-                headers: this.getAjaxHeaders(),
-                body: formData,
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                
+        const form = e.target;
+
+        await this.write(form.action, {
+            method: 'POST',
+            headers: this.getAjaxHeaders(),
+            body: new FormData(form),
+            formId: form.id,
+            failure: 'Failed to create entry.',
+            onSuccess: (data) => {
                 if (data.entry) {
                     // Focus on new node — the reload it triggers lays the
                     // node out, so no optimistic coordinates are needed.
@@ -1233,49 +1212,27 @@ const KnowledgeGraphSimple = {
                     const partial = (data.unresolved_related || []).length > 0;
                     this.showStatus(data.message || 'Entry created.', partial ? 'info' : 'success');
                 }
-                
+
                 form.reset();
-            } else {
-                const error = await this.readError(response);
-                this.showStatus(error || 'Failed to create entry.', 'error');
-            }
-        } catch (error) {
-            this.showStatus('Network error. Please try again.', 'error');
-        } finally {
-            this.setLoading(formId, false);
-        }
+            },
+        });
     },
 
     async handleNewLinkSubmit(e) {
         e.preventDefault();
-        
+
         const form = e.target;
-        const formId = form.id;
-        const formData = new FormData(form);
-        
-        this.setLoading(formId, true);
-        
-        try {
-            const response = await fetch(form.action, {
-                method: 'POST',
-                headers: this.getAjaxHeaders(),
-                body: formData,
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                
+
+        await this.write(form.action, {
+            method: 'POST',
+            headers: this.getAjaxHeaders(),
+            body: new FormData(form),
+            formId: form.id,
+            failure: 'Failed to create link.',
+            onSuccess: (data) => {
                 if (data.link) {
                     // Add new link to state
-                    const link = {
-                        id: data.link.id,
-                        from: data.link.from_id,
-                        to: data.link.to_id,
-                        predicate: data.link.predicate,
-                        confidence: data.link.confidence,
-                        permanent: data.link.permanent,
-                        disputed: data.link.disputed,
-                    };
+                    const link = this.toLink(data.link);
                     this.state.links.push(link);
 
                     // Focus on from node
@@ -1286,88 +1243,57 @@ const KnowledgeGraphSimple = {
 
                     this.showStatus(data.message || 'Link created.', 'success');
                 }
-                
+
                 form.reset();
-            } else {
-                const error = await this.readError(response);
-                this.showStatus(error || 'Failed to create link.', 'error');
-            }
-        } catch (error) {
-            this.showStatus('Network error. Please try again.', 'error');
-        } finally {
-            this.setLoading(formId, false);
-        }
+            },
+        });
     },
 
     async handleFixLinkSubmit(e) {
         e.preventDefault();
-        
+
         const form = e.target;
-        const formId = form.id;
-        const formData = new FormData(form);
         const linkId = this.state.selectedLinkId;
-        
+
         if (!linkId) return;
-        
-        this.setLoading(formId, true);
-        
-        try {
-            const response = await fetch(`/api/v1/knowledge/links/${linkId}`, {
-                method: 'PUT',
-                headers: this.getAjaxHeaders(),
-                body: formData,
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                
+
+        await this.write(`/api/v1/knowledge/links/${linkId}`, {
+            method: 'PUT',
+            headers: this.getAjaxHeaders(),
+            body: new FormData(form),
+            formId: form.id,
+            failure: 'Failed to fix link.',
+            onSuccess: (data) => {
                 if (data.link) {
                     // Update link in state
                     const index = this.state.links.findIndex(l => String(l.id) === linkId);
                     if (index !== -1) {
-                        this.state.links[index] = {
-                            id: data.link.id,
-                            from: data.link.from_id,
-                            to: data.link.to_id,
-                            predicate: data.link.predicate,
-                            confidence: data.link.confidence,
-                            permanent: data.link.permanent,
-                            disputed: data.link.disputed,
-                        };
+                        this.state.links[index] = this.toLink(data.link);
+
+                        // The inspector has to show the edge as it is now,
+                        // not as it was before the fix.
+                        this.showLink(this.state.links[index]);
                     }
-                    
+
                     this.render();
                     this.showStatus(data.message || 'Link fixed.', 'success');
                 }
-            } else {
-                const error = await this.readError(response);
-                this.showStatus(error || 'Failed to fix link.', 'error');
-            }
-        } catch (error) {
-            this.showStatus('Network error. Please try again.', 'error');
-        } finally {
-            this.setLoading(formId, false);
-        }
+            },
+        });
     },
 
     async handleConfirmLinkSubmit(e) {
         e.preventDefault();
-        
+
         const linkId = this.state.selectedLinkId;
         if (!linkId) return;
-        
-        const formId = 'kg-confirm-form';
-        this.setLoading(formId, true);
-        
-        try {
-            const response = await fetch(`/api/v1/knowledge/links/${linkId}/confirm`, {
-                method: 'POST',
-                headers: this.getAjaxHeaders(),
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                
+
+        await this.write(`/api/v1/knowledge/links/${linkId}/confirm`, {
+            method: 'POST',
+            headers: this.getAjaxHeaders(),
+            formId: 'kg-confirm-form',
+            failure: 'Failed to confirm link.',
+            onSuccess: (data) => {
                 if (data.link) {
                     const link = this.state.links.find(l => String(l.id) === linkId);
                     if (link) {
@@ -1375,38 +1301,25 @@ const KnowledgeGraphSimple = {
                         this.render();
                     }
                 }
-                
+
                 this.showStatus(data.message || 'Link confirmed.', 'success');
-            } else {
-                const error = await this.readError(response);
-                this.showStatus(error || 'Failed to confirm link.', 'error');
-            }
-        } catch (error) {
-            this.showStatus('Network error. Please try again.', 'error');
-        } finally {
-            this.setLoading(formId, false);
-        }
+            },
+        });
     },
 
     async handlePermanentLinkSubmit(e, isPermanent) {
         e.preventDefault();
-        
+
         const linkId = this.state.selectedLinkId;
         if (!linkId) return;
-        
-        const formId = isPermanent ? 'kg-permanent-form' : 'kg-unpermanent-form';
-        this.setLoading(formId, true);
-        
-        try {
-            const response = await fetch(`/api/v1/knowledge/links/${linkId}/permanent`, {
-                method: 'POST',
-                headers: this.getJsonHeaders(),
-                body: JSON.stringify({ permanent: isPermanent }),
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                
+
+        await this.write(`/api/v1/knowledge/links/${linkId}/permanent`, {
+            method: 'POST',
+            headers: this.getJsonHeaders(),
+            body: JSON.stringify({ permanent: isPermanent }),
+            formId: isPermanent ? 'kg-permanent-form' : 'kg-unpermanent-form',
+            failure: 'Failed to update permanent status.',
+            onSuccess: (data) => {
                 if (data.link) {
                     const link = this.state.links.find(l => String(l.id) === linkId);
                     if (link) {
@@ -1415,56 +1328,36 @@ const KnowledgeGraphSimple = {
                         this.render();
                     }
                 }
-                
+
                 this.showStatus(data.message || (isPermanent ? 'Link marked permanent.' : 'Permanent lock lifted.'), 'success');
-            } else {
-                const error = await this.readError(response);
-                this.showStatus(error || 'Failed to update permanent status.', 'error');
-            }
-        } catch (error) {
-            this.showStatus('Network error. Please try again.', 'error');
-        } finally {
-            this.setLoading(formId, false);
-        }
+            },
+        });
     },
 
     async handleRetractLinkSubmit(e) {
         e.preventDefault();
-        
+
         const linkId = this.state.selectedLinkId;
         if (!linkId) return;
-        
+
         if (!confirm('Retract this link? Only you can bring it back — agents cannot re-assert it.')) {
             return;
         }
-        
-        const formId = 'kg-retract-form';
-        this.setLoading(formId, true);
-        
-        try {
-            const response = await fetch(`/api/v1/knowledge/links/${linkId}/retract`, {
-                method: 'POST',
-                headers: this.getAjaxHeaders(),
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                
+
+        await this.write(`/api/v1/knowledge/links/${linkId}/retract`, {
+            method: 'POST',
+            headers: this.getAjaxHeaders(),
+            formId: 'kg-retract-form',
+            failure: 'Failed to retract link.',
+            onSuccess: (data) => {
                 // Remove link from state
                 this.state.links = this.state.links.filter(l => String(l.id) !== linkId);
-                
+
                 this.clearSelection();
-                
+
                 this.showStatus(data.message || 'Link retracted.', 'success');
-            } else {
-                const error = await this.readError(response);
-                this.showStatus(error || 'Failed to retract link.', 'error');
-            }
-        } catch (error) {
-            this.showStatus('Network error. Please try again.', 'error');
-        } finally {
-            this.setLoading(formId, false);
-        }
+            },
+        });
     },
 
     handleNodeEdit(e) {
@@ -1490,58 +1383,40 @@ const KnowledgeGraphSimple = {
     },
 
     async deleteNode(nodeId) {
-        try {
-            const response = await fetch(`/api/v1/knowledge/entries/${nodeId}`, {
-                method: 'DELETE',
-                headers: this.getAjaxHeaders(),
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                
+        await this.write(`/api/v1/knowledge/entries/${nodeId}`, {
+            method: 'DELETE',
+            headers: this.getAjaxHeaders(),
+            failure: 'Failed to delete node.',
+            onError: (error) => console.error('Error deleting node:', error),
+            onSuccess: (data) => {
                 this.state.nodes = this.state.nodes.filter(n => String(n.id) !== nodeId);
-                this.state.links = this.state.links.filter(l => 
+                this.state.links = this.state.links.filter(l =>
                     String(l.from) !== nodeId && String(l.to) !== nodeId
                 );
-                
+
                 this.clearSelection();
-                
+
                 this.showStatus(data.message || 'Node deleted.', 'success');
                 this.render();
-            } else {
-                const error = await this.readError(response);
-                this.showStatus(error || 'Failed to delete node.', 'error');
-            }
-        } catch (error) {
-            console.error('Error deleting node:', error);
-            this.showStatus('Network error. Please try again.', 'error');
-        }
+            },
+        });
     },
 
     async deleteLink(linkId) {
-        try {
-            const response = await fetch(`/api/v1/knowledge/links/${linkId}`, {
-                method: 'DELETE',
-                headers: this.getAjaxHeaders(),
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                
+        await this.write(`/api/v1/knowledge/links/${linkId}`, {
+            method: 'DELETE',
+            headers: this.getAjaxHeaders(),
+            failure: 'Failed to delete link.',
+            onError: (error) => console.error('Error deleting link:', error),
+            onSuccess: (data) => {
                 this.state.links = this.state.links.filter(l => String(l.id) !== linkId);
-                
+
                 this.clearSelection();
-                
+
                 this.showStatus(data.message || 'Link deleted.', 'success');
                 this.render();
-            } else {
-                const error = await this.readError(response);
-                this.showStatus(error || 'Failed to delete link.', 'error');
-            }
-        } catch (error) {
-            console.error('Error deleting link:', error);
-            this.showStatus('Network error. Please try again.', 'error');
-        }
+            },
+        });
     },
 
     showStatus(message, type = 'info') {
