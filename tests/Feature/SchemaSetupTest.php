@@ -105,6 +105,20 @@ it('keeps login, logout, and health reachable while migrations are pending', fun
     });
 });
 
+it('answers the knowledge API with 503 until migrations finish', function () {
+    $owner = User::factory()->owner()->create();
+
+    withPendingMigration(function () use ($owner) {
+        $this->actingAs($owner)
+            ->getJson(route('api.knowledge.graph'))
+            ->assertServiceUnavailable()
+            ->assertJson([
+                'ok' => false,
+                'error' => 'schema outdated',
+            ]);
+    });
+});
+
 it('answers MCP and the HTTP tools API with 503 until migrations finish', function () {
     User::factory()->owner()->create();
     Agent::factory()->withKey()->create();

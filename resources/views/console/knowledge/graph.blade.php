@@ -4,9 +4,10 @@
             <x-page-header eyebrow="KNOWLEDGE" title="Constellation">
                 <x-slot:subtitle>Typed links. Confidence on every edge. Owner can lock one permanent.</x-slot:subtitle>
             </x-page-header>
-            <div class="flex gap-2 font-mono text-xs">
+            <div class="flex gap-2 font-mono text-xs items-center">
                 <a href="{{ route('console.knowledge.index') }}" class="border border-transparent px-3 py-1.5 text-steel hover:border-border hover:text-cream" style="border-radius: var(--radius-console)">entries</a>
                 <span class="border border-amber bg-void px-3 py-1.5 text-amber" style="border-radius: var(--radius-console)">graph</span>
+                <button id="kg-refresh" class="border border-transparent px-3 py-1.5 text-steel hover:border-border hover:text-cream" style="border-radius: var(--radius-console)" title="Reload the graph from the server">refresh</button>
             </div>
         </div>
 
@@ -21,17 +22,24 @@
             <div id="knowledge-graph" class="kg-stage relative min-h-[32rem] lg:min-h-[36rem] lg:h-[min(72vh,40rem)]"
                 data-focus="{{ $focusId ?? '' }}"
                 data-link="{{ request('link') }}">
+                <div class="absolute top-3 left-4 z-10">
+                    <input id="kg-search" type="text" list="kg-search-results" autocomplete="off" placeholder="Search nodes..."
+                        class="border border-border/50 bg-void/80 px-2 py-1 font-mono text-xs text-cream placeholder:text-steel/60 rounded"
+                        style="border-radius: var(--radius-console)">
+                    <datalist id="kg-search-results" class="hidden"></datalist>
+                </div>
                 <svg class="kg-svg absolute inset-0 h-full w-full" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Knowledge constellation"></svg>
                 @if ($snapshot['nodes'] === [])
                     <p class="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-xs text-steel">No entities yet — create one here, or wait for an agent to upsert.</p>
                 @endif
-                <p class="pointer-events-none absolute bottom-3 left-4 font-mono text-[10px] tracking-[0.16em] text-steel/70">NAV · AMBER = PERMANENT · STEEL = INFERRED · DASHED = LOW CONFIDENCE</p>
+                <p class="pointer-events-none absolute bottom-3 left-4 font-mono text-[10px] tracking-[0.16em] text-steel/70">NAV · AMBER = PERMANENT OR FOCUSED · STEEL = INFERRED · DASHED = LOW CONFIDENCE · RED DASHED = DISPUTED</p>
             </div>
 
             <aside class="border-t border-border bg-void/40 lg:border-t-0 lg:border-l">
                 <div id="kg-inspect-empty" class="space-y-3 p-4">
                     <p class="font-mono text-[10px] tracking-[0.16em] text-steel">INSPECT</p>
                     <p class="text-sm text-steel">Click a node to focus it. Click an edge to confirm, fix, retract, or mark it permanent. Create only when the graph is missing a noun.</p>
+                    <p class="font-mono text-xs text-steel/60 mt-2">Press <kbd class="px-1 border border-border/30">F</kbd> to focus, <kbd class="px-1 border border-border/30">+</kbd>/<kbd class="px-1 border border-border/30">-</kbd> to zoom, <kbd class="px-1 border border-border/30">0</kbd> to reset view, <kbd class="px-1 border border-border/30">Esc</kbd> to clear the selection, <kbd class="px-1 border border-border/30">Delete</kbd> to remove what is selected.</p>
                 </div>
 
                 <div id="kg-inspect-node" class="hidden space-y-4 p-4">
@@ -47,7 +55,7 @@
                     <p id="kg-link-label" class="font-mono text-xs text-cream"></p>
                     <p id="kg-link-meta" class="font-mono text-xs text-steel"></p>
 
-                    <form id="kg-fix-form" method="POST" class="space-y-2">
+                    <form id="kg-fix-form" method="POST" action="{{ route('api.knowledge.links.update', ['link' => 0]) }}" class="space-y-2" data-ajax="true">
                         @csrf
                         @method('PUT')
                         <label class="block font-mono text-[10px] tracking-[0.12em] text-steel">
@@ -76,32 +84,35 @@
                     </form>
 
                     <div class="flex flex-wrap gap-2">
-                        <form id="kg-confirm-form" method="POST">
+                        <form id="kg-confirm-form" method="POST" action="{{ route('api.knowledge.links.confirm', ['link' => 0]) }}" data-ajax="true">
                             @csrf
-                            @method('PUT')
                             <button type="submit" class="border border-amber bg-amber px-3 py-1 font-mono text-xs font-semibold text-void hover:bg-amber-dim" style="border-radius: var(--radius-console)">confirm</button>
                         </form>
-                        <form id="kg-permanent-form" method="POST">
+                        <form id="kg-permanent-form" method="POST" action="{{ route('api.knowledge.links.permanent', ['link' => 0]) }}" data-ajax="true">
                             @csrf
-                            @method('PUT')
                             <input type="hidden" name="permanent" value="1">
                             <button type="submit" class="border border-amber px-3 py-1 font-mono text-xs text-amber hover:bg-void" style="border-radius: var(--radius-console)">mark permanent</button>
                         </form>
-                        <form id="kg-unpermanent-form" method="POST" class="hidden">
+                        <form id="kg-unpermanent-form" method="POST" action="{{ route('api.knowledge.links.permanent', ['link' => 0]) }}" class="hidden" data-ajax="true">
                             @csrf
-                            @method('PUT')
                             <input type="hidden" name="permanent" value="0">
                             <button type="submit" class="border border-border px-3 py-1 font-mono text-xs text-steel hover:border-amber hover:text-amber" style="border-radius: var(--radius-console)">lift lock</button>
                         </form>
-                        <x-confirm-form id="kg-retract-form" action="#" method="DELETE" confirm="Retract this link? Agents can still re-assert it unless you recreate and lock it.">
+                        {{-- The viewer confirms this one itself. The shared
+                             gate only picks up forms carrying data-confirm,
+                             and it submits them natively — which would
+                             bypass the in-page fetch and land the browser
+                             on a JSON body. --}}
+                        <form id="kg-retract-form" method="POST" action="{{ route('api.knowledge.links.retract', ['link' => 0]) }}" data-ajax="true">
+                            @csrf
                             <button type="submit" class="font-mono text-xs text-danger hover:text-cream">retract</button>
-                        </x-confirm-form>
+                        </form>
                     </div>
                 </div>
 
                 <div class="border-t border-border p-4">
                     <p class="font-mono text-[10px] tracking-[0.16em] text-steel">NEW LINK</p>
-                    <form method="POST" action="{{ route('console.knowledge.links.store') }}" class="mt-3 space-y-2">
+                    <form id="kg-new-link-form" method="POST" action="{{ route('api.knowledge.links.store') }}" class="mt-3 space-y-2" data-ajax="true">
                         @csrf
                         <label class="block font-mono text-[10px] text-steel">
                             from
@@ -141,9 +152,8 @@
 
                 <div class="border-t border-border p-4">
                     <p class="font-mono text-[10px] tracking-[0.16em] text-steel">NEW ENTITY</p>
-                    <form method="POST" action="{{ route('console.knowledge.store') }}" class="mt-3 space-y-2">
+                    <form id="kg-new-entity-form" method="POST" action="{{ route('api.knowledge.entries.store') }}" class="mt-3 space-y-2" data-ajax="true">
                         @csrf
-                        <input type="hidden" name="return" value="graph">
                         <label class="block font-mono text-[10px] text-steel">
                             name
                             <input type="text" name="name" required maxlength="200"
@@ -179,6 +189,5 @@
         </datalist>
 
         <script type="application/json" id="kg-data">@json($snapshot)</script>
-        <script type="application/json" id="kg-routes">@json($routes)</script>
     </x-console-panel>
 </x-console-layout>

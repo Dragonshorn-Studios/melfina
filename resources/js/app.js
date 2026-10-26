@@ -1,4 +1,5 @@
-import './knowledge-graph.js';
+// The knowledge graph viewer — plain SVG, no chart library.
+import './knowledge-graph-interactive-simple.js';
 
 // Styled confirmation for destructive console forms: any <form> with a
 // data-confirm="…" attribute is intercepted and gated behind the shared

@@ -4,6 +4,7 @@ use App\Models\KnowledgeAuthorKind;
 use App\Models\KnowledgeEntry;
 use App\Models\KnowledgeIdentifierKind;
 use App\Models\KnowledgeLink;
+use App\Models\KnowledgeLinkStatus;
 use App\Models\KnowledgePredicate;
 use App\Models\User;
 use App\Services\KnowledgeGraph;
@@ -165,4 +166,131 @@ it('is owner-only', function () {
         'from' => 'Yukine', 'to' => 'Botbox', 'predicate' => 'runs_on',
     ])->assertForbidden();
     $this->actingAs($plain)->put(route('console.knowledge.links.permanent', $link), ['permanent' => '1'])->assertForbidden();
+});
+
+it('points the constellation forms at the json api', function () {
+    $this->actingAs($this->owner)
+        ->get(route('console.knowledge.graph'))
+        ->assertOk()
+        ->assertSee(route('api.knowledge.entries.store'), false)
+        ->assertSee(route('api.knowledge.links.store'), false)
+        ->assertSee(route('api.knowledge.links.retract', ['link' => 0]), false)
+        ->assertSee('list="kg-search-results"', false);
+});
+
+it('keeps the markup the viewer reads in place', function () {
+    // The viewer looks these ids up by name and rewrites the `/0`
+    // placeholder in the link actions with the selected link id. A renamed
+    // id silently disables a button; a changed action shape sends every
+    // link action to id 0.
+    $response = $this->actingAs($this->owner)
+        ->get(route('console.knowledge.graph'))
+        ->assertOk();
+
+    foreach ([
+        'kg-search', 'kg-search-results', 'kg-data', 'kg-refresh',
+        'kg-new-entity-form', 'kg-new-link-form', 'kg-new-from',
+        'kg-fix-form', 'kg-confirm-form', 'kg-permanent-form',
+        'kg-unpermanent-form', 'kg-retract-form',
+        'kg-inspect-empty', 'kg-inspect-node', 'kg-inspect-link',
+        'kg-node-edit',
+    ] as $id) {
+        $response->assertSee('id="'.$id.'"', false);
+    }
+
+    // The CSRF token the viewer sends back on writes.
+    $response->assertSee('name="csrf-token"', false);
+
+    // The action templates the viewer rewrites per link.
+    $response->assertSee(route('api.knowledge.links.update', ['link' => 0]), false)
+        ->assertSee(route('api.knowledge.links.confirm', ['link' => 0]), false)
+        ->assertSee(route('api.knowledge.links.permanent', ['link' => 0]), false)
+        ->assertSee(route('api.knowledge.links.retract', ['link' => 0]), false);
+});
+
+it('renders a csrf token inside every form on the page', function () {
+    $html = $this->actingAs($this->owner)
+        ->get(route('console.knowledge.graph'))
+        ->assertOk()
+        ->getContent();
+
+    $dom = new DOMDocument;
+    @$dom->loadHTML($html);
+    $xpath = new DOMXPath($dom);
+
+    // An opening tag that is not closed swallows the token input into the
+    // form's attribute list, and the form then submits without one.
+    foreach ([
+        'kg-fix-form', 'kg-confirm-form', 'kg-permanent-form',
+        'kg-unpermanent-form', 'kg-retract-form',
+        'kg-new-link-form', 'kg-new-entity-form',
+    ] as $id) {
+        $tokens = $xpath->query("//form[@id='{$id}']//input[@name='_token']");
+
+        expect($tokens->length)->toBe(1);
+    }
+});
+
+it('sends the viewer writes in a shape php can parse', function () {
+    $source = file_get_contents(resource_path('js/knowledge-graph-interactive-simple.js'));
+
+    // PHP only fills the input bag for POST and for url-encoded bodies - a
+    // multipart PUT arrives empty, so the fix request has to go as JSON.
+    preg_match('/async handleFixLinkSubmit.*?\n    \},/s', $source, $matches);
+    $fixHandler = $matches[0] ?? '';
+
+    expect($fixHandler)->toContain('getJsonHeaders()')
+        // Reading the form's fields with FormData is fine; sending it as
+        // the request body is what php never parses.
+        ->and($fixHandler)->not->toContain('body: new FormData(form)');
+
+    // A freshly created entry is not in the snapshot yet, so focusNode has
+    // to reload instead of giving up on an unknown id.
+    preg_match('/    focusNode\(nodeId\).*?\n    \},/s', $source, $matches);
+    $focus = $matches[0] ?? '';
+
+    expect($focus)->toContain('this.loadData(nodeId)')
+        ->and($focus)->not->toContain('if (!node) return;');
+});
+
+it('does not let a console fix certify a link or revive a retracted one', function () {
+    $this->graph->connect(
+        'grokbot',
+        KnowledgeAuthorKind::Agent,
+        'Yukine',
+        'Botbox',
+        KnowledgePredicate::RelatedTo,
+    );
+
+    $asserted = KnowledgeLink::query()
+        ->where('predicate', KnowledgePredicate::RelatedTo->value)
+        ->sole();
+
+    $this->actingAs($this->owner)
+        ->put(route('console.knowledge.links.update', $asserted), [
+            'from' => 'Melfina',
+            'to' => 'Botbox',
+            'predicate' => 'related_to',
+        ])
+        ->assertRedirect();
+
+    // Fixing the endpoints is not an owner attestation.
+    expect($asserted->fresh()->confidence)->toBe(220)
+        ->and($asserted->fresh()->status)->toBe(KnowledgeLinkStatus::Active);
+
+    $this->actingAs($this->owner)
+        ->delete(route('console.knowledge.links.destroy', $asserted))
+        ->assertRedirect();
+
+    $this->actingAs($this->owner)
+        ->put(route('console.knowledge.links.update', $asserted), [
+            'from' => 'Yukine',
+            'to' => 'Botbox',
+            'predicate' => 'related_to',
+        ])
+        ->assertRedirect();
+
+    // A retracted link stays retracted until the owner confirms it again.
+    expect($asserted->fresh()->confidence)->toBe(0)
+        ->and($asserted->fresh()->status)->toBe(KnowledgeLinkStatus::Retracted);
 });

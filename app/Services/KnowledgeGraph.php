@@ -375,7 +375,9 @@ class KnowledgeGraph
 
         if ($focusId !== null && $entries->count() > $limit) {
             $keep = $this->focusIds($this->resolver->canonicalId($focusId) ?? $focusId, $hops, $limit);
-            $entries = $entries->whereIn('id', $keep)->values();
+            // focusIds() returns a set keyed by entry id; whereIn needs
+            // the ids themselves, not the `true` markers it keeps as values.
+            $entries = $entries->whereIn('id', array_keys($keep))->values();
         } elseif ($entries->count() > $limit) {
             $entries = $entries->take($limit)->values();
         }
@@ -430,11 +432,14 @@ class KnowledgeGraph
             $kinds[$obs->author] = $obs->author_kind;
             $isOwner = $obs->author_kind === KnowledgeAuthorKind::Owner;
 
+            // A link_fix corrects the endpoints of a link that already
+            // exists; it is not an assertion that the link holds, so it
+            // counts neither towards the owner's confidence nor towards
+            // reviving a link the owner retracted (docs/knowledge-graph.md).
             if (in_array($obs->kind, [
                 KnowledgeObservationKind::LinkAssert,
                 KnowledgeObservationKind::OwnerConfirm,
                 KnowledgeObservationKind::OwnerPermanent,
-                KnowledgeObservationKind::LinkFix,
             ], true)) {
                 $asserts[$obs->author] = ($asserts[$obs->author] ?? 0) + 1;
                 if ($isOwner) {
