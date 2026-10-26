@@ -1,7 +1,4 @@
-// Import the knowledge graph modules
-// D3 version (if installed): import './knowledge-graph-interactive.js';
-// Lightweight version (no dependencies):
-import './knowledge-graph.js';
+// The knowledge graph viewer — plain SVG, no chart library.
 import './knowledge-graph-interactive-simple.js';
 
 // Styled confirmation for destructive console forms: any <form> with a

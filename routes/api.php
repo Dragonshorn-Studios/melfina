@@ -1,11 +1,16 @@
 <?php
 
 use App\Http\Controllers\Api\KnowledgeApiController;
-use App\Models\KnowledgeEntry;
-use App\Models\KnowledgeLink;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['web', 'auth', 'owner', 'throttle:60,1'])->prefix('api/v1/knowledge')->group(function () {
+// `routes/api.php` is mounted by bootstrap/app.php with the `api` prefix
+// already applied, so this group only adds the version segment: the
+// public path is /api/v1/knowledge/... — do not repeat the `api` prefix.
+//
+// The `web` group keeps the session that `auth` reads, which also means the
+// group runs under CSRF verification. `schema` answers 503 while migrations
+// are pending instead of failing on a missing table.
+Route::middleware(['web', 'auth', 'owner', 'schema', 'throttle:60,1'])->prefix('v1/knowledge')->group(function () {
     // Graph operations
     Route::get('/graph', [KnowledgeApiController::class, 'graph'])->name('api.knowledge.graph');
 

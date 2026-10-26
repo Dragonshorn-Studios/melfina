@@ -23,7 +23,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'oauth/token',
             'oauth/token/refresh',
             'oauth/revoke',
-            'api/*',
         ]);
         $middleware->appendToGroup('web', [
             PersistMcpConsent::class,

@@ -45,8 +45,6 @@ const KnowledgeGraphSimple = {
         hoveredLink: null,
         draggingNode: null,
         searchQuery: '',
-        predicates: [],
-        types: [],
         loadingForms: new Set(),
     },
 
@@ -54,6 +52,30 @@ const KnowledgeGraphSimple = {
     getCsrfToken() {
         const meta = document.querySelector('meta[name="csrf-token"]');
         return meta ? meta.content : '';
+    },
+
+    // Read a failed answer, whatever shape it arrives in. A 500 from the
+    // web server is an HTML page, not JSON — reporting that as a network
+    // error hides the real cause.
+    async readError(response) {
+        let message = `Request failed (HTTP ${response.status})`;
+
+        try {
+            const body = await response.text();
+
+            if (body) {
+                try {
+                    const parsed = JSON.parse(body);
+                    message = parsed.message || parsed.error || message;
+                } catch {
+                    message = `${message} — ${body.slice(0, 200)}`;
+                }
+            }
+        } catch {
+            // The body cannot be read; the status is all we have.
+        }
+
+        return message;
     },
 
     // Default headers for AJAX requests
@@ -65,7 +87,14 @@ const KnowledgeGraphSimple = {
         };
     },
 
-    // Update dimensions from SVG element's viewBox
+    // JSON body headers — the CSRF token still has to ride along.
+    getJsonHeaders() {
+        return {
+            ...this.getAjaxHeaders(),
+            'Content-Type': 'application/json',
+        };
+    },
+
     updateDimensions() {
         if (this.elements.svg) {
             const viewBox = this.elements.svg.viewBox?.baseVal;
@@ -80,7 +109,6 @@ const KnowledgeGraphSimple = {
         }
     },
 
-    // Load saved node positions from localStorage
     loadSavedPositions() {
         try {
             const positions = JSON.parse(localStorage.getItem('kg-node-positions') || '{}');
@@ -109,72 +137,45 @@ const KnowledgeGraphSimple = {
             return;
         }
         
-        // Read actual SVG dimensions
         this.updateDimensions();
         
-        // Parse initial data
         this.parseInitialData();
         
-        // Load saved node positions
         this.loadSavedPositions();
         
-        // Apply layout to initial data
         if (this.state.nodes.length > 0) {
             this.applyForceLayout();
         }
         
-        // Load predicates and types
-        await this.loadMetadata();
-        
-        // Setup SVG layers
         this.setupSVG();
         
-        // Setup event listeners
         this.setupEvents();
         
-        // Initial render
         this.render();
         
-        // Load fresh data from API
         await this.loadData();
         
-
     },
 
     parseInitialData() {
         const dataEl = document.getElementById('kg-data');
-        const routesEl = document.getElementById('kg-routes');
-        
-        if (dataEl) {
+
+        if (!dataEl) {
+            return;
+        }
+
+        try {
             const snapshot = JSON.parse(dataEl.textContent);
             this.state.nodes = snapshot.nodes || [];
             this.state.links = snapshot.links || [];
+        } catch (error) {
+            console.error('Failed to parse initial data:', error);
+            this.showStatus('The graph data on this page could not be read.', 'error');
         }
         
         if (this.elements.root) {
             this.state.focusId = this.elements.root.dataset.focus || (this.state.nodes[0]?.id ? String(this.state.nodes[0].id) : null);
             this.state.selectedLinkId = this.elements.root.dataset.link || '';
-        }
-    },
-
-    async loadMetadata() {
-        try {
-            const [predicatesRes, typesRes] = await Promise.all([
-                fetch('/api/v1/knowledge/predicates'),
-                fetch('/api/v1/knowledge/types'),
-            ]);
-            
-            if (predicatesRes.ok) {
-                const data = await predicatesRes.json();
-                this.state.predicates = data.predicates || [];
-            }
-            
-            if (typesRes.ok) {
-                const data = await typesRes.json();
-                this.state.types = data.types || [];
-            }
-        } catch (error) {
-            console.error('Failed to load metadata:', error);
         }
     },
 
@@ -201,24 +202,25 @@ const KnowledgeGraphSimple = {
                 
                 // Apply layout
                 this.applyForceLayout();
-                
+
                 this.updateURL();
                 this.render();
+            } else {
+                this.showStatus(await this.readError(response), 'error');
             }
         } catch (error) {
             console.error('Failed to load graph data:', error);
+            this.showStatus('Could not reach the server. Please try again.', 'error');
         }
     },
 
     setupSVG() {
         const svg = this.elements.svg;
         
-        // Clear existing content
         while (svg.firstChild) {
             svg.removeChild(svg.firstChild);
         }
 
-        // Create layers
         this.elements.gridLayer = this.createElement('g');
         this.elements.compassLayer = this.createElement('g');
         this.elements.linkLayer = this.createElement('g');
@@ -275,6 +277,17 @@ const KnowledgeGraphSimple = {
     },
 
     setupFormHandlers() {
+        // The link forms carry a `0` placeholder that the viewer swaps for
+        // the selected link id. The pristine template is kept so every
+        // selection rewrites the action from scratch.
+        ['kg-fix-form', 'kg-confirm-form', 'kg-permanent-form', 'kg-unpermanent-form', 'kg-retract-form']
+            .forEach((id) => {
+                const form = document.getElementById(id);
+                if (form) {
+                    form.dataset.actionTemplate = form.action;
+                }
+            });
+
         // New entity form
         const newEntityForm = document.getElementById('kg-new-entity-form');
         if (newEntityForm) {
@@ -345,15 +358,29 @@ const KnowledgeGraphSimple = {
                     if (response.ok) {
                         const data = await response.json();
                         this.updateSearchResults(data.results || []);
+                    } else {
+                        this.showStatus(await this.readError(response), 'error');
                     }
                 } catch (error) {
                     console.error('Search failed:', error);
+                    this.showStatus('Could not reach the server. Please try again.', 'error');
                 }
             }, 300);
         });
 
         searchInput.addEventListener('blur', () => {
             setTimeout(() => this.updateSearchResults([]), 200);
+        });
+
+        // Picking a name from the results focuses that entity.
+        searchInput.addEventListener('change', (e) => {
+            const option = [...searchInput.list?.options ?? []]
+                .find((candidate) => candidate.value === e.target.value);
+
+            if (option?.dataset.id) {
+                this.focusNode(option.dataset.id);
+                e.target.value = '';
+            }
         });
     },
 
@@ -379,16 +406,19 @@ const KnowledgeGraphSimple = {
         resultsEl.classList.remove('hidden');
     },
 
-    // Pan/Zoom handlers
     handleWheel(e) {
         e.preventDefault();
         
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
         const svg = this.elements.svg;
+        const ctm = svg.getScreenCTM();
+        if (!ctm) {
+            return;
+        }
         const pt = svg.createSVGPoint();
         pt.x = e.clientX;
         pt.y = e.clientY;
-        const mousePos = pt.matrixTransform(svg.getScreenCTM().inverse());
+        const mousePos = pt.matrixTransform(ctm.inverse());
         
         // Zoom towards mouse position
         this.state.transform.k *= delta;
@@ -458,10 +488,11 @@ const KnowledgeGraphSimple = {
         this.elements.overlay.setAttribute('transform', transform);
     },
 
-    // Keyboard handlers
     handleKeyDown(event) {
-        // Ignore if typing in an input
-        if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+        // Ignore if typing in a field — Delete/Backspace is a destructive
+        // shortcut and must not fire from inside the inspector forms.
+        const tag = event.target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || event.target.isContentEditable) {
             return;
         }
 
@@ -520,21 +551,25 @@ const KnowledgeGraphSimple = {
         this.state.focusId = String(nodeId);
         this.state.selectedNodeId = String(nodeId);
         this.state.selectedLinkId = null;
-        
-        // Center view on node
-        const centerX = this.config.width / 2;
-        const centerY = this.config.height / 2;
-        
-        this.state.transform.x = centerX - node.x;
-        this.state.transform.y = centerY - node.y;
-        this.state.transform.k = 1;
-        
-        this.applyTransform();
+
         this.updateURL();
         this.showNode(node);
-        
-        // Reload data focused on this node
-        this.loadData(nodeId);
+
+        // Reload data focused on this node, then centre on where it landed.
+        // Centring before the layout would use stale (or missing) coordinates
+        // and poison the view transform with NaN.
+        this.loadData(nodeId).then(() => {
+            const laid = this.state.nodes.find(n => String(n.id) === String(nodeId));
+            if (!laid || !Number.isFinite(laid.x) || !Number.isFinite(laid.y)) {
+                return;
+            }
+
+            this.state.transform.x = (this.config.width / 2) - laid.x;
+            this.state.transform.y = (this.config.height / 2) - laid.y;
+            this.state.transform.k = 1;
+
+            this.applyTransform();
+        });
     },
 
     // URL management
@@ -575,7 +610,6 @@ const KnowledgeGraphSimple = {
         }
     },
 
-    // Selection management
     clearSelection() {
         this.state.selectedNodeId = null;
         this.state.selectedLinkId = null;
@@ -606,7 +640,6 @@ const KnowledgeGraphSimple = {
         this.render();
     },
 
-    // Display functions
     showEmpty() {
         const emptyEl = document.getElementById('kg-inspect-empty');
         const nodeEl = document.getElementById('kg-inspect-node');
@@ -683,12 +716,13 @@ const KnowledgeGraphSimple = {
             const retractForm = document.getElementById('kg-retract-form');
             
             const linkUrl = (template, id) => template.replace(/\/0(\/|$)/, `/${id}$1`);
-            
-            if (fixForm) fixForm.action = linkUrl(fixForm.action, link.id);
-            if (confirmForm) confirmForm.action = linkUrl(confirmForm.action, link.id);
-            if (permanentForm) permanentForm.action = linkUrl(permanentForm.action, link.id);
-            if (unpermanentForm) unpermanentForm.action = linkUrl(unpermanentForm.action, link.id);
-            if (retractForm) retractForm.action = linkUrl(retractForm.action, link.id);
+            const actionFor = (form) => linkUrl(form.dataset.actionTemplate || form.action, link.id);
+
+            if (fixForm) fixForm.action = actionFor(fixForm);
+            if (confirmForm) confirmForm.action = actionFor(confirmForm);
+            if (permanentForm) permanentForm.action = actionFor(permanentForm);
+            if (unpermanentForm) unpermanentForm.action = actionFor(unpermanentForm);
+            if (retractForm) retractForm.action = actionFor(retractForm);
             
             if (permanentForm) permanentForm.classList.toggle('hidden', !!link.permanent);
             if (unpermanentForm) unpermanentForm.classList.toggle('hidden', !link.permanent);
@@ -702,7 +736,6 @@ const KnowledgeGraphSimple = {
         }
     },
 
-    // Render functions
     render() {
         this.renderGrid();
         this.renderCompass();
@@ -774,10 +807,8 @@ const KnowledgeGraphSimple = {
             const isSelected = String(link.id) === this.state.selectedLinkId;
             const isHovered = String(link.id) === this.state.hoveredLink;
             
-            // Calculate stroke properties
             const stroke = this.getLinkStroke(link, isSelected);
             
-            // Create hit detection area (thicker, transparent)
             const hitLine = this.createLine(
                 fromNode.x, fromNode.y,
                 toNode.x, toNode.y,
@@ -802,7 +833,6 @@ const KnowledgeGraphSimple = {
             });
             layer.appendChild(hitLine);
             
-            // Create visible line
             const line = this.createLine(
                 fromNode.x, fromNode.y,
                 toNode.x, toNode.y,
@@ -818,7 +848,6 @@ const KnowledgeGraphSimple = {
             }
             layer.appendChild(line);
             
-            // Add label
             const mx = (fromNode.x + toNode.x) / 2;
             const my = (fromNode.y + toNode.y) / 2;
             const label = this.createText(mx, my - 8, link.predicate, {
@@ -876,12 +905,10 @@ const KnowledgeGraphSimple = {
             g.setAttribute('data-node-id', String(node.id));
             g.style.cursor = 'pointer';
             
-            // Outer circle (for hover effect)
             const outerRadius = isHovered ? 20 : 16;
             const outerCircle = this.createCircle(node.x, node.y, outerRadius, 'transparent', 'transparent', 0);
             g.appendChild(outerCircle);
             
-            // Main circle
             const radius = isFocused ? this.config.focusedNodeRadius : this.config.nodeRadius;
             const strokeWidth = isFocused ? 2 : 1.25;
             const strokeColor = isFocused ? this.config.colors.focusedNodeStroke : this.config.colors.nodeStroke;
@@ -890,7 +917,6 @@ const KnowledgeGraphSimple = {
             const circle = this.createCircle(node.x, node.y, radius, fillColor, strokeColor, strokeWidth);
             g.appendChild(circle);
             
-            // Click handler
             g.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.selectNode(node);
@@ -931,6 +957,10 @@ const KnowledgeGraphSimple = {
             const positions = JSON.parse(localStorage.getItem('kg-node-positions') || '{}');
             positions[node.id] = { x: node.x, y: node.y };
             localStorage.setItem('kg-node-positions', JSON.stringify(positions));
+
+            // Keep the in-memory copy in step, or the next layout snaps the
+            // node back to where it was before the drag.
+            this.state.savedPositions = positions;
         } catch (e) {
             console.warn('Failed to save node position:', e);
         }
@@ -975,12 +1005,12 @@ const KnowledgeGraphSimple = {
         layer.innerHTML = '';
         
         for (const node of this.state.nodes) {
-            const isFocused = String(node.id) === this.state.focusId;
-            const isSelected = String(node.id) === this.state.selectedNodeId;
+            if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) {
+                continue;
+            }
+
             const isHovered = String(node.id) === this.state.hoveredNode;
-            
-            const g = this.createElement('g');
-            
+
             // Name label
             const name = this.createText(node.x, node.y + 22, node.name, {
                 'font-size': this.config.font.size,
@@ -989,9 +1019,8 @@ const KnowledgeGraphSimple = {
                 'fill': isHovered ? this.config.colors.text : this.config.colors.textSecondary,
             });
             name.setAttribute('class', 'kg-node-label');
-            
-            g.appendChild(name);
-            layer.appendChild(g);
+
+            layer.appendChild(name);
         }
     },
 
@@ -1034,81 +1063,75 @@ const KnowledgeGraphSimple = {
         return textEl;
     },
 
-    // Layout algorithm
     applyForceLayout() {
         const nodes = this.state.nodes;
         const links = this.state.links;
         const center = { x: this.config.width / 2, y: this.config.height / 2 };
-        
+
         // If no nodes, nothing to layout
         if (nodes.length === 0) return;
-        
-        // Restore saved positions if available
+
+        // Restore saved positions; only the nodes without one are laid out.
+        // A node left without coordinates would render at NaN and vanish.
         const savedPositions = this.state.savedPositions || {};
-        let hasSavedPositions = false;
-        
+        const unplaced = [];
+
         for (const node of nodes) {
-            if (savedPositions[node.id]) {
-                node.x = savedPositions[node.id].x;
-                node.y = savedPositions[node.id].y;
-                hasSavedPositions = true;
+            const saved = savedPositions[node.id];
+            if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+                node.x = saved.x;
+                node.y = saved.y;
+            } else {
+                unplaced.push(node);
             }
         }
-        
-        // If we have saved positions, use them; otherwise apply automatic layout
-        if (!hasSavedPositions) {
-            // If we have a focused node, use hop-based layout
-            if (this.state.focusId) {
-                const focusNode = nodes.find(n => String(n.id) === this.state.focusId);
-                
-                // Position focus at center
-                if (focusNode) {
-                    focusNode.x = center.x;
-                    focusNode.y = center.y;
-                }
-                
-                // Use hop-based layout with concentric circles
-                this.layoutByHops(this.state.focusId, nodes, links, center);
-            } else {
-                // No focus - use spiral layout for all nodes
-                this.layoutSpiral(nodes, center);
-            }
+
+        if (unplaced.length === 0) return;
+
+        // If we have a focused node, use hop-based layout
+        if (this.state.focusId) {
+            this.layoutByHops(this.state.focusId, unplaced, nodes, links, center);
+        } else {
+            // No focus - use spiral layout for all nodes
+            this.layoutSpiral(unplaced, center);
         }
     },
 
     // Layout nodes in concentric circles based on hop distance from focus
-    layoutByHops(focusId, nodes, links, center) {
+    layoutByHops(focusId, nodesToPlace, allNodes, links, center) {
         // Calculate hop distances from focus
-        const hopDistances = this.calculateHopDistances(focusId, nodes, links);
-        
+        const hopDistances = this.calculateHopDistances(focusId, allNodes, links);
+
         // Group nodes by hop distance
         const nodesByHop = {};
-        nodes.forEach(node => {
+        nodesToPlace.forEach(node => {
             const hop = hopDistances[node.id] ?? 0;
             if (!nodesByHop[hop]) {
                 nodesByHop[hop] = [];
             }
             nodesByHop[hop].push(node);
         });
-        
+
         // Sort hop distances
         const hopLevels = Object.keys(nodesByHop).map(Number).sort((a, b) => a - b);
-        
+
         // Position nodes in concentric circles by hop level
         hopLevels.forEach(hop => {
             const hopNodes = nodesByHop[hop];
-            const radius = 150 + (hop * 120);
+            // Hop 0 is the focus itself: dead centre. The outer rings grow
+            // with distance but stay inside the stage, so a node that is far
+            // away (or unconnected) is still visible.
+            const radius = hop === 0 ? 0 : Math.min(150 + (hop * 120), 360);
             const nodeCount = hopNodes.length;
-            
+            const ringOffset = (-Math.PI / 2) + (hop * 0.25);
+
             hopNodes.forEach((node, index) => {
-                const angle = (index / Math.max(nodeCount, 1)) * Math.PI * 2;
-                
-                // Add small random offset for better distribution
-                const randomOffset = ((Math.random() - 0.5) * 0.3); // +/- 30% of angle spacing
-                const finalAngle = angle + randomOffset;
-                
-                node.x = center.x + Math.cos(finalAngle) * radius;
-                node.y = center.y + Math.sin(finalAngle) * radius;
+                // Deterministic spread — a random offset would reshuffle the
+                // constellation on every reload.
+                const angle = ringOffset + ((index / Math.max(nodeCount, 1)) * Math.PI * 2);
+
+                node.x = center.x + Math.cos(angle) * radius;
+                node.y = center.y + Math.sin(angle) * radius;
             });
         });
     },
@@ -1140,7 +1163,7 @@ const KnowledgeGraphSimple = {
             return distances;
         }
         
-        // BFS to calculate hop distances
+        // Breadth-first walk from the focus: every node's hop distance.
         const queue = [];
         const visited = new Set();
         
@@ -1153,7 +1176,6 @@ const KnowledgeGraphSimple = {
             const currentId = current.id;
             const currentDist = current.distance;
             
-            // Find all neighbors of current node
             const neighbors = new Set();
             links.forEach(link => {
                 if (String(link.from) === currentId) {
@@ -1164,7 +1186,6 @@ const KnowledgeGraphSimple = {
                 }
             });
             
-            // Add unvisited neighbors to queue
             neighbors.forEach(id => {
                 if (!visited.has(id)) {
                     visited.add(id);
@@ -1191,10 +1212,7 @@ const KnowledgeGraphSimple = {
         const form = e.target;
         const formId = form.id;
         const formData = new FormData(form);
-        
-        // Add return parameter
-        formData.append('return', 'graph');
-        
+
         this.setLoading(formId, true);
         
         try {
@@ -1208,26 +1226,18 @@ const KnowledgeGraphSimple = {
                 const data = await response.json();
                 
                 if (data.entry) {
-                    // Add new node to state
-                    this.state.nodes.push({
-                        id: data.entry.id,
-                        name: data.entry.name,
-                        type: data.entry.type,
-                        summary: data.entry.summary,
-                    });
-                    
-                    // Focus on new node
+                    // Focus on new node — the reload it triggers lays the
+                    // node out, so no optimistic coordinates are needed.
                     this.focusNode(data.entry.id);
-                    
-                    // Show success message
-                    this.showStatus(data.message || 'Entry created.', 'success');
+
+                    const partial = (data.unresolved_related || []).length > 0;
+                    this.showStatus(data.message || 'Entry created.', partial ? 'info' : 'success');
                 }
                 
-                // Reset form
                 form.reset();
             } else {
-                const error = await response.json();
-                this.showStatus(error.message || 'Failed to create entry.', 'error');
+                const error = await this.readError(response);
+                this.showStatus(error || 'Failed to create entry.', 'error');
             }
         } catch (error) {
             this.showStatus('Network error. Please try again.', 'error');
@@ -1257,7 +1267,7 @@ const KnowledgeGraphSimple = {
                 
                 if (data.link) {
                     // Add new link to state
-                    this.state.links.push({
+                    const link = {
                         id: data.link.id,
                         from: data.link.from_id,
                         to: data.link.to_id,
@@ -1265,21 +1275,22 @@ const KnowledgeGraphSimple = {
                         confidence: data.link.confidence,
                         permanent: data.link.permanent,
                         disputed: data.link.disputed,
-                    });
-                    
+                    };
+                    this.state.links.push(link);
+
                     // Focus on from node
-                    this.focusNode(data.link.from_id);
-                    
+                    this.focusNode(link.from);
+
                     // Select the new link
-                    this.selectLink(data.link);
-                    
+                    this.selectLink(link);
+
                     this.showStatus(data.message || 'Link created.', 'success');
                 }
                 
                 form.reset();
             } else {
-                const error = await response.json();
-                this.showStatus(error.message || 'Failed to create link.', 'error');
+                const error = await this.readError(response);
+                this.showStatus(error || 'Failed to create link.', 'error');
             }
         } catch (error) {
             this.showStatus('Network error. Please try again.', 'error');
@@ -1329,8 +1340,8 @@ const KnowledgeGraphSimple = {
                     this.showStatus(data.message || 'Link fixed.', 'success');
                 }
             } else {
-                const error = await response.json();
-                this.showStatus(error.message || 'Failed to fix link.', 'error');
+                const error = await this.readError(response);
+                this.showStatus(error || 'Failed to fix link.', 'error');
             }
         } catch (error) {
             this.showStatus('Network error. Please try again.', 'error');
@@ -1351,10 +1362,7 @@ const KnowledgeGraphSimple = {
         try {
             const response = await fetch(`/api/v1/knowledge/links/${linkId}/confirm`, {
                 method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                },
+                headers: this.getAjaxHeaders(),
             });
             
             if (response.ok) {
@@ -1370,8 +1378,8 @@ const KnowledgeGraphSimple = {
                 
                 this.showStatus(data.message || 'Link confirmed.', 'success');
             } else {
-                const error = await response.json();
-                this.showStatus(error.message || 'Failed to confirm link.', 'error');
+                const error = await this.readError(response);
+                this.showStatus(error || 'Failed to confirm link.', 'error');
             }
         } catch (error) {
             this.showStatus('Network error. Please try again.', 'error');
@@ -1392,11 +1400,7 @@ const KnowledgeGraphSimple = {
         try {
             const response = await fetch(`/api/v1/knowledge/links/${linkId}/permanent`, {
                 method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                },
+                headers: this.getJsonHeaders(),
                 body: JSON.stringify({ permanent: isPermanent }),
             });
             
@@ -1414,8 +1418,8 @@ const KnowledgeGraphSimple = {
                 
                 this.showStatus(data.message || (isPermanent ? 'Link marked permanent.' : 'Permanent lock lifted.'), 'success');
             } else {
-                const error = await response.json();
-                this.showStatus(error.message || 'Failed to update permanent status.', 'error');
+                const error = await this.readError(response);
+                this.showStatus(error || 'Failed to update permanent status.', 'error');
             }
         } catch (error) {
             this.showStatus('Network error. Please try again.', 'error');
@@ -1430,7 +1434,7 @@ const KnowledgeGraphSimple = {
         const linkId = this.state.selectedLinkId;
         if (!linkId) return;
         
-        if (!confirm('Retract this link? Agents can still re-assert it unless you recreate and lock it.')) {
+        if (!confirm('Retract this link? Only you can bring it back — agents cannot re-assert it.')) {
             return;
         }
         
@@ -1440,10 +1444,7 @@ const KnowledgeGraphSimple = {
         try {
             const response = await fetch(`/api/v1/knowledge/links/${linkId}/retract`, {
                 method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                },
+                headers: this.getAjaxHeaders(),
             });
             
             if (response.ok) {
@@ -1456,8 +1457,8 @@ const KnowledgeGraphSimple = {
                 
                 this.showStatus(data.message || 'Link retracted.', 'success');
             } else {
-                const error = await response.json();
-                this.showStatus(error.message || 'Failed to retract link.', 'error');
+                const error = await this.readError(response);
+                this.showStatus(error || 'Failed to retract link.', 'error');
             }
         } catch (error) {
             this.showStatus('Network error. Please try again.', 'error');
@@ -1478,11 +1479,11 @@ const KnowledgeGraphSimple = {
 
     handleDelete() {
         if (this.state.selectedNodeId) {
-            if (confirm('Delete this node? Its whole version history goes with it.')) {
+            if (confirm('Delete this node? Its links and observations go with it.')) {
                 this.deleteNode(this.state.selectedNodeId);
             }
         } else if (this.state.selectedLinkId) {
-            if (confirm('Delete this link?')) {
+            if (confirm('Delete this link? Its observations go with it.')) {
                 this.deleteLink(this.state.selectedLinkId);
             }
         }
@@ -1492,10 +1493,7 @@ const KnowledgeGraphSimple = {
         try {
             const response = await fetch(`/api/v1/knowledge/entries/${nodeId}`, {
                 method: 'DELETE',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                },
+                headers: this.getAjaxHeaders(),
             });
             
             if (response.ok) {
@@ -1511,8 +1509,8 @@ const KnowledgeGraphSimple = {
                 this.showStatus(data.message || 'Node deleted.', 'success');
                 this.render();
             } else {
-                const error = await response.json();
-                this.showStatus(error.message || 'Failed to delete node.', 'error');
+                const error = await this.readError(response);
+                this.showStatus(error || 'Failed to delete node.', 'error');
             }
         } catch (error) {
             console.error('Error deleting node:', error);
@@ -1524,10 +1522,7 @@ const KnowledgeGraphSimple = {
         try {
             const response = await fetch(`/api/v1/knowledge/links/${linkId}`, {
                 method: 'DELETE',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                },
+                headers: this.getAjaxHeaders(),
             });
             
             if (response.ok) {
@@ -1540,8 +1535,8 @@ const KnowledgeGraphSimple = {
                 this.showStatus(data.message || 'Link deleted.', 'success');
                 this.render();
             } else {
-                const error = await response.json();
-                this.showStatus(error.message || 'Failed to delete link.', 'error');
+                const error = await this.readError(response);
+                this.showStatus(error || 'Failed to delete link.', 'error');
             }
         } catch (error) {
             console.error('Error deleting link:', error);
@@ -1550,11 +1545,9 @@ const KnowledgeGraphSimple = {
     },
 
     showStatus(message, type = 'info') {
-        // Remove existing status messages
         const existing = document.querySelectorAll('.kg-status-message');
         existing.forEach(el => el.remove());
         
-        // Create new status message
         const statusEl = document.createElement('div');
         statusEl.className = `kg-status-message fixed bottom-4 left-4 px-4 py-2 font-mono text-xs rounded ${
             type === 'error' ? 'bg-red-900/50 text-red-400 border border-red-600' :
@@ -1566,17 +1559,18 @@ const KnowledgeGraphSimple = {
         
         document.body.appendChild(statusEl);
         
-        // Auto-remove after 5 seconds
         setTimeout(() => {
             statusEl.remove();
         }, 5000);
     },
 };
 
-// Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     const root = document.getElementById('knowledge-graph');
     if (root) {
-        KnowledgeGraphSimple.init(root);
+        KnowledgeGraphSimple.init(root).catch((error) => {
+            console.error('Failed to start the graph viewer:', error);
+            KnowledgeGraphSimple.showStatus('The graph viewer could not start. Please reload the page.', 'error');
+        });
     }
 });

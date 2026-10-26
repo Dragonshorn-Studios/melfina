@@ -5,12 +5,17 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\KnowledgeAuthorKind;
 use App\Models\KnowledgeEntry;
+use App\Models\KnowledgeEntryRedirect;
+use App\Models\KnowledgeIdentityStatus;
 use App\Models\KnowledgeLink;
 use App\Models\KnowledgeObservationKind;
 use App\Models\KnowledgePredicate;
+use App\Models\User;
 use App\Services\KnowledgeEntryWriter;
 use App\Services\KnowledgeGraph;
 use App\Services\KnowledgeIdentityContext;
+use App\Services\KnowledgeIdentityResolver;
+use App\Services\KnowledgeIdentityResult;
 use App\Support\KnowledgeName;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,16 +28,11 @@ use Illuminate\Validation\ValidationException;
 class KnowledgeApiController extends Controller
 {
     /**
-     * Get the authenticated user's author identifier.
+     * The owner is one identity in the audit log, exactly as the console
+     * pages record it. Confidence is keyed per author string, so a display
+     * name here would split the owner's history in two.
      */
-    private function getAuthorName(Request $request): string
-    {
-        if (!$request->user()) {
-            throw new \Illuminate\Auth\AuthenticationException();
-        }
-        
-        return $request->user()->name;
-    }
+    private const AUTHOR = 'owner';
 
     /**
      * Get the full graph or a focused constellation.
@@ -40,8 +40,8 @@ class KnowledgeApiController extends Controller
     public function graph(Request $request, KnowledgeGraph $graph): JsonResponse
     {
         $focus = $request->integer('focus') ?: null;
-        $hops = $request->integer('hops', 2);
-        $limit = $request->integer('limit', 250);
+        $hops = max(1, min(5, $request->integer('hops', 2)));
+        $limit = max(1, min(500, $request->integer('limit', 250)));
 
         $snapshot = $graph->constellation($focus, $hops, $limit);
 
@@ -60,7 +60,8 @@ class KnowledgeApiController extends Controller
             'summary' => $entry->summary,
             'state' => $entry->state,
             'source' => $entry->source,
-            'verified' => $entry->verified,
+            'verified' => $entry->verified_at !== null,
+            'verified_at' => $entry->verified_at?->toIso8601String(),
             'version' => $entry->version,
             'updated_at' => $entry->updated_at->toIso8601String(),
             'updated_by' => $entry->updated_by,
@@ -70,8 +71,11 @@ class KnowledgeApiController extends Controller
     /**
      * Create a new knowledge entry.
      */
-    public function storeEntry(Request $request, KnowledgeEntryWriter $writer): JsonResponse
-    {
+    public function storeEntry(
+        Request $request,
+        KnowledgeEntryWriter $writer,
+        KnowledgeIdentityResolver $resolver,
+    ): JsonResponse {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:200'],
             'type' => ['required', 'string', Rule::in(KnowledgeEntry::TYPES)],
@@ -84,6 +88,12 @@ class KnowledgeApiController extends Controller
         $name = trim($validated['name']);
         $nameLower = KnowledgeName::normalize($name);
 
+        if (KnowledgeName::isOperatorToken($nameLower)) {
+            throw ValidationException::withMessages([
+                'name' => 'That name is reserved for the installation operator.',
+            ]);
+        }
+
         $collision = KnowledgeEntry::query()
             ->where('name_lower', $nameLower)
             ->first();
@@ -94,15 +104,33 @@ class KnowledgeApiController extends Controller
             ]);
         }
 
+        // The writer resolves a name through aliases, identifiers and the
+        // operator binding, and then *updates* whatever it matched. Resolve
+        // first so a create can never land on an entity the caller did not
+        // name.
+        $resolved = $resolver->resolve(KnowledgeIdentityContext::forOwner(), query: $name);
+
+        if ($resolved->found() && $resolved->entry !== null) {
+            throw ValidationException::withMessages([
+                'name' => "'{$resolved->entry->name}' already exists — update that entry instead of creating a second one.",
+            ]);
+        }
+
+        if ($resolved->status !== KnowledgeIdentityStatus::NotFound) {
+            throw ValidationException::withMessages([
+                'name' => $resolved->error ?? 'Could not create the entry.',
+            ]);
+        }
+
         $result = $writer->upsert(
             context: KnowledgeIdentityContext::forOwner(),
-            author: $this->getAuthorName($request),
+            author: self::AUTHOR,
             authorKind: KnowledgeAuthorKind::Owner,
             entryName: $name,
             entryId: null,
             type: $validated['type'],
             aliases: null,
-            related: self::lines($validated['related'] ?? null),
+            related: $request->has('related') ? self::lines($validated['related'] ?? null) : null,
             fields: [
                 'summary' => $validated['summary'] ?? '',
                 'state' => $validated['state'] ?? '',
@@ -120,6 +148,18 @@ class KnowledgeApiController extends Controller
             ]);
         }
 
+        if (! $result->created) {
+            // Guard: the pre-check above refuses every name that resolves to
+            // an existing entry, so this only fires if the entry appeared
+            // between the two resolutions. Say what actually happened
+            // rather than claiming nothing was written.
+            throw ValidationException::withMessages([
+                'name' => "'{$result->entry->name}' already existed — the write updated that entry instead of creating a new one.",
+            ]);
+        }
+
+        $unresolved = $this->unresolvedRelated($result->entry, self::lines($validated['related'] ?? null));
+
         return response()->json([
             'entry' => [
                 'id' => $result->entry->id,
@@ -128,7 +168,10 @@ class KnowledgeApiController extends Controller
                 'summary' => $result->entry->summary,
                 'version' => $result->entry->version,
             ],
-            'message' => 'Entry created.',
+            'unresolved_related' => $unresolved,
+            'message' => $unresolved === []
+                ? 'Entry created.'
+                : 'Entry created, but these related names did not resolve: '.implode(', ', $unresolved).'.',
         ], 201);
     }
 
@@ -164,13 +207,13 @@ class KnowledgeApiController extends Controller
 
         $result = $writer->upsert(
             context: KnowledgeIdentityContext::forOwner(),
-            author: $this->getAuthorName($request),
+            author: self::AUTHOR,
             authorKind: KnowledgeAuthorKind::Owner,
             entryName: $entry->name,
             entryId: $entry->id,
             type: $validated['type'],
             aliases: null,
-            related: self::lines($validated['related'] ?? null),
+            related: $request->has('related') ? self::lines($validated['related'] ?? null) : null,
             fields: [
                 'summary' => $validated['summary'] ?? '',
                 'state' => $validated['state'] ?? '',
@@ -212,13 +255,13 @@ class KnowledgeApiController extends Controller
     public function deleteEntry(KnowledgeEntry $entry): JsonResponse
     {
         // Check if it's safe to delete
-        if (\App\Models\User::query()->where('operator_entry_id', $entry->id)->exists()) {
+        if (User::query()->where('operator_entry_id', $entry->id)->exists()) {
             throw ValidationException::withMessages([
                 'delete' => 'Detach or replace the operator binding before deleting this person.',
             ]);
         }
 
-        if (\App\Models\KnowledgeEntryRedirect::query()
+        if (KnowledgeEntryRedirect::query()
             ->where('from_entry_id', $entry->id)
             ->orWhere('to_entry_id', $entry->id)
             ->exists()) {
@@ -228,7 +271,7 @@ class KnowledgeApiController extends Controller
         }
 
         $name = $entry->name;
-        
+
         if (! $entry->delete()) {
             throw ValidationException::withMessages([
                 'delete' => 'Failed to delete entry. Please try again.',
@@ -258,7 +301,7 @@ class KnowledgeApiController extends Controller
             'confidence' => $link->confidence,
             'permanent' => $link->permanent,
             'disputed' => $link->disputed,
-            'status' => $link->status->value ?? $link->status,
+            'status' => $link->status->value,
         ]);
     }
 
@@ -277,7 +320,7 @@ class KnowledgeApiController extends Controller
         ]);
 
         $result = $graph->connect(
-            author: $this->getAuthorName($request),
+            author: self::AUTHOR,
             authorKind: KnowledgeAuthorKind::Owner,
             from: $validated['from'],
             to: $validated['to'],
@@ -329,9 +372,9 @@ class KnowledgeApiController extends Controller
             'predicate' => ['required', 'string', Rule::in(KnowledgePredicate::values())],
         ]);
 
-        $from = app(\App\Services\KnowledgeIdentityResolver::class)
+        $from = app(KnowledgeIdentityResolver::class)
             ->resolve(KnowledgeIdentityContext::forOwner(), query: $validated['from']);
-        $to = app(\App\Services\KnowledgeIdentityResolver::class)
+        $to = app(KnowledgeIdentityResolver::class)
             ->resolve(KnowledgeIdentityContext::forOwner(), query: $validated['to']);
 
         $endError = $this->linkEndError($from) ?? $this->linkEndError($to);
@@ -367,6 +410,7 @@ class KnowledgeApiController extends Controller
                 'confidence' => $result->link->confidence,
                 'permanent' => $result->link->permanent,
                 'disputed' => $result->link->disputed,
+                'status' => $result->link->status->value,
             ],
             'message' => 'Link updated.',
         ]);
@@ -412,9 +456,8 @@ class KnowledgeApiController extends Controller
      */
     public function retractLink(Request $request, KnowledgeLink $link, KnowledgeGraph $graph): JsonResponse
     {
-        $fromId = $link->from_entry_id;
-        $graph->connect(
-            author: $this->getAuthorName($request),
+        $result = $graph->connect(
+            author: self::AUTHOR,
             authorKind: KnowledgeAuthorKind::Owner,
             from: $link->fromEntry->name,
             to: $link->toEntry->name,
@@ -425,11 +468,18 @@ class KnowledgeApiController extends Controller
             toId: $link->to_entry_id,
         );
 
+        if (! $result->ok || $result->link === null) {
+            throw ValidationException::withMessages([
+                'link' => $result->error ?? 'Could not retract the link.',
+            ]);
+        }
+
         return response()->json([
             'message' => 'Link retracted.',
             'link' => [
-                'id' => $link->id,
-                'status' => 'retracted',
+                'id' => $result->link->id,
+                'status' => $result->link->status->value,
+                'confidence' => $result->link->confidence,
             ],
         ]);
     }
@@ -477,13 +527,15 @@ class KnowledgeApiController extends Controller
     public function search(Request $request): JsonResponse
     {
         $query = $request->string('q', '');
-        $limit = $request->integer('limit', 10);
-        $page = $request->integer('page', 1);
+        $limit = max(1, min(100, $request->integer('limit', 10)));
+        $page = max(1, $request->integer('page', 1));
 
-        $searchTerm = '%'.strtolower($query).'%';
-        
+        // Normalise the same way the stored name_lower keys are built, and
+        // escape the LIKE wildcards so "100%" cannot match every row.
+        $searchTerm = '%'.self::likePattern(KnowledgeName::normalize($query)).'%';
+
         $entries = KnowledgeEntry::query()
-            ->where('name_lower', 'like', $searchTerm)
+            ->whereRaw('name_lower LIKE ? ESCAPE ?', [$searchTerm, '\\'])
             ->orderBy('name_lower')
             ->paginate($limit, ['id', 'name', 'type'], 'page', $page);
 
@@ -495,6 +547,49 @@ class KnowledgeApiController extends Controller
             'total' => $entries->total(),
             'last_page' => $entries->lastPage(),
         ]);
+    }
+
+    /**
+     * The related names that did not become links. A name that does not
+     * resolve is dropped by the writer, so the owner has to be told rather
+     * than left with a relation that exists in one column and not the other.
+     *
+     * @param  list<string>  $requested
+     * @return list<string>
+     */
+    private function unresolvedRelated(KnowledgeEntry $entry, array $requested): array
+    {
+        if ($requested === []) {
+            return [];
+        }
+
+        $linked = KnowledgeLink::query()
+            ->where('from_entry_id', $entry->id)
+            ->where('predicate', KnowledgePredicate::RelatedTo->value)
+            ->with('toEntry')
+            ->get()
+            ->pluck('toEntry')
+            ->filter()
+            ->map(fn (KnowledgeEntry $target) => KnowledgeName::normalize($target->name))
+            ->all();
+
+        $unresolved = [];
+
+        foreach ($requested as $name) {
+            if (! in_array(KnowledgeName::normalize($name), $linked, true)) {
+                $unresolved[] = $name;
+            }
+        }
+
+        return $unresolved;
+    }
+
+    /**
+     * Escape the LIKE metacharacters so a query is matched literally.
+     */
+    private static function likePattern(string $value): string
+    {
+        return addcslashes($value, '%_\\');
     }
 
     /**
@@ -513,13 +608,13 @@ class KnowledgeApiController extends Controller
             ->all();
     }
 
-    private function linkEndError(\App\Services\KnowledgeIdentityResult $resolved): ?string
+    private function linkEndError(KnowledgeIdentityResult $resolved): ?string
     {
         if ($resolved->found()) {
             return null;
         }
 
-        if ($resolved->status === \App\Models\KnowledgeIdentityStatus::Ambiguous) {
+        if ($resolved->status === KnowledgeIdentityStatus::Ambiguous) {
             return "'{$resolved->input}' matches more than one entity. Use a unique name or resolve the collision first.";
         }
 

@@ -201,7 +201,7 @@
             <div class="mt-8 border-t border-border pt-4">
                 <div class="flex items-center justify-between">
                     <p class="font-mono text-xs tracking-[0.16em] text-steel">VERSION HISTORY</p>
-                    <x-confirm-form action="{{ route('console.knowledge.destroy', $entry) }}" method="DELETE" confirm="Delete '{{ $entry->name }}'? Its whole version history goes with it.">
+                    <x-confirm-form action="{{ route('console.knowledge.destroy', $entry) }}" method="DELETE" confirm="Delete '{{ $entry->name }}'? Its links and observations go with it.">
                         <button type="submit" class="font-mono text-[10px] tracking-[0.12em] text-red-400 hover:text-red-300">DELETE ENTRY</button>
                     </x-confirm-form>
                 </div>

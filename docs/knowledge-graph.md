@@ -91,7 +91,7 @@ Append-only. Every graph mutation writes one. This is "the data for each event".
 
 | Column | Role |
 | --- | --- |
-| `kind` | `entity_upsert` \| `link_assert` \| `link_retract` \| `owner_confirm` |
+| `kind` | `entity_upsert` \| `link_assert` \| `link_retract` \| `owner_confirm` \| `link_fix` \| `owner_permanent` \| `owner_unpermanent` |
 | `entry_id` | Entity touched (nullable for pure link rows; still set to `from` for asserts) |
 | `link_id` | Link touched, if any |
 | `author` | Agent name or `owner` |
@@ -145,7 +145,7 @@ Agents never pass a confidence number. Melfina derives it from observations. Int
 
 Let
 
-- `O` = count of **owner** `link_assert` or `owner_confirm` observations on this link that have not been owner-retracted
+- `O` = count of **owner** `link_assert`, `owner_confirm` or `owner_permanent` observations on this link that have not been owner-retracted
 - `A` = count of **distinct agent names** with a net-positive assert (asserts minus their own retracts > 0)
 - `R` = extra repeat asserts beyond the first per agent, capped at 3 per agent, summed
 - `D` = distinct authors (agent or owner) with a live retract while asserts still exist
@@ -159,8 +159,14 @@ if D > 0:           raw -= 250 * D      # dispute
                     disputed = true
 confidence = clamp(raw, 0, 990)
 if owner retracted the link: status = retracted, confidence = 0
-if owner verified the link (`owner_confirm` or console verify): confidence = max(confidence, 950)
+if owner confirmed the link (`owner_confirm`): confidence = max(confidence, 950)
+if owner locked the link permanent (`owner_permanent`): confidence = max(confidence, 950)
 ```
+
+A `link_fix` is not an assertion. Fixing the endpoints of a link that already
+exists corrects the shape of an edge the owner is looking at; it does not say
+the edge holds, so it adds nothing to `O` and it does not revive a link the
+owner retracted. Confirming or locking the link does both.
 
 Worked numbers:
 
@@ -253,9 +259,49 @@ Keep list + wiki editor. On the entity page, replace the "related — one per li
 - Observation log under version history (newest first, same details disclosure pattern).
 - Filter list page by type still; optional later filter "disputed only".
 
-No force-directed canvas in v1. Look.md's constellation mark is available later as a read-only SVG of the 1-hop neighborhood; not required to ship the graph. Blade + existing tokens.
+v1 ships a deterministic constellation canvas — concentric rings around the focused entry, not a force simulation. See [Constellation view](#constellation-view-shipped). Blade + existing tokens.
 
 Delete entity: confirm copy must say links and observations go with it.
+
+### Constellation view (shipped)
+
+`/console/knowledge/graph` is the owner-facing canvas. It is a plain-SVG renderer
+(`resources/js/knowledge-graph-interactive-simple.js`, no chart library): pan by
+dragging, zoom with the wheel or `+`/`-`/`0`, drag a node to move it, click a node
+to focus it, click an edge to inspect it. `F` focuses the selection, `Esc` clears
+it, `Delete` removes the selected node or link. Node positions are kept in
+`localStorage`; the layout itself is deterministic, so a reload does not reshuffle
+the constellation.
+
+The page talks to a JSON API under `/api/v1/knowledge`, mounted from
+`routes/api.php`. It is owner-only and session-authenticated — the same `auth` +
+`owner` middleware the rest of the console uses — so it sits in the `web`
+middleware group and stays CSRF-protected. The viewer sends the CSRF token
+(read from the layout's `csrf-token` meta tag) on every write; reads carry no
+token. The group is throttled to 60 requests a minute per owner.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /graph?focus=&hops=&limit=` | The constellation: nodes plus typed links. |
+| `GET /entries?q=&limit=&page=` | Name search, paged. |
+| `GET /entries/{entry}` | One entry. |
+| `POST /entries` | Create an entry. |
+| `PUT /entries/{entry}` | Update an entry; `expected_version` guards concurrent edits. |
+| `DELETE /entries/{entry}` | Delete an entry (refused while it is operator-bound or part of a redirect). |
+| `GET /links/{link}` | One link. |
+| `POST /links` | Create a link. |
+| `PUT /links/{link}` | Retarget a link. |
+| `POST /links/{link}/confirm` | Owner attestation. |
+| `POST /links/{link}/permanent` | Lock or unlock. |
+| `POST /links/{link}/retract` | Retract. |
+| `DELETE /links/{link}` | Delete outright. |
+| `GET /predicates`, `GET /types` | Closed vocabularies for the pickers. `/predicates` returns the stored names *and* their inverses — the service canonicalises to the stored direction on write. |
+
+Entry and link *writes* go through the same services the console pages and
+agent tools use (`KnowledgeEntryWriter`, `KnowledgeGraph`), so the canvas
+cannot drift from the rules agents are held to. The two deletes do not: they
+remove the row directly, and the schema cascades the entry's links and
+observations — and a link's observations — with it.
 
 ## Schema sketch
 
