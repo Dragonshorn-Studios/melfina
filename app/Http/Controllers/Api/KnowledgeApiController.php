@@ -149,7 +149,11 @@ class KnowledgeApiController extends Controller
             ]);
         }
 
-        $unresolved = $this->unresolvedRelated($result->entry, self::lines($validated['related'] ?? null));
+        $unresolved = $this->unresolvedRelated(
+            $result->entry,
+            self::lines($validated['related'] ?? null),
+            $resolver,
+        );
 
         return response()->json([
             'entry' => self::entryPayload($result->entry),
@@ -172,6 +176,12 @@ class KnowledgeApiController extends Controller
 
         $name = trim($validated['name']);
         $nameLower = KnowledgeName::normalize($name);
+
+        if (KnowledgeName::isOperatorToken($nameLower)) {
+            throw ValidationException::withMessages([
+                'name' => 'That name is reserved for the installation operator.',
+            ]);
+        }
 
         $collision = self::nameCollision($nameLower, $entry->id);
 
@@ -570,8 +580,11 @@ class KnowledgeApiController extends Controller
      * @param  list<string>  $requested
      * @return list<string>
      */
-    private function unresolvedRelated(KnowledgeEntry $entry, array $requested): array
-    {
+    private function unresolvedRelated(
+        KnowledgeEntry $entry,
+        array $requested,
+        KnowledgeIdentityResolver $resolver,
+    ): array {
         if ($requested === []) {
             return [];
         }
@@ -579,17 +592,20 @@ class KnowledgeApiController extends Controller
         $linked = KnowledgeLink::query()
             ->where('from_entry_id', $entry->id)
             ->where('predicate', KnowledgePredicate::RelatedTo->value)
-            ->with('toEntry')
-            ->get()
-            ->pluck('toEntry')
-            ->filter()
-            ->map(fn (KnowledgeEntry $target) => KnowledgeName::normalize($target->name))
+            ->pluck('to_entry_id')
+            ->map(fn ($id) => (int) $id)
             ->all();
 
         $unresolved = [];
 
         foreach ($requested as $name) {
-            if (! in_array(KnowledgeName::normalize($name), $linked, true)) {
+            // The writer resolves the name through aliases and identifiers
+            // too, so compare the resolved entry, not the typed string.
+            $resolved = $resolver->resolve(KnowledgeIdentityContext::forOwner(), query: $name);
+
+            if (! $resolved->found()
+                || $resolved->entry === null
+                || ! in_array((int) $resolved->entry->id, $linked, true)) {
                 $unresolved[] = $name;
             }
         }

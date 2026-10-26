@@ -208,6 +208,28 @@ it('keeps the markup the viewer reads in place', function () {
         ->assertSee(route('api.knowledge.links.retract', ['link' => 0]), false);
 });
 
+it('sends the viewer writes in a shape php can parse', function () {
+    $source = file_get_contents(resource_path('js/knowledge-graph-interactive-simple.js'));
+
+    // PHP only fills the input bag for POST and for url-encoded bodies - a
+    // multipart PUT arrives empty, so the fix request has to go as JSON.
+    preg_match('/async handleFixLinkSubmit.*?\n    \},/s', $source, $matches);
+    $fixHandler = $matches[0] ?? '';
+
+    expect($fixHandler)->toContain('getJsonHeaders()')
+        // Reading the form's fields with FormData is fine; sending it as
+        // the request body is what php never parses.
+        ->and($fixHandler)->not->toContain('body: new FormData(form)');
+
+    // A freshly created entry is not in the snapshot yet, so focusNode has
+    // to reload instead of giving up on an unknown id.
+    preg_match('/    focusNode\(nodeId\).*?\n    \},/s', $source, $matches);
+    $focus = $matches[0] ?? '';
+
+    expect($focus)->toContain('this.loadData(nodeId)')
+        ->and($focus)->not->toContain('if (!node) return;');
+});
+
 it('does not let a console fix certify a link or revive a retracted one', function () {
     $this->graph->connect(
         'grokbot',

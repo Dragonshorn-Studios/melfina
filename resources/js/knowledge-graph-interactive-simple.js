@@ -66,7 +66,14 @@ const KnowledgeGraphSimple = {
             if (body) {
                 try {
                     const parsed = JSON.parse(body);
-                    message = parsed.message || parsed.error || message;
+
+                    // A refused write carries its copy per field; the
+                    // top-level message is only a summary of them.
+                    const fields = parsed.errors
+                        ? Object.values(parsed.errors).flat().filter(Boolean)
+                        : [];
+
+                    message = fields[0] || parsed.message || parsed.error || message;
                 } catch {
                     message = `${message} — ${body.slice(0, 200)}`;
                 }
@@ -562,18 +569,23 @@ const KnowledgeGraphSimple = {
 
     focusNode(nodeId) {
         const node = this.state.nodes.find(n => String(n.id) === String(nodeId));
-        if (!node) return;
 
         this.state.focusId = String(nodeId);
-        this.state.selectedNodeId = String(nodeId);
+        this.state.selectedNodeId = node ? String(nodeId) : null;
         this.state.selectedLinkId = null;
 
         this.updateURL();
-        this.showNode(node);
+
+        if (node) {
+            this.showNode(node);
+        }
 
         // Reload data focused on this node, then centre on where it landed.
         // Centring before the layout would use stale (or missing) coordinates
-        // and poison the view transform with NaN.
+        // and poison the view transform with NaN. An id the canvas has not
+        // seen - a freshly created entry, or a search result outside the
+        // loaded snapshot - is still worth focusing: the reload is what
+        // brings it into view.
         this.loadData(nodeId).then(() => {
             const laid = this.state.nodes.find(n => String(n.id) === String(nodeId));
             if (!laid || !Number.isFinite(laid.x) || !Number.isFinite(laid.y)) {
@@ -682,7 +694,7 @@ const KnowledgeGraphSimple = {
             const metaEl = nodeEl.querySelector('#kg-node-meta');
             const summaryEl = nodeEl.querySelector('#kg-node-summary');
             const editEl = nodeEl.querySelector('#kg-node-edit');
-            const newFromEl = nodeEl.querySelector('#kg-new-from');
+            const newFromEl = document.getElementById('kg-new-from');
 
             if (nameEl) nameEl.textContent = node.name;
             if (metaEl) metaEl.textContent = node.type;
@@ -1257,10 +1269,16 @@ const KnowledgeGraphSimple = {
 
         if (!linkId) return;
 
+        // PHP only fills the input bag for POST and for url-encoded bodies.
+        // A multipart PUT arrives empty, so the fields go as JSON.
+        const payload = Object.fromEntries(
+            [...new FormData(form).entries()].filter(([key]) => key !== '_token')
+        );
+
         await this.write(`/api/v1/knowledge/links/${linkId}`, {
             method: 'PUT',
-            headers: this.getAjaxHeaders(),
-            body: new FormData(form),
+            headers: this.getJsonHeaders(),
+            body: JSON.stringify(payload),
             formId: form.id,
             failure: 'Failed to fix link.',
             onSuccess: (data) => {

@@ -653,6 +653,38 @@ it('reports the related names that did not resolve', function () {
         ->assertJsonFragment(['message' => 'Entry created, but these related names did not resolve: Ghost.']);
 });
 
+it('does not report a related name that resolved through an alias', function () {
+    KnowledgeIdentifier::factory()->create([
+        'entry_id' => $this->yukine->id,
+        'value' => 'Yuki',
+        'normalized_value' => 'yuki',
+    ]);
+
+    $this->actingAs($this->owner)
+        ->postJson(route('api.knowledge.entries.store'), [
+            'name' => 'Bridge',
+            'type' => 'concept',
+            'related' => 'Yuki',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('unresolved_related', [])
+        ->assertJsonPath('message', 'Entry created.');
+});
+
+it('refuses to rename an entry onto the operator token', function () {
+    $this->actingAs($this->owner)
+        ->putJson(route('api.knowledge.entries.update', ['entry' => $this->yukine->id]), [
+            'name' => 'operator',
+            'type' => 'project',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors([
+            'name' => 'That name is reserved for the installation operator.',
+        ]);
+
+    expect($this->yukine->fresh()->name)->toBe('Yukine');
+});
+
 it('keeps the legacy related column when the field is left out', function () {
     $this->yukine->update(['related' => ['Botbox']]);
 
