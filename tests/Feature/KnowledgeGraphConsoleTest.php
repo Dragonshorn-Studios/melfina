@@ -208,6 +208,29 @@ it('keeps the markup the viewer reads in place', function () {
         ->assertSee(route('api.knowledge.links.retract', ['link' => 0]), false);
 });
 
+it('renders a csrf token inside every form on the page', function () {
+    $html = $this->actingAs($this->owner)
+        ->get(route('console.knowledge.graph'))
+        ->assertOk()
+        ->getContent();
+
+    $dom = new DOMDocument;
+    @$dom->loadHTML($html);
+    $xpath = new DOMXPath($dom);
+
+    // An opening tag that is not closed swallows the token input into the
+    // form's attribute list, and the form then submits without one.
+    foreach ([
+        'kg-fix-form', 'kg-confirm-form', 'kg-permanent-form',
+        'kg-unpermanent-form', 'kg-retract-form',
+        'kg-new-link-form', 'kg-new-entity-form',
+    ] as $id) {
+        $tokens = $xpath->query("//form[@id='{$id}']//input[@name='_token']");
+
+        expect($tokens->length)->toBe(1);
+    }
+});
+
 it('sends the viewer writes in a shape php can parse', function () {
     $source = file_get_contents(resource_path('js/knowledge-graph-interactive-simple.js'));
 

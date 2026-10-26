@@ -55,7 +55,7 @@
                     <p id="kg-link-label" class="font-mono text-xs text-cream"></p>
                     <p id="kg-link-meta" class="font-mono text-xs text-steel"></p>
 
-                    <form id="kg-fix-form" method="POST" action="{{ route('api.knowledge.links.update', ['link' => 0]) }}" class="space-y-2" data-ajax="true"
+                    <form id="kg-fix-form" method="POST" action="{{ route('api.knowledge.links.update', ['link' => 0]) }}" class="space-y-2" data-ajax="true">
                         @csrf
                         @method('PUT')
                         <label class="block font-mono text-[10px] tracking-[0.12em] text-steel">
@@ -112,7 +112,7 @@
 
                 <div class="border-t border-border p-4">
                     <p class="font-mono text-[10px] tracking-[0.16em] text-steel">NEW LINK</p>
-                    <form id="kg-new-link-form" method="POST" action="{{ route('api.knowledge.links.store') }}" class="mt-3 space-y-2" data-ajax="true"
+                    <form id="kg-new-link-form" method="POST" action="{{ route('api.knowledge.links.store') }}" class="mt-3 space-y-2" data-ajax="true">
                         @csrf
                         <label class="block font-mono text-[10px] text-steel">
                             from
@@ -152,7 +152,7 @@
 
                 <div class="border-t border-border p-4">
                     <p class="font-mono text-[10px] tracking-[0.16em] text-steel">NEW ENTITY</p>
-                    <form id="kg-new-entity-form" method="POST" action="{{ route('api.knowledge.entries.store') }}" class="mt-3 space-y-2" data-ajax="true"
+                    <form id="kg-new-entity-form" method="POST" action="{{ route('api.knowledge.entries.store') }}" class="mt-3 space-y-2" data-ajax="true">
                         @csrf
                         <label class="block font-mono text-[10px] text-steel">
                             name
